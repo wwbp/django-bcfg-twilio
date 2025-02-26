@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
+import requests
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,6 +30,17 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 
+# Append Elastic Beanstalk Load Balancer Health Check requests since the source host IP address keeps changing
+try:
+    token = requests.put('http://169.254.169.254/latest/api/token',
+                         headers={'X-aws-ec2-metadata-token-ttl-seconds': '60'}).text
+    internal_ip = requests.get('http://169.254.169.254/latest/meta-data/local-ipv4',
+                               headers={'X-aws-ec2-metadata-token': token}).text
+except requests.exceptions.ConnectionError:
+    pass
+else:
+    ALLOWED_HOSTS.append(internal_ip)
+del requests
 
 # Application definition
 
