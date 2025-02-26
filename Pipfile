@@ -9,6 +9,8 @@ djangorestframework = "*"
 celery = "*"
 redis = "*"
 kani = {extras = ["openai"], version = "*"}
+gunicorn = "*"
+whitenoise = "*"
 
 [dev-packages]
 
