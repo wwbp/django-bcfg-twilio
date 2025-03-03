@@ -25,6 +25,11 @@
         migrations/
             __init__.py
             0001_initial.py
+        templates/
+            chat/
+                prompt_interface.html
+                prompt_confirm_delete.html
+                prompt_edit.html
     config/
         asgi.py
         __init__.py

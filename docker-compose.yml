@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     depends_on:
       - db
+      - redis
     # command: "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
 
 
@@ -30,6 +31,23 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
       timeout: 20s
       retries: 10
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+  
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: celery -A config worker -l info
+    depends_on:
+      - redis
+      - db
+      - web
 
 volumes:
   mysql_data:

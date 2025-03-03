@@ -153,3 +153,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Celery Configuration Options
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get(
+    'CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
