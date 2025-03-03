@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import json
 import os
 from pathlib import Path
 import requests
@@ -22,13 +23,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY', 'django-insecure-#7lq@_7b#8v!+1^6!$0@5v!u7z7x0^v1x0v0#4q8t^k9^3!%zr')
+SECRET_KEY = 'django-insecure-#7lq@_7b#8v!+1^6!$0@5v!u7z7x0^v1x0v0#4q8t^k9^3!%zr'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
+ALLOWED_HOSTS = ["*"]
 
 # Append Elastic Beanstalk Load Balancer Health Check requests since the source host IP address keeps changing
 try:
@@ -90,16 +90,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
+
 
 # mysql dabase connection
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('MYSQL_DATABASE', 'db'),
-        'USER': os.environ.get('MYSQL_USER', 'root'),
-        'PASSWORD': os.environ.get('MYSQL_PASSWORD', 'password'),
-        'HOST': os.environ.get('MYSQL_HOST', 'db'),
-        'PORT': os.environ.get('MYSQL_PORT', '3306'),
+        "HOST": DBINFO["host"],
+        "PORT": DBINFO["port"],
+        "NAME": DBINFO["dbname"],
+        "USER": DBINFO["username"],
+        "PASSWORD": DBINFO["password"],
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
