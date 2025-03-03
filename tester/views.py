@@ -1,4 +1,5 @@
 # tester/views.py
+from chat.tasks import add
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -76,3 +77,11 @@ class ReceiveParticipantResponseView(View):
             bot_response=bot_response
         )
         return JsonResponse({"message": "Bot response received"}, status=200)
+
+def test_celery(request):
+    # Dispatch the task asynchronously
+    task_result = add.delay(3, 4)
+    return JsonResponse({
+        'message': 'Task submitted successfully!',
+        'task_id': task_result.id
+    })
