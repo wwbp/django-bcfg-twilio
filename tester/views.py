@@ -9,7 +9,7 @@ from django.urls import reverse
 import requests
 
 from tester.models import ChatResponse
-from django.http import HttpResponse
+
 
 class ChatTestInterface(View):
     def get(self, request):
@@ -21,7 +21,7 @@ class ChatTestInterface(View):
         #     "Please provide me with more information.",
         # ]
         return render(request, "tester/chat_interface.html", {"responses": responses})
-    
+
     def post(self, request):
         # Extract data from the submitted form.
         participant_id = request.POST.get("participant_id")
