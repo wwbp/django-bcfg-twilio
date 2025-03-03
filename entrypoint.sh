@@ -12,7 +12,7 @@ DB_PORT=${MYSQL_PORT:-3306}
 # If the first argument is "celery", run Celery directly.
 if [ "$1" = "celery" ]; then
     shift
-    exec celery -A config worker -l info
+    exec celery "$@"
 fi
 
 python manage.py collectstatic --noinput

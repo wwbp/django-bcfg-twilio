@@ -10,6 +10,7 @@
     ds.txt
     chat/
         ingest.py
+        tasks.py
         models.py
         completion.py
         send.py
@@ -33,6 +34,7 @@
     config/
         asgi.py
         __init__.py
+        celery.py
         settings.py
         urls.py
         wsgi.py
