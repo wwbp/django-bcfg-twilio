@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Prompt Interface</title>
+    <style>
+        .container { display: flex; }
+        .left-panel { width: 50%; padding: 10px; border-right: 1px solid #ccc; }
+        .right-panel { width: 50%; padding: 10px; }
+        .prompt-item { border: 1px solid #ccc; padding: 5px; margin-bottom: 5px; }
+        .prompt-actions { display: inline-block; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Panel: Activity Prompts -->
+        <div class="left-panel">
+            <h2>Activity Prompts</h2>
+            <form method="post">
+                {% csrf_token %}
+                {{ prompt_form.as_p }}
+                <button type="submit" name="prompt_submit">Add Prompt</button>
+            </form>
+            <hr/>
+            <h3>Existing Prompts</h3>
+            {% if prompts %}
+                <ul>
+                    {% for prompt in prompts %}
+                        <li class="prompt-item">
+                            <strong>Week {{ prompt.week }}:</strong> {{ prompt.activity }}
+                            <span class="prompt-actions">
+                                <!-- Edit link -->
+                                <a href="{% url 'chat:prompt_edit' prompt.id %}">Edit</a>
+                                <!-- Delete button: directs to a confirmation page -->
+                                <a href="{% url 'chat:prompt_delete' prompt.id %}">Delete</a>
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No prompts available.</p>
+            {% endif %}
+        </div>
+        <!-- Right Panel: Control Prompt -->
+        <div class="right-panel">
+            <h2>Control Prompt</h2>
+            <form method="post">
+                {% csrf_token %}
+                {{ control_form.as_p }}
+                <button type="submit" name="control_submit">Update Control</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

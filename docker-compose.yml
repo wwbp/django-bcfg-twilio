@@ -1,0 +1,72 @@
+services:
+  web:
+    build:
+      dockerfile: Dockerfile.local
+      context: .
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    # command: "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
+
+
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: "UTC"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      timeout: 20s
+      retries: 10
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+  
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+    command: celery -A config worker -l info
+    depends_on:
+      - redis
+      - db
+      - web
+  
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+    command: celery -A config beat -l info
+    depends_on:
+      - redis
+      - db
+
+
+volumes:
+  mysql_data:

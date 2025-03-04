@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import json
 import os
 from pathlib import Path
 import requests
@@ -22,13 +23,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY', 'django-insecure-#7lq@_7b#8v!+1^6!$0@5v!u7z7x0^v1x0v0#4q8t^k9^3!%zr')
+SECRET_KEY = 'django-insecure-#7lq@_7b#8v!+1^6!$0@5v!u7z7x0^v1x0v0#4q8t^k9^3!%zr'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
+ALLOWED_HOSTS = ["*"]
 
 # Append Elastic Beanstalk Load Balancer Health Check requests since the source host IP address keeps changing
 try:
@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'chat',
+    'tester',
 ]
 
 MIDDLEWARE = [
@@ -71,7 +72,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -89,11 +90,21 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
 
+
+# mysql dabase connection
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        "HOST": DBINFO["host"],
+        "PORT": DBINFO["port"],
+        "NAME": DBINFO["dbname"],
+        "USER": DBINFO["username"],
+        "PASSWORD": DBINFO["password"],
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
     }
 }
 
@@ -144,3 +155,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Celery Configuration Options
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get(
+    'CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
+CELERY_ENABLE_UTC = True

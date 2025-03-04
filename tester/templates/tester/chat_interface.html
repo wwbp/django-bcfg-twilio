@@ -1,0 +1,71 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Tester Interface</title>
+    <style>
+        /* Minimal CSS for a two-panel layout */
+        .container {
+            display: flex;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+        }
+        .panel:not(:last-child) {
+            border-right: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Chat Interface</h1>
+    <div class="container">
+        <!-- Left panel: Form to send a chat message -->
+        <div class="panel">
+            <h2>Send a Message</h2>
+            <form method="post">
+                {% csrf_token %}
+                <label for="participant_id">Participant ID:</label>
+                <input type="text" id="participant_id" name="participant_id" required><br><br>
+                
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required><br><br>
+                
+                <label for="school_name">School Name:</label>
+                <input type="text" id="school_name" name="school_name" required><br><br>
+                
+                <label for="school_mascot">School Mascot:</label>
+                <input type="text" id="school_mascot" name="school_mascot" required><br><br>
+
+                <label for="initial_message">Initial Message:</label>
+                <input type="text" id="initial_message" name="initial_message" required><br><br>
+
+                <label for="week_number">Week Number:</label>
+                <input type="text" id="week_number" name="week_number" required><br><br>
+
+                <label for="message">Message:</label><br>
+                <textarea id="message" name="message" rows="4" cols="50" required></textarea><br><br>
+                
+                <input type="submit" value="Send">
+            </form>
+        </div>
+        
+        <!-- Right panel: Chat responses -->
+        <div class="panel">
+            <h2>Chat Responses</h2>
+            <!-- Refresh button to update the chat view -->
+            <button type="button" onclick="location.reload();">Refresh Chat</button>
+            <ul>
+                {% for response in responses %}
+                    <li>
+                        <strong>{{ response.participant_id }}:</strong> {{ response.bot_response }}<br>
+                        <small>{{ response.created_at }}</small>
+                    </li>
+                {% empty %}
+                    <li>No responses yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -12,6 +12,7 @@ kani = {extras = ["openai"], version = "*"}
 gunicorn = "*"
 whitenoise = "*"
 requests = "*"
+mysqlclient = "*"
 
 [dev-packages]
 

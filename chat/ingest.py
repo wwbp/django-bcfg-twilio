@@ -1,6 +1,6 @@
 import asyncio
-from .completion import generate_response 
-from .crud import verify_update_database, load_chat_history_json, save_chat_round
+from .completion import generate_response
+from .crud import load_chat_prompt, verify_update_database, load_chat_history_json, save_chat_round
 from .send import send_message_to_participant, send_message_to_participant_group
 
 
@@ -10,7 +10,7 @@ def ingest_individual(user_id: str, data: dict):
     # Load existing chat history
     history_json = load_chat_history_json(user_id)
     # Create instructions from context
-    instructions = f"Chat with {data['context']['name']} from {data['context']['school_name']}"
+    instructions = load_chat_prompt(data['context']['week_number'])
     # Generate response using your async completion (bridged synchronously)
     response = asyncio.run(generate_response(
         history_json, instructions, data['message']))
