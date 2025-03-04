@@ -17,6 +17,8 @@ def verify_update_database(user_id: str, data: dict):
         user.name = data["context"]["name"]
         user.initial_message = data["context"]["initial_message"]
         user.save()
+        ChatTranscript.objects.create(
+            user=user, role="assistant", content=data["context"]["initial_message"])
     else:
         logger.info(f"Participant/group ID {user_id} exists.")
     return user

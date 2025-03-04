@@ -74,6 +74,8 @@
                 <p><strong>Initial Message:</strong> <span id="meta_initial_message"></span></p>
                 <label for="week_number">Week Number:</label>
                 <input type="text" id="week_number"><br><br>
+                <label for="message">Message:</label><br>
+                <textarea id="message" rows="3" cols="50"></textarea><br><br>
                 <button type="button" onclick="sendChatMessage()">Send Message</button>
             </div>
             
@@ -139,8 +141,11 @@
         function sendChatMessage() {
             var testCaseId = document.getElementById('meta_participant_id').innerText;
             var weekNumber = document.getElementById('week_number').value;
-            var message = prompt("Enter your chat message:");
-            if (!message) return;
+            var message = document.getElementById('message').value;
+            if (!message) {
+                alert("Please enter a message.");
+                return;
+            }
             
             var payload = {
                 context: {
@@ -164,10 +169,12 @@
             })
             .then(response => response.json())
             .then(data => {
-                alert("Message sent.");
+                // Do not show a success popup.
+                document.getElementById('message').value = "";
                 loadChatTranscript(testCaseId);
             })
             .catch(error => {
+                alert("Error sending message.");
                 console.error('Error sending message:', error);
             });
         }
@@ -207,13 +214,20 @@
             }).then(response => response.json())
               .then(data => {
                   if(data.success) {
-                      alert("Test case created successfully.");
+                      // No success popup; simply reload.
                       location.reload();
                   } else {
                       alert("Error creating test case.");
                   }
+              })
+              .catch(error => {
+                  alert("Error creating test case.");
+                  console.error('Error creating test case:', error);
               });
         }
+        
+        // Auto-refresh chat transcript every 1 second.
+        setInterval(refreshChat, 1000);
     </script>
 </body>
 </html>

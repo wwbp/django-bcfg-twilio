@@ -102,13 +102,20 @@ def create_test_case(request):
     initial_message = data.get("initial_message")
 
     if participant_id and name:
-        ChatUser.objects.create(
+        # Create the test user.
+        user = ChatUser.objects.create(
             id=participant_id,
             name=name,
             school_name=school_name,
             school_mascot=school_mascot,
             initial_message=initial_message,
             is_test=True
+        )
+        # Insert the initial message as the first assistant message in the transcript.
+        ChatTranscript.objects.create(
+            user=user,
+            role='assistant',
+            content=initial_message
         )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
