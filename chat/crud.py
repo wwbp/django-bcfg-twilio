@@ -1,6 +1,6 @@
 # chat/crud.py
 import logging
-from .models import User, ChatTranscript, Prompt, Control
+from .models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,41 @@ def verify_update_database(user_id: str, data: dict):
     return user
 
 
+def verify_update_database_group(group_id: str, data: dict):
+    logger.info(f"Checking database for group ID: {group_id}")
+    group, group_created = Group.objects.get_or_create(id=group_id)
+    if group_created:
+        logger.info(f"Group ID {group_id} not found. Creating a new record.")
+        group.initial_message = data["context"]["initial_message"]
+        group.save()
+        for participant in data["context"].get("participants", []):
+            user, user_created = User.objects.get_or_create(
+                id=participant["id"])
+            if user_created:
+                user.name = participant.get("name", user.name)
+                user.school_name = data["context"]["school_name"]
+                user.school_mascot = data["context"]["school_mascot"]
+                user.save()
+            group.users.add(user)
+        GroupChatTranscript.objects.create(
+            group=group, role="assistant", content=data["context"]["initial_message"])
+    else:
+        logger.info(f"Group ID {group_id} exists.")
+    return group
+
+
 def load_chat_history_json(user_id: str):
     logger.info(f"Loading chat history for participant/group ID: {user_id}")
     transcripts = ChatTranscript.objects.filter(
         user_id=user_id).order_by("created_at")
+    history = [{"role": t.role, "content": t.content} for t in transcripts]
+    return history
+
+
+def load_chat_history_json_group(group_id: str):
+    logger.info(f"Loading chat history for group ID: {group_id}")
+    transcripts = GroupChatTranscript.objects.filter(
+        group_id=group_id).order_by("created_at")
     history = [{"role": t.role, "content": t.content} for t in transcripts]
     return history
 
@@ -42,10 +73,24 @@ def save_chat_round(user_id: str, message, response):
     logger.info("Chat round saved successfully.")
 
 
-def load_chat_prompt(week: int):
-    controls = Control.objects.latest('created_at')
-    controls = controls if controls else Control.objects.create()
+@transaction.atomic
+def save_chat_round_group(group_id: str, sender_id: str, message, response):
+    logger.info(f"Saving chat round for group ID: {sender_id}")
+    group = Group.objects.get(id=group_id)
+    sender = User.objects.get(id=sender_id)
+    GroupChatTranscript.objects.create(
+        group=group, role="user", content=message, sender=sender)
+    GroupChatTranscript.objects.create(
+        group=group, role="assistant", content=response)
+    logger.info("Chat round saved successfully.")
+
+
+def load_chat_prompt(week: int, group=False):
+    try:
+        controls = Control.objects.latest('created_at')
+    except Control.DoesNotExist:
+        controls = Control.objects.create()
     prompt = Prompt.objects.filter(week=week).last()
     activity = prompt.activity if prompt else controls.default
-    prompt = f"{controls.system} \n {controls.persona} \n {activity}"
+    prompt = f"System Prompt: {controls.system} \n AI BOT Persona: {controls.persona} \n Week's Activity: {activity}"
     return prompt
