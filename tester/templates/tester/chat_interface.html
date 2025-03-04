@@ -20,10 +20,40 @@
 <body>
     <h1>Test Chat Interface</h1>
     <div class="container">
-        <!-- Left panel: Form to send a chat message -->
+        <!-- Left panel: Test Case management and chat message form -->
         <div class="panel">
+            <h2>Test Cases</h2>
+            <select id="test_case_select" onchange="populateTestCase()">
+                <option value="">-- Select Test Case --</option>
+                {% for test in test_users %}
+                <option value="{{ test.id }}" 
+                    data-name="{{ test.name }}" 
+                    data-school_name="{{ test.school_name }}"
+                    data-school_mascot="{{ test.school_mascot }}"
+                    data-initial_message="{{ test.initial_message }}">
+                    {{ test.name }} - {{ test.school_name }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="button" onclick="showNewTestCaseForm()">Create New Test Case</button>
+
+            <div id="new_test_case" style="display:none; margin-top:20px;">
+                <h3>Create New Test Case</h3>
+                <label for="new_participant_id">Participant ID:</label>
+                <input type="text" id="new_participant_id"><br><br>
+                <label for="new_name">Name:</label>
+                <input type="text" id="new_name"><br><br>
+                <label for="new_school_name">School Name:</label>
+                <input type="text" id="new_school_name"><br><br>
+                <label for="new_school_mascot">School Mascot:</label>
+                <input type="text" id="new_school_mascot"><br><br>
+                <label for="new_initial_message">Initial Message:</label>
+                <input type="text" id="new_initial_message"><br><br>
+                <button type="button" onclick="createTestCase()">Save Test Case</button>
+            </div>
+
             <h2>Send a Message</h2>
-            <form method="post">
+            <form method="post" id="chat_form">
                 {% csrf_token %}
                 <label for="participant_id">Participant ID:</label>
                 <input type="text" id="participant_id" name="participant_id" required><br><br>
@@ -53,7 +83,6 @@
         <!-- Right panel: Chat responses -->
         <div class="panel">
             <h2>Chat Responses</h2>
-            <!-- Refresh button to update the chat view -->
             <button type="button" onclick="location.reload();">Refresh Chat</button>
             <ul>
                 {% for response in responses %}
@@ -67,5 +96,57 @@
             </ul>
         </div>
     </div>
+
+    <script>
+        // When a test case is selected, populate the chat form fields.
+        function populateTestCase() {
+            var select = document.getElementById('test_case_select');
+            var selectedOption = select.options[select.selectedIndex];
+            if(selectedOption.value) {
+                document.getElementById('participant_id').value = selectedOption.value;
+                document.getElementById('name').value = selectedOption.getAttribute('data-name');
+                document.getElementById('school_name').value = selectedOption.getAttribute('data-school_name');
+                document.getElementById('school_mascot').value = selectedOption.getAttribute('data-school_mascot');
+                document.getElementById('initial_message').value = selectedOption.getAttribute('data-initial_message');
+            }
+        }
+
+        function showNewTestCaseForm() {
+            var formDiv = document.getElementById('new_test_case');
+            formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // AJAX call to create a new test case.
+        function createTestCase() {
+            var participantId = document.getElementById('new_participant_id').value;
+            var name = document.getElementById('new_name').value;
+            var schoolName = document.getElementById('new_school_name').value;
+            var schoolMascot = document.getElementById('new_school_mascot').value;
+            var initialMessage = document.getElementById('new_initial_message').value;
+
+            fetch("{% url 'tester:create-test-case' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: JSON.stringify({
+                    participant_id: participantId,
+                    name: name,
+                    school_name: schoolName,
+                    school_mascot: schoolMascot,
+                    initial_message: initialMessage
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if(data.success) {
+                      alert("Test case created successfully.");
+                      location.reload();
+                  } else {
+                      alert("Error creating test case.");
+                  }
+              });
+        }
+    </script>
 </body>
 </html>

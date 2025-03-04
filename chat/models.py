@@ -8,6 +8,7 @@ class User(models.Model):
     school_mascot = models.CharField(max_length=255, default='')
     name = models.CharField(max_length=255, default='')
     initial_message = models.TextField(default='')
+    is_test = models.BooleanField(default=False)
 
 
 class ChatTranscript(models.Model):
