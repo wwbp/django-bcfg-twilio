@@ -76,8 +76,12 @@
                 <input type="text" id="group_week_number"><br><br>
                 <label for="group_message">Message:</label><br>
                 <textarea id="group_message" rows="3" cols="50"></textarea><br><br>
-                <label for="sender_id">Sender ID:</label>
-                <input type="text" id="sender_id" placeholder="Enter your user id"><br><br>
+                <label for="sender_id">Sender:</label>
+                <!-- Replaced text input with a dropdown -->
+                <select id="sender_id">
+                    <option value="">-- Select Sender --</option>
+                </select>
+                <br><br>
                 <button type="button" onclick="sendGroupChatMessage()">Send Message</button>
             </div>
             
@@ -96,12 +100,28 @@
             if(selectedOption.value) {
                 // Populate metadata fields
                 document.getElementById('group_meta_id').innerText = selectedOption.value;
-                document.getElementById('group_meta_participants').innerText = selectedOption.getAttribute('data-participants');
+                var participantsStr = selectedOption.getAttribute('data-participants');
+                document.getElementById('group_meta_participants').innerText = participantsStr;
                 document.getElementById('group_meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
                 document.getElementById('group_meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
                 document.getElementById('group_meta_initial_message').innerText = selectedOption.getAttribute('data-initial_message');
                 // Show metadata section
                 document.getElementById('group_test_case_metadata').style.display = 'block';
+                
+                // Populate the sender dropdown using the participants list
+                var senderSelect = document.getElementById('sender_id');
+                senderSelect.innerHTML = '<option value="">-- Select Sender --</option>';
+                participantsStr.split(',').forEach(function(pair) {
+                    var parts = pair.split(':');
+                    if(parts.length === 2) {
+                        var id = parts[0].trim();
+                        var name = parts[1].trim();
+                        var option = document.createElement('option');
+                        option.value = id;
+                        option.text = name;
+                        senderSelect.appendChild(option);
+                    }
+                });
                 
                 // Load chat transcript for the selected test group
                 loadGroupChatTranscript(selectedOption.value);
@@ -147,7 +167,7 @@
             var message = document.getElementById('group_message').value;
             var senderId = document.getElementById('sender_id').value;
             if (!message || !senderId) {
-                alert("Please enter both a message and a sender ID.");
+                alert("Please enter both a message and select a sender.");
                 return;
             }
             
