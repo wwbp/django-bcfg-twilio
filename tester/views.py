@@ -111,3 +111,15 @@ def create_test_case(request):
         )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
+
+
+def chat_transcript(request, test_case_id):
+    # Filter responses for the selected test case and order them by creation time
+    responses = ChatResponse.objects.filter(
+        participant_id=test_case_id).order_by('created_at')
+    transcript = [{
+        "participant_id": r.participant_id,
+        "bot_response": r.bot_response,
+        "created_at": r.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+    } for r in responses]
+    return JsonResponse({"transcript": transcript})

@@ -1,6 +1,6 @@
 # tester/urls.py
 from django.urls import path
-from .views import ChatTestInterface, ReceiveParticipantResponseView, create_test_case, test_celery
+from .views import ChatTestInterface, ReceiveParticipantResponseView, chat_transcript, create_test_case, test_celery
 
 app_name = "tester"
 
@@ -11,4 +11,6 @@ urlpatterns = [
          ReceiveParticipantResponseView.as_view(), name="receive-participant-response"),
     path('test-celery/', test_celery, name='test-celery'),
     path('create-test-case/', create_test_case, name='create-test-case'),
+    path("chat_transcript/<str:test_case_id>/",
+         chat_transcript, name="chat-transcript"),
 ]

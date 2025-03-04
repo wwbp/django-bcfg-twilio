@@ -20,10 +20,10 @@
 <body>
     <h1>Test Chat Interface</h1>
     <div class="container">
-        <!-- Left panel: Test Case management and chat message form -->
+        <!-- Left panel: Test Case management -->
         <div class="panel">
             <h2>Test Cases</h2>
-            <select id="test_case_select" onchange="populateTestCase()">
+            <select id="test_case_select" onchange="loadTestCaseChat()">
                 <option value="">-- Select Test Case --</option>
                 {% for test in test_users %}
                 <option value="{{ test.id }}" 
@@ -51,63 +51,117 @@
                 <input type="text" id="new_initial_message"><br><br>
                 <button type="button" onclick="createTestCase()">Save Test Case</button>
             </div>
-
-            <h2>Send a Message</h2>
-            <form method="post" id="chat_form">
-                {% csrf_token %}
-                <label for="participant_id">Participant ID:</label>
-                <input type="text" id="participant_id" name="participant_id" required><br><br>
-                
-                <label for="name">Name:</label>
-                <input type="text" id="name" name="name" required><br><br>
-                
-                <label for="school_name">School Name:</label>
-                <input type="text" id="school_name" name="school_name" required><br><br>
-                
-                <label for="school_mascot">School Mascot:</label>
-                <input type="text" id="school_mascot" name="school_mascot" required><br><br>
-
-                <label for="initial_message">Initial Message:</label>
-                <input type="text" id="initial_message" name="initial_message" required><br><br>
-
-                <label for="week_number">Week Number:</label>
-                <input type="text" id="week_number" name="week_number" required><br><br>
-
-                <label for="message">Message:</label><br>
-                <textarea id="message" name="message" rows="4" cols="50" required></textarea><br><br>
-                
-                <input type="submit" value="Send">
-            </form>
         </div>
         
-        <!-- Right panel: Chat responses -->
+        <!-- Right panel: Chat interface -->
         <div class="panel">
-            <h2>Chat Responses</h2>
-            <button type="button" onclick="location.reload();">Refresh Chat</button>
-            <ul>
-                {% for response in responses %}
-                    <li>
-                        <strong>{{ response.participant_id }}:</strong> {{ response.bot_response }}<br>
-                        <small>{{ response.created_at }}</small>
-                    </li>
-                {% empty %}
-                    <li>No responses yet.</li>
-                {% endfor %}
-            </ul>
+            <h2>Chat Interface</h2>
+            <!-- Metadata and week number input appear only after a test case is selected -->
+            <div id="test_case_metadata" style="display:none; border-bottom:1px solid #ccc; margin-bottom:10px; padding-bottom:10px;">
+                <p><strong>Participant ID:</strong> <span id="meta_participant_id"></span></p>
+                <p><strong>Name:</strong> <span id="meta_name"></span></p>
+                <p><strong>School Name:</strong> <span id="meta_school_name"></span></p>
+                <p><strong>School Mascot:</strong> <span id="meta_school_mascot"></span></p>
+                <p><strong>Initial Message:</strong> <span id="meta_initial_message"></span></p>
+                <label for="week_number">Week Number:</label>
+                <input type="text" id="week_number"><br><br>
+                <button type="button" onclick="sendChatMessage()">Send Message</button>
+            </div>
+            
+            <!-- Chat transcript loads for the selected test case -->
+            <div id="chat_transcript">
+                <p>Select a test case to load the chat transcript.</p>
+            </div>
+            <button type="button" onclick="refreshChat()">Refresh Chat</button>
         </div>
     </div>
 
     <script>
-        // When a test case is selected, populate the chat form fields.
-        function populateTestCase() {
+        function loadTestCaseChat() {
             var select = document.getElementById('test_case_select');
             var selectedOption = select.options[select.selectedIndex];
             if(selectedOption.value) {
-                document.getElementById('participant_id').value = selectedOption.value;
-                document.getElementById('name').value = selectedOption.getAttribute('data-name');
-                document.getElementById('school_name').value = selectedOption.getAttribute('data-school_name');
-                document.getElementById('school_mascot').value = selectedOption.getAttribute('data-school_mascot');
-                document.getElementById('initial_message').value = selectedOption.getAttribute('data-initial_message');
+                // Populate metadata fields
+                document.getElementById('meta_participant_id').innerText = selectedOption.value;
+                document.getElementById('meta_name').innerText = selectedOption.getAttribute('data-name');
+                document.getElementById('meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
+                document.getElementById('meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
+                document.getElementById('meta_initial_message').innerText = selectedOption.getAttribute('data-initial_message');
+                // Show metadata section
+                document.getElementById('test_case_metadata').style.display = 'block';
+                
+                // Load chat transcript for the selected test case
+                loadChatTranscript(selectedOption.value);
+            } else {
+                document.getElementById('test_case_metadata').style.display = 'none';
+                document.getElementById('chat_transcript').innerHTML = '<p>Select a test case to load the chat transcript.</p>';
+            }
+        }
+
+        // Replace the URL with your API endpoint that returns the transcript
+        function loadChatTranscript(testCaseId) {
+            fetch(`/tester/chat_transcript/${testCaseId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    var transcriptDiv = document.getElementById('chat_transcript');
+                    transcriptDiv.innerHTML = '';
+                    if(data.transcript && data.transcript.length > 0) {
+                        data.transcript.forEach(function(message) {
+                            var p = document.createElement('p');
+                            p.innerHTML = `<strong>${message.participant_id}:</strong> ${message.bot_response} <small>${message.created_at}</small>`;
+                            transcriptDiv.appendChild(p);
+                        });
+                    } else {
+                        transcriptDiv.innerHTML = '<p>No chat transcript available.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading transcript:', error);
+                });
+        }
+
+        // This function demonstrates how to send a new chat message.
+        // It uses a prompt for the message; you can replace this with a more elaborate input.
+        function sendChatMessage() {
+            var testCaseId = document.getElementById('meta_participant_id').innerText;
+            var weekNumber = document.getElementById('week_number').value;
+            var message = prompt("Enter your chat message:");
+            if (!message) return;
+            
+            var payload = {
+                    context: {
+                        participant_id: testCaseId,
+                        name: document.getElementById('meta_name').innerText,
+                        school_name: document.getElementById('meta_school_name').innerText,
+                        school_mascot: document.getElementById('meta_school_mascot').innerText,
+                        initial_message: document.getElementById('meta_initial_message').innerText,
+                        week_number: weekNumber
+                    },
+                    message: message
+                };
+            // Replace with your actual endpoint to send the message
+            fetch(`/api/participant/${testCaseId}/incoming`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert("Message sent.");
+                loadChatTranscript(testCaseId);
+            })
+            .catch(error => {
+                console.error('Error sending message:', error);
+            });
+        }
+
+        function refreshChat() {
+            var testCaseId = document.getElementById('meta_participant_id').innerText;
+            if(testCaseId) {
+                loadChatTranscript(testCaseId);
             }
         }
 
@@ -116,7 +170,6 @@
             formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
         }
 
-        // AJAX call to create a new test case.
         function createTestCase() {
             var participantId = document.getElementById('new_participant_id').value;
             var name = document.getElementById('new_name').value;
