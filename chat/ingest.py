@@ -1,6 +1,6 @@
 import asyncio
 from .completion import generate_response
-from .crud import load_chat_prompt, verify_update_database, load_chat_history_json, save_chat_round
+from .crud import load_chat_prompt, save_chat_round_group, verify_update_database, load_chat_history_json, save_chat_round, verify_update_database_group
 from .send import send_message_to_participant, send_message_to_participant_group
 
 
@@ -26,14 +26,16 @@ def ingest_group_sync(group_id: str, data: dict):
     print(
         f"Group message received for group {group_id} from sender {data['sender_id']}: {data['message']}")
     # Update or create the group record (stubbed DB update)
-    verify_update_database(group_id, data)
+    verify_update_database_group(group_id, data)
+    # load chat history for group
+    history_json = load_chat_history_json(group_id)
     # Build instructions from group context
-    participant_names = ", ".join(
-        [p['name'] for p in data['context'].get('participants', [])])
-    instructions = f"Group chat from {data['context']['school_name']} with participants: {participant_names}"
+    instructions = load_chat_prompt(data['context']['week_number'], group=True)
     # Generate response; here we assume an empty chat history for groups
     response = asyncio.run(generate_response(
-        [], instructions, data['message']))
+        history_json, instructions, data['message']))
+    # Save the chat round
+    save_chat_round_group(group_id, data['sender_id'], data['message'], response)
     # Send the group message
     asyncio.run(send_message_to_participant_group(group_id, response))
     print(f"Generated group response for group {group_id}: {response}")
