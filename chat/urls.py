@@ -9,7 +9,7 @@ urlpatterns = [
          IngestIndividualView.as_view(), name='ingest-individual'),
     path('participantgroup/<str:id>/incoming',
          IngestGroupView.as_view(), name='ingest-group'),
-    path('interface/', PromptInterface.as_view(), name='prompt_interface'),
+    path('prompt/', PromptInterface.as_view(), name='prompt_interface'),
     path('prompt/edit/<int:prompt_id>/', prompt_edit, name='prompt_edit'),
     path('prompt/delete/<int:prompt_id>/', prompt_delete, name='prompt_delete'),
 ]

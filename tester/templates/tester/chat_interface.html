@@ -111,7 +111,7 @@
 
         // Fetch chat transcript and display messages based on role.
         function loadChatTranscript(testCaseId) {
-            fetch(`/tester/chat_transcript/${testCaseId}/`)
+            fetch(`/test/chat_transcript/${testCaseId}/`)
                 .then(response => response.json())
                 .then(data => {
                     var transcriptDiv = document.getElementById('chat_transcript');

@@ -133,7 +133,7 @@
 
         // Fetch group chat transcript and display messages based on role.
         function loadGroupChatTranscript(groupId) {
-            fetch(`/tester/group_chat_transcript/${groupId}/`)
+            fetch(`/test/group_chat_transcript/${groupId}/`)
                 .then(response => response.json())
                 .then(data => {
                     var transcriptDiv = document.getElementById('group_chat_transcript');

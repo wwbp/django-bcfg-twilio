@@ -5,7 +5,7 @@ from .views import ChatTestInterface, GroupChatTestInterface, ReceiveParticipant
 app_name = "tester"
 
 urlpatterns = [
-    path("chat/", ChatTestInterface.as_view(), name="chat-test-interface"),
+    path("individual/", ChatTestInterface.as_view(), name="chat-test-interface"),
     # This endpoint will receive bot responses from chat app.
     path("ai/api/participant/<str:id>/send",
          ReceiveParticipantResponseView.as_view(), name="receive-participant-response"),
@@ -17,6 +17,6 @@ urlpatterns = [
          group_chat_transcript, name="group-chat-transcript"),
     path("create-group-test-case/", create_group_test_case,
          name="create-group-test-case"),
-    path("group_chat/", GroupChatTestInterface.as_view(),
+    path("group/", GroupChatTestInterface.as_view(),
          name="group-chat-test-interface"),
 ]

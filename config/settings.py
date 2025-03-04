@@ -88,33 +88,33 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
-# # Database
-# # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-# DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
+# Database
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
 
 
-# # mysql dabase connection
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         "HOST": DBINFO["host"],
-#         "PORT": DBINFO["port"],
-#         "NAME": DBINFO["dbname"],
-#         "USER": DBINFO["username"],
-#         "PASSWORD": DBINFO["password"],
-#         'OPTIONS': {
-#             'charset': 'utf8mb4',
-#         },
-#     }
-# }
-
-# Use sqlite3 for local development
+# mysql dabase connection
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        "HOST": DBINFO["host"],
+        "PORT": DBINFO["port"],
+        "NAME": DBINFO["dbname"],
+        "USER": DBINFO["username"],
+        "PASSWORD": DBINFO["password"],
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
     }
 }
+
+# Use sqlite3 for local development
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 STORAGES = {
     'staticfiles': {
