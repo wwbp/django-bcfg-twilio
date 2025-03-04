@@ -15,6 +15,15 @@
         .panel:not(:last-child) {
             border-right: 1px solid #ccc;
         }
+        /* Simple styles for message tags */
+        .user-tag {
+            font-weight: bold;
+            color: blue;
+        }
+        .assistant-tag {
+            font-weight: bold;
+            color: green;
+        }
     </style>
 </head>
 <body>
@@ -98,7 +107,7 @@
             }
         }
 
-        // Replace the URL with your API endpoint that returns the transcript
+        // Fetch chat transcript and display messages based on role.
         function loadChatTranscript(testCaseId) {
             fetch(`/tester/chat_transcript/${testCaseId}/`)
                 .then(response => response.json())
@@ -108,7 +117,13 @@
                     if(data.transcript && data.transcript.length > 0) {
                         data.transcript.forEach(function(message) {
                             var p = document.createElement('p');
-                            p.innerHTML = `<strong>${message.participant_id}:</strong> ${message.bot_response} <small>${message.created_at}</small>`;
+                            if(message.role === 'user'){
+                                p.innerHTML = `<span class="user-tag">User:</span> ${message.content} <small>${message.created_at}</small>`;
+                            } else if(message.role === 'assistant'){
+                                p.innerHTML = `<span class="assistant-tag">Assistant:</span> ${message.content} <small>${message.created_at}</small>`;
+                            } else {
+                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content} <small>${message.created_at}</small>`;
+                            }
                             transcriptDiv.appendChild(p);
                         });
                     } else {
@@ -120,8 +135,7 @@
                 });
         }
 
-        // This function demonstrates how to send a new chat message.
-        // It uses a prompt for the message; you can replace this with a more elaborate input.
+        // Send a new chat message with context and message.
         function sendChatMessage() {
             var testCaseId = document.getElementById('meta_participant_id').innerText;
             var weekNumber = document.getElementById('week_number').value;
@@ -129,17 +143,17 @@
             if (!message) return;
             
             var payload = {
-                    context: {
-                        participant_id: testCaseId,
-                        name: document.getElementById('meta_name').innerText,
-                        school_name: document.getElementById('meta_school_name').innerText,
-                        school_mascot: document.getElementById('meta_school_mascot').innerText,
-                        initial_message: document.getElementById('meta_initial_message').innerText,
-                        week_number: weekNumber
-                    },
-                    message: message
-                };
-            // Replace with your actual endpoint to send the message
+                context: {
+                    participant_id: testCaseId,
+                    name: document.getElementById('meta_name').innerText,
+                    school_name: document.getElementById('meta_school_name').innerText,
+                    school_mascot: document.getElementById('meta_school_mascot').innerText,
+                    initial_message: document.getElementById('meta_initial_message').innerText,
+                    week_number: weekNumber
+                },
+                message: message
+            };
+            // Replace with your actual endpoint to send the message.
             fetch(`/api/participant/${testCaseId}/incoming`, {
                 method: "POST",
                 headers: {

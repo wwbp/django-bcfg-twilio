@@ -1,4 +1,5 @@
 # tester/views.py
+from chat.models import ChatTranscript
 from django.views.decorators.http import require_POST
 from chat.tasks import add
 from django.utils.decorators import method_decorator
@@ -114,12 +115,12 @@ def create_test_case(request):
 
 
 def chat_transcript(request, test_case_id):
-    # Filter responses for the selected test case and order them by creation time
-    responses = ChatResponse.objects.filter(
-        participant_id=test_case_id).order_by('created_at')
+    # Query transcript entries for the given test case (assuming test_case_id corresponds to User.id)
+    transcripts = ChatTranscript.objects.filter(
+        user__id=test_case_id).order_by('created_at')
     transcript = [{
-        "participant_id": r.participant_id,
-        "bot_response": r.bot_response,
-        "created_at": r.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-    } for r in responses]
+        "role": t.role,  # 'user' or 'assistant'
+        "content": t.content,
+        "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+    } for t in transcripts]
     return JsonResponse({"transcript": transcript})
