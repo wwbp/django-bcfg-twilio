@@ -1,0 +1,247 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Group Chat Tester Interface</title>
+    <style>
+        /* Minimal CSS for a two-panel layout */
+        .container {
+            display: flex;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+        }
+        .panel:not(:last-child) {
+            border-right: 1px solid #ccc;
+        }
+        /* Simple styles for message tags */
+        .user-tag {
+            font-weight: bold;
+            color: blue;
+        }
+        .assistant-tag {
+            font-weight: bold;
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Group Chat Test Interface</h1>
+    <div class="container">
+        <!-- Left panel: Test Group management -->
+        <div class="panel">
+            <h2>Test Groups</h2>
+            <select id="group_test_case_select" onchange="loadGroupTestCaseChat()">
+                <option value="">-- Select Test Group --</option>
+                {% for group in test_groups %}
+                <option value="{{ group.id }}"
+                    data-participants="{{ group.participants|safe }}"
+                    data-school_name="{{ group.school_name }}"
+                    data-school_mascot="{{ group.school_mascot }}"
+                    data-initial_message="{{ group.initial_message }}">
+                    Group: {{ group.id }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="button" onclick="showNewGroupTestCaseForm()">Create New Test Group</button>
+
+            <div id="new_group_test_case" style="display:none; margin-top:20px;">
+                <h3>Create New Test Group</h3>
+                <label for="new_group_id">Group ID:</label>
+                <input type="text" id="new_group_id"><br><br>
+                <label for="new_participants">Participants (format: id1:name1, id2:name2):</label>
+                <input type="text" id="new_participants"><br><br>
+                <label for="new_school_name">School Name:</label>
+                <input type="text" id="new_school_name"><br><br>
+                <label for="new_school_mascot">School Mascot:</label>
+                <input type="text" id="new_school_mascot"><br><br>
+                <label for="new_initial_message">Initial Message:</label>
+                <input type="text" id="new_initial_message"><br><br>
+                <button type="button" onclick="createGroupTestCase()">Save Test Group</button>
+            </div>
+        </div>
+        
+        <!-- Right panel: Group Chat Interface -->
+        <div class="panel">
+            <h2>Chat Interface</h2>
+            <!-- Metadata and week number input appear only after a test group is selected -->
+            <div id="group_test_case_metadata" style="display:none; border-bottom:1px solid #ccc; margin-bottom:10px; padding-bottom:10px;">
+                <p><strong>Group ID:</strong> <span id="group_meta_id"></span></p>
+                <p><strong>Participants:</strong> <span id="group_meta_participants"></span></p>
+                <p><strong>School Name:</strong> <span id="group_meta_school_name"></span></p>
+                <p><strong>School Mascot:</strong> <span id="group_meta_school_mascot"></span></p>
+                <p><strong>Initial Message:</strong> <span id="group_meta_initial_message"></span></p>
+                <label for="group_week_number">Week Number:</label>
+                <input type="text" id="group_week_number"><br><br>
+                <label for="group_message">Message:</label><br>
+                <textarea id="group_message" rows="3" cols="50"></textarea><br><br>
+                <label for="sender_id">Sender ID:</label>
+                <input type="text" id="sender_id" placeholder="Enter your user id"><br><br>
+                <button type="button" onclick="sendGroupChatMessage()">Send Message</button>
+            </div>
+            
+            <!-- Chat transcript loads for the selected test group -->
+            <div id="group_chat_transcript">
+                <p>Select a test group to load the chat transcript.</p>
+            </div>
+            <button type="button" onclick="refreshGroupChat()">Refresh Chat</button>
+        </div>
+    </div>
+
+    <script>
+        function loadGroupTestCaseChat() {
+            var select = document.getElementById('group_test_case_select');
+            var selectedOption = select.options[select.selectedIndex];
+            if(selectedOption.value) {
+                // Populate metadata fields
+                document.getElementById('group_meta_id').innerText = selectedOption.value;
+                document.getElementById('group_meta_participants').innerText = selectedOption.getAttribute('data-participants');
+                document.getElementById('group_meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
+                document.getElementById('group_meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
+                document.getElementById('group_meta_initial_message').innerText = selectedOption.getAttribute('data-initial_message');
+                // Show metadata section
+                document.getElementById('group_test_case_metadata').style.display = 'block';
+                
+                // Load chat transcript for the selected test group
+                loadGroupChatTranscript(selectedOption.value);
+            } else {
+                document.getElementById('group_test_case_metadata').style.display = 'none';
+                document.getElementById('group_chat_transcript').innerHTML = '<p>Select a test group to load the chat transcript.</p>';
+            }
+        }
+
+        // Fetch group chat transcript and display messages based on role.
+        function loadGroupChatTranscript(groupId) {
+            fetch(`/tester/group_chat_transcript/${groupId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    var transcriptDiv = document.getElementById('group_chat_transcript');
+                    transcriptDiv.innerHTML = '';
+                    if(data.transcript && data.transcript.length > 0) {
+                        data.transcript.forEach(function(message) {
+                            var p = document.createElement('p');
+                            var sender = message.sender ? message.sender : 'User';
+                            if(message.role === 'user'){
+                                p.innerHTML = `<span class="user-tag">${sender}:</span> ${message.content} <small>${message.created_at}</small>`;
+                            } else if(message.role === 'assistant'){
+                                p.innerHTML = `<span class="assistant-tag">${sender}:</span> ${message.content} <small>${message.created_at}</small>`;
+                            } else {
+                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content} <small>${message.created_at}</small>`;
+                            }
+                            transcriptDiv.appendChild(p);
+                        });
+                    } else {
+                        transcriptDiv.innerHTML = '<p>No chat transcript available.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading transcript:', error);
+                });
+        }
+
+        // Send a new group chat message with context and message.
+        function sendGroupChatMessage() {
+            var groupId = document.getElementById('group_meta_id').innerText;
+            var weekNumber = document.getElementById('group_week_number').value;
+            var message = document.getElementById('group_message').value;
+            var senderId = document.getElementById('sender_id').value;
+            if (!message || !senderId) {
+                alert("Please enter both a message and a sender ID.");
+                return;
+            }
+            
+            // Build participants array from metadata (expected format: "id1:name1, id2:name2")
+            var participantsStr = document.getElementById('group_meta_participants').innerText;
+            var participants = [];
+            participantsStr.split(',').forEach(function(pair) {
+                var parts = pair.split(':');
+                if(parts.length === 2) {
+                    participants.push({id: parts[0].trim(), name: parts[1].trim()});
+                }
+            });
+
+            var payload = {
+                context: {
+                    school_name: document.getElementById('group_meta_school_name').innerText,
+                    school_mascot: document.getElementById('group_meta_school_mascot').innerText,
+                    initial_message: document.getElementById('group_meta_initial_message').innerText,
+                    week_number: parseInt(weekNumber),
+                    participants: participants
+                },
+                sender_id: senderId,
+                message: message
+            };
+            // Send to the group chat ingestion endpoint.
+            fetch(`/api/participantgroup/${groupId}/incoming`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Clear the message input.
+                document.getElementById('group_message').value = "";
+                loadGroupChatTranscript(groupId);
+            })
+            .catch(error => {
+                alert("Error sending message.");
+                console.error('Error sending message:', error);
+            });
+        }
+
+        function refreshGroupChat() {
+            var groupId = document.getElementById('group_meta_id').innerText;
+            if(groupId) {
+                loadGroupChatTranscript(groupId);
+            }
+        }
+
+        function showNewGroupTestCaseForm() {
+            var formDiv = document.getElementById('new_group_test_case');
+            formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function createGroupTestCase() {
+            var groupId = document.getElementById('new_group_id').value;
+            var participants = document.getElementById('new_participants').value;
+            var schoolName = document.getElementById('new_school_name').value;
+            var schoolMascot = document.getElementById('new_school_mascot').value;
+            var initialMessage = document.getElementById('new_initial_message').value;
+
+            fetch("{% url 'tester:create-group-test-case' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: JSON.stringify({
+                    group_id: groupId,
+                    participants: participants,
+                    school_name: schoolName,
+                    school_mascot: schoolMascot,
+                    initial_message: initialMessage
+                })
+            }).then(response => response.json())
+              .then(data => {
+                  if(data.success) {
+                      // Simply reload to update the test groups.
+                      location.reload();
+                  } else {
+                      alert("Error creating test group.");
+                  }
+              })
+              .catch(error => {
+                  alert("Error creating test group.");
+                  console.error('Error creating test group:', error);
+              });
+        }
+        
+        // Auto-refresh group chat transcript every 1 second.
+        setInterval(refreshGroupChat, 1000);
+    </script>
+</body>
+</html>
