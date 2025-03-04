@@ -1,4 +1,6 @@
 # tester/views.py
+from chat.models import ChatTranscript
+from django.views.decorators.http import require_POST
 from chat.tasks import add
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -8,7 +10,7 @@ from django.views import View
 from django.http import JsonResponse
 from django.urls import reverse
 import requests
-
+from chat.models import User as ChatUser
 from tester.models import ChatResponse
 
 
@@ -21,7 +23,8 @@ class ChatTestInterface(View):
         #     "I am a bot, I can help you with your queries.",
         #     "Please provide me with more information.",
         # ]
-        return render(request, "tester/chat_interface.html", {"responses": responses})
+        test_users = ChatUser.objects.filter(is_test=True)
+        return render(request, "tester/chat_interface.html", {"responses": responses, "test_users": test_users})
 
     def post(self, request):
         # Extract data from the submitted form.
@@ -78,6 +81,7 @@ class ReceiveParticipantResponseView(View):
         )
         return JsonResponse({"message": "Bot response received"}, status=200)
 
+
 def test_celery(request):
     # Dispatch the task asynchronously
     task_result = add.delay(3, 4)
@@ -85,3 +89,45 @@ def test_celery(request):
         'message': 'Task submitted successfully!',
         'task_id': task_result.id
     })
+
+
+@csrf_exempt
+@require_POST
+def create_test_case(request):
+    data = json.loads(request.body)
+    participant_id = data.get("participant_id")
+    name = data.get("name")
+    school_name = data.get("school_name")
+    school_mascot = data.get("school_mascot")
+    initial_message = data.get("initial_message")
+
+    if participant_id and name:
+        # Create the test user.
+        user = ChatUser.objects.create(
+            id=participant_id,
+            name=name,
+            school_name=school_name,
+            school_mascot=school_mascot,
+            initial_message=initial_message,
+            is_test=True
+        )
+        # Insert the initial message as the first assistant message in the transcript.
+        ChatTranscript.objects.create(
+            user=user,
+            role='assistant',
+            content=initial_message
+        )
+        return JsonResponse({"success": True})
+    return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
+
+
+def chat_transcript(request, test_case_id):
+    # Query transcript entries for the given test case (assuming test_case_id corresponds to User.id)
+    transcripts = ChatTranscript.objects.filter(
+        user__id=test_case_id).order_by('created_at')
+    transcript = [{
+        "role": t.role,  # 'user' or 'assistant'
+        "content": t.content,
+        "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+    } for t in transcripts]
+    return JsonResponse({"transcript": transcript})
