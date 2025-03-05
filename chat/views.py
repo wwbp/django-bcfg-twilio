@@ -43,7 +43,7 @@ class PromptForm(forms.ModelForm):
 class ControlForm(forms.ModelForm):
     class Meta:
         model = Control
-        fields = ['persona', 'system', 'default']
+        fields = ['persona', 'system', 'default', 'moderation']
 
 
 class PromptInterface(View):

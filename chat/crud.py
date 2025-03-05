@@ -1,5 +1,7 @@
 # chat/crud.py
 import logging
+
+from .constant import MODERATION_MESSAGE_DEFAULT
 from .models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
@@ -94,3 +96,13 @@ def load_chat_prompt(week: int, group=False):
     activity = prompt.activity if prompt else controls.default
     prompt = f"System Prompt: {controls.system} \n AI BOT Persona: {controls.persona} \n Week's Activity: {activity}"
     return prompt
+
+
+def get_moderation_message():
+    try:
+        controls = Control.objects.latest('created_at')
+    except Control.DoesNotExist:
+        controls = Control.objects.create()
+    if len(controls.moderation) > 0:
+        return controls.moderation
+    return MODERATION_MESSAGE_DEFAULT

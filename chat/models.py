@@ -1,5 +1,7 @@
 from django.db import models
 
+from .constant import MODERATION_MESSAGE_DEFAULT
+
 
 class User(models.Model):
     id = models.CharField(primary_key=True, max_length=255)
@@ -54,4 +56,5 @@ class Control(models.Model):
     persona = models.TextField()
     system = models.TextField()
     default = models.TextField()
+    moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
     created_at = models.DateTimeField(auto_now_add=True)
