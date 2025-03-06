@@ -1,31 +1,21 @@
-# The manifest for the "web" service.
-# Read the full specification for the "Load Balanced Web Service" type at:
-#  https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/
+# The manifest for the "worker" service.
+# Read the full specification for the "Worker Service" type at:
+# https://aws.github.io/copilot-cli/docs/manifest/worker-service/
 
 # Your service name will be used in naming your resources like log groups, ECS services, etc.
-name: web
-type: Load Balanced Web Service
-
-# Distribute traffic to your service.
-http:
-  # Requests to this path will be forwarded to your service.
-  # To match all requests you can use the "/" path.
-  path: '/'
-  # You can specify a custom health check path. The default is "/".
-  healthcheck: '/api/health/'
+name: worker
+type: Worker Service
 
 # Configuration for your containers and service.
 image:
-  # Docker build arguments. For additional overrides: https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#image-build
+  # Docker build arguments.
   build: Dockerfile
-  # Port exposed through your container to route traffic to it.
-  port: 8000
 
-entrypoint: /app/entrypoint.prod.sh
+entrypoint: "celery -A config worker --loglevel=info --concurrency 1"
 
-cpu: 512       # Number of CPU units for the task.
-memory: 1024    # Amount of memory in MiB used by the task.
-platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#platform
+cpu: 256       # Number of CPU units for the task.
+memory: 512    # Amount of memory in MiB used by the task.
+platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/worker-service/#platform
 count: 1       # Number of tasks that should be running in your service.
 exec: true     # Enable running commands in your container.
 network:
@@ -33,15 +23,22 @@ network:
   vpc:
     security_groups:
       - from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-dbSecurityGroup
-
+      - from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-RedisSecurityGroup
 # storage:
   # readonly_fs: true       # Limit to read-only access to mounted root filesystems.
 
+
+# You can register to topics from other services.
+# The events can be received from an SQS queue via the env var $COPILOT_QUEUE_URI.
+# subscribe:
+#   topics: 
+#     - name: topic-from-another-service
+#       service: another-service
+
 # Optional fields for more advanced use-cases.
 #
-variables:                    # Pass environment variables as key value pairs.
- LOG_LEVEL: info
- BCFG_DOMAIN: https://test-2025.joinstarterkit.org
+#variables:                    # Pass environment variables as key value pairs.
+#  LOG_LEVEL: info
 
 #secrets:                      # Pass secrets from AWS Systems Manager (SSM) Parameter Store.
 #  GITHUB_TOKEN: GITHUB_TOKEN  # The key is the name of the environment variable, the value is the name of the SSM parameter.
@@ -51,7 +48,7 @@ secrets:
     from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-dbAuroraSecret
   CELERY_BROKER_HOST: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/RedisEndpoint
   OPENAI_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/OPENAI_API_KEY
-
+  
 # You can override any of the values defined above by environment.
 #environments:
 #  test:
