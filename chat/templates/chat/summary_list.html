@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Summary List</title>
+</head>
+<body>
+    <h1>Summary List</h1>
+    <a href="{% url 'chat:summary_create' %}">Create New Summary</a>
+    <ul>
+        {% for summary in summaries %}
+            <li>
+                {{ summary.school }} - {{ summary.type }} -
+                <a href="{% url 'chat:summary_update' summary.pk %}">Edit</a>
+            </li>
+        {% empty %}
+            <li>No summaries found.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

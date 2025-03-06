@@ -58,3 +58,19 @@ class Control(models.Model):
     default = models.TextField()
     moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Summary(models.Model):
+    TYPE_CHOICES = [
+        ('influencer', 'Influencer'),
+        ('song', 'Song'),
+        ('spot', 'Spot'),
+        ('idea', 'Idea'),
+        ('pick', 'Pick'),
+    ]
+
+    school = models.CharField(max_length=255)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    summary = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
