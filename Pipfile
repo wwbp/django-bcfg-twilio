@@ -15,6 +15,7 @@ requests = "*"
 mysqlclient = "*"
 openai = "*"
 asgiref = "*"
+django-celery-results = "*"
 
 [dev-packages]
 

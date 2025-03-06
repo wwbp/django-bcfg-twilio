@@ -8,8 +8,10 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 app = Celery('config')
 
 # Load configuration from Django settings, using a CELERY_ namespace.
-app.config_from_object('django.conf:settings', namespace='CELERY')
-
+try:
+    app.config_from_object('django.conf:settings', namespace='CELERY')
+except Exception as e:
+    print(e)
 # Autodiscover tasks from all installed apps.
 app.autodiscover_tasks()
 

@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'chat',
     'tester',
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
@@ -165,8 +166,21 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery Configuration Options
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
-CELERY_RESULT_BACKEND = os.environ.get(
-    'CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
-CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
-CELERY_ENABLE_UTC = True
+CELERY_BROKER_HOST = os.environ.get("CELERY_BROKER_HOST", "redis")
+# CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
+CELERY_BROKER_URL = f"redis://{CELERY_BROKER_HOST}:6379"
+CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_EXTENDED = True
+CELERY_TASK_SERIALIZER = "json"
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "retry_on_timeout": True,
+    "max_retries": 5,  # Adjust based on your needs
+    "socket_connect_timeout": 10,  # Timeout for establishing the connection
+    "socket_timeout": 20,  # Timeout for read/write operations,
+    "queue_order_strategy": "priority",
+    "sep": ":",
+    "priority_steps": list(range(2)),  # note - lower number is higher priority
+}
+CELERY_TASK_DEFAULT_PRIORITY = 0
+# CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
+# CELERY_ENABLE_UTC = True
