@@ -18,7 +18,12 @@ memory: 512    # Amount of memory in MiB used by the task.
 platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/worker-service/#platform
 count: 1       # Number of tasks that should be running in your service.
 exec: true     # Enable running commands in your container.
-
+network:
+  connect: true # Enable Service Connect for intra-environment traffic between services.
+  vpc:
+    security_groups:
+      - from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-dbSecurityGroup
+      - from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-RedisSecurityGroup
 # storage:
   # readonly_fs: true       # Limit to read-only access to mounted root filesystems.
 
@@ -39,7 +44,10 @@ exec: true     # Enable running commands in your container.
 #  GITHUB_TOKEN: GITHUB_TOKEN  # The key is the name of the environment variable, the value is the name of the SSM parameter.
 
 secrets:
+  DB_SECRET:
+    from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-dbAuroraSecret
   CELERY_BROKER_HOST: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/RedisEndpoint
+  OPENAI_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/OPENAI_API_KEY
   
 # You can override any of the values defined above by environment.
 #environments:
