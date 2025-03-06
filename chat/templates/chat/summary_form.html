@@ -1,0 +1,16 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% if object %}Edit{% else %}Create{% endif %} Summary</title>
+</head>
+<body>
+    <h1>{% if object %}Edit{% else %}Create{% endif %} Summary</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Submit</button>
+    </form>
+    <a href="{% url 'chat:summary_list' %}">Back to list</a>
+</body>
+</html>

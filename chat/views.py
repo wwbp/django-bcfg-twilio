@@ -1,6 +1,9 @@
+from django.urls import reverse_lazy
+from django.views.generic import ListView, CreateView, UpdateView
+from django.http import JsonResponse
 from django.views import View
 from django import forms
-from .models import Prompt, Control
+from .models import Prompt, Control, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -113,3 +116,63 @@ def prompt_delete(request, prompt_id):
         prompt.delete()
         return redirect('chat:prompt_interface')
     return render(request, 'chat/prompt_confirm_delete.html', {'prompt': prompt})
+
+
+SUMMARY_ALLOWED_TYPES = ['influencer', 'song', 'spot', 'idea', 'pick']
+
+
+def summary_view(request):
+    school = request.GET.get('school')
+    type_param = request.GET.get('type')
+
+    # Validate query parameters
+    if not school:
+        return JsonResponse({"error": "Missing school parameter."}, status=400)
+    if not type_param:
+        return JsonResponse({"error": "Missing type parameter."}, status=400)
+    if type_param not in SUMMARY_ALLOWED_TYPES:
+        return JsonResponse(
+            {"error": f"Invalid type parameter. Allowed values: {', '.join(SUMMARY_ALLOWED_TYPES)}."},
+            status=400
+        )
+
+    # Check if the school exists in any summary record
+    if not Summary.objects.filter(school=school).exists():
+        return JsonResponse({"error": "School not found."}, status=404)
+
+    # Retrieve the most recently updated summary for the given school and type
+    summary = Summary.objects.filter(
+        school=school, type=type_param).order_by('-updated_at').first()
+
+    if not summary:
+        return JsonResponse({"error": f"No summary found for {school} with type {type_param}."}, status=404)
+
+    data = summary.summary
+
+    return JsonResponse({"summary": data}, status=200)
+
+
+class SummaryForm(forms.ModelForm):
+    class Meta:
+        model = Summary
+        fields = ['school', 'type', 'summary']
+
+
+class SummaryListView(ListView):
+    model = Summary
+    template_name = 'chat/summary_list.html'
+    context_object_name = 'summaries'
+
+
+class SummaryCreateView(CreateView):
+    model = Summary
+    form_class = SummaryForm
+    template_name = 'chat/summary_form.html'
+    success_url = reverse_lazy('chat:summary_list')
+
+
+class SummaryUpdateView(UpdateView):
+    model = Summary
+    form_class = SummaryForm
+    template_name = 'chat/summary_form.html'
+    success_url = reverse_lazy('chat:summary_list')
