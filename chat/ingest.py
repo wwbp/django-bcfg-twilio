@@ -1,7 +1,6 @@
 import asyncio
 from .completion import generate_response
 from .crud import load_chat_prompt, save_chat_round_group, verify_update_database, load_chat_history_json, save_chat_round, verify_update_database_group
-from .send import send_message_to_participant, send_message_to_participant_group
 
 
 def ingest_individual(user_id: str, data: dict):
