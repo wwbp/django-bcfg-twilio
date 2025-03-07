@@ -57,6 +57,17 @@ def load_chat_history_json(user_id: str):
     return history
 
 
+def load_detailed_transcript(group_id: str):
+    logger.info(f"Loading detailed transcript for group ID: {group_id}")
+    transcripts = GroupChatTranscript.objects.filter(
+        group_id=group_id).order_by("created_at")
+    transcript_text = "<|sender name; role; timestamp; content|>"
+    for t in transcripts:
+        sender_name = t.sender.name if t.sender else "assistant" # TODO pipe mascot name
+        transcript_text += f"<|{sender_name};{t.role};{t.created_at};{t.content}|>"
+    return transcript_text
+
+
 def load_chat_history_json_group(group_id: str):
     logger.info(f"Loading chat history for group ID: {group_id}")
     transcripts = GroupChatTranscript.objects.filter(
@@ -77,13 +88,15 @@ def save_chat_round(user_id: str, message, response):
 
 @transaction.atomic
 def save_chat_round_group(group_id: str, sender_id: str, message, response):
-    logger.info(f"Saving chat round for group ID: {sender_id}")
+    logger.info(f"Saving chat round for group ID: {group_id}")
     group = Group.objects.get(id=group_id)
-    sender = User.objects.get(id=sender_id)
-    GroupChatTranscript.objects.create(
-        group=group, role="user", content=message, sender=sender)
-    GroupChatTranscript.objects.create(
-        group=group, role="assistant", content=response)
+    if message:
+        sender = User.objects.get(id=sender_id)
+        GroupChatTranscript.objects.create(
+            group=group, role="user", content=message, sender=sender)
+    if response:
+        GroupChatTranscript.objects.create(
+            group=group, role="assistant", content=response)
     logger.info("Chat round saved successfully.")
 
 

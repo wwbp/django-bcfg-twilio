@@ -79,9 +79,11 @@ class Summary(models.Model):
 class StrategyPrompt(models.Model):
     name = models.CharField(max_length=255)
     what_prompt = models.TextField(
-        help_text="Prompt used to generate a response")
+        help_text="Prompt used to generate a response", default="")
     when_prompt = models.TextField(
-        help_text="Conditions or triggers for using this strategy")
+        help_text="Conditions or triggers for using this strategy", default="")
+    who_prompt = models.TextField(
+        help_text="Criteria for selecting the response's addressee", default="")
     is_active = models.BooleanField(default=True, help_text="Soft delete flag")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

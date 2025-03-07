@@ -179,7 +179,7 @@ class SummaryUpdateView(UpdateView):
 class StrategyPromptForm(forms.ModelForm):
     class Meta:
         model = StrategyPrompt
-        fields = ['name', 'what_prompt', 'when_prompt', 'is_active']
+        fields = ['name', 'what_prompt', 'when_prompt', 'who_prompt', 'is_active']
 
 
 def strategy_list(request):
