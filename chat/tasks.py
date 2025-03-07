@@ -47,9 +47,9 @@ def ingest_group_task(self, group_id, data):
     """
     try:
         response = ingest_group_sync(group_id, data)
-        chain(
-            send_message_to_participant_group_task.s(group_id, response)
-        ).apply_async()
+        # chain(
+        #     send_message_to_participant_group_task.s(group_id, response)
+        # ).apply_async()
         return response
     except Exception as exc:
         logger.error(f"Ingest group task failed for {group_id}: {exc}")

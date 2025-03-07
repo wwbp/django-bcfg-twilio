@@ -1,3 +1,4 @@
+from .views import strategy_list, strategy_create, strategy_edit, strategy_delete
 from .views import SummaryListView, SummaryCreateView, SummaryUpdateView
 from django.urls import path
 from .views import HealthCheckView, IngestIndividualView, IngestGroupView, PromptInterface, prompt_edit, prompt_delete, summary_view
@@ -18,4 +19,8 @@ urlpatterns = [
     path('summary/create/', SummaryCreateView.as_view(), name='summary_create'),
     path('summary/<int:pk>/edit/',
          SummaryUpdateView.as_view(), name='summary_update'),
+    path("strategies/", strategy_list, name="strategy_list"),
+    path("strategies/create/", strategy_create, name="strategy_create"),
+    path("strategies/<int:pk>/edit/", strategy_edit, name="strategy_edit"),
+    path("strategies/<int:pk>/delete/", strategy_delete, name="strategy_delete"),
 ]
