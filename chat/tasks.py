@@ -1,3 +1,5 @@
+from .send import send_message_to_participant, send_message_to_participant_group
+import asyncio
 from .ingest import ingest_individual, ingest_group_sync
 from config.celery import app
 import logging
@@ -19,10 +21,26 @@ def sample_task():
 
 
 @shared_task
-def ingest_individual_task(participant_id, data):
-    ingest_individual(participant_id, data)
+def ingest_individual_task(user_id, data):
+    response = ingest_individual(user_id, data)
+    send_message_to_participant_task.delay(user_id, response)
+    return response
 
 
 @shared_task
 def ingest_group_task(group_id, data):
-    ingest_group_sync(group_id, data)
+    response = ingest_group_sync(group_id, data)
+    send_message_to_participant_group_task.delay(group_id, response)
+    return response
+
+
+@shared_task
+def send_message_to_participant_task(participant_id, message):
+    result = asyncio.run(send_message_to_participant(participant_id, message))
+    return result
+
+
+@shared_task
+def send_message_to_participant_group_task(group_id, message):
+    result = asyncio.run(send_message_to_participant_group(group_id, message))
+    return result
