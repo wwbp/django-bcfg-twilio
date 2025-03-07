@@ -1,4 +1,5 @@
 # chat/crud.py
+import json
 import logging
 
 from .constant import MODERATION_MESSAGE_DEFAULT
@@ -61,11 +62,16 @@ def load_detailed_transcript(group_id: str):
     logger.info(f"Loading detailed transcript for group ID: {group_id}")
     transcripts = GroupChatTranscript.objects.filter(
         group_id=group_id).order_by("created_at")
-    transcript_text = "<|sender name; role; timestamp; content|>"
+    messages = []
     for t in transcripts:
-        sender_name = t.sender.name if t.sender else "assistant" # TODO pipe mascot name
-        transcript_text += f"<|{sender_name};{t.role};{t.created_at};{t.content}|>"
-    return transcript_text
+        sender_name = t.sender.name if t.sender else "assistant"  # TODO: pipe mascot name
+        messages.append({
+            "sender": sender_name,
+            "role": t.role,
+            "timestamp": str(t.created_at),
+            "content": t.content
+        })
+    return json.dumps(messages, indent=2)
 
 
 def load_chat_history_json_group(group_id: str):
