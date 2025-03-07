@@ -3,7 +3,7 @@ from django.views.generic import ListView, CreateView, UpdateView
 from django.http import JsonResponse
 from django.views import View
 from django import forms
-from .models import Prompt, Control, Summary
+from .models import Prompt, Control, StrategyPrompt, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -174,3 +174,49 @@ class SummaryUpdateView(UpdateView):
     form_class = SummaryForm
     template_name = 'chat/summary_form.html'
     success_url = reverse_lazy('chat:summary_list')
+
+
+class StrategyPromptForm(forms.ModelForm):
+    class Meta:
+        model = StrategyPrompt
+        fields = ['name', 'what_prompt', 'when_prompt', 'is_active']
+
+
+def strategy_list(request):
+    """List all active strategy prompts."""
+    strategies = StrategyPrompt.objects.filter(is_active=True)
+    return render(request, "chat/strategy_list.html", {"strategies": strategies})
+
+
+def strategy_create(request):
+    """Create a new strategy prompt."""
+    if request.method == "POST":
+        form = StrategyPromptForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect("chat:strategy_list")
+    else:
+        form = StrategyPromptForm()
+    return render(request, "chat/strategy_form.html", {"form": form, "action": "Create"})
+
+
+def strategy_edit(request, pk):
+    """Edit an existing strategy prompt."""
+    strategy = get_object_or_404(StrategyPrompt, pk=pk)
+    if request.method == "POST":
+        form = StrategyPromptForm(request.POST, instance=strategy)
+        if form.is_valid():
+            form.save()
+            return redirect("chat:strategy_list")
+    else:
+        form = StrategyPromptForm(instance=strategy)
+    return render(request, "chat/strategy_form.html", {"form": form, "action": "Edit"})
+
+
+def strategy_delete(request, pk):
+    """Soft delete a strategy prompt by marking it inactive."""
+    strategy = get_object_or_404(StrategyPrompt, pk=pk)
+    # Soft delete: mark as inactive
+    strategy.is_active = False
+    strategy.save()
+    return redirect("chat:strategy_list")
