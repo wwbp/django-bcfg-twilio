@@ -146,7 +146,7 @@ def process_arbitrar_layer(group_id: str):
     return results
 
 
-async def send_strategy_responses(group_id: str, responses: dict):
+async def send_multiple_responses(group_id: str, responses: list[str]):
     """
     Asynchronously send each generated strategy response to the group.
 
@@ -155,6 +155,8 @@ async def send_strategy_responses(group_id: str, responses: dict):
     logging.info(f"Sending strategy responses for group ID: {group_id}")
     # TODO priority order and evaluation
 
-    for _, response in responses.items():
+    # for _, response in responses.items():
+    #     await send_message_to_participant_group(group_id, response)
+
+    for response in responses:
         await send_message_to_participant_group(group_id, response)
-        save_chat_round_group(group_id, "assistant", "", response)

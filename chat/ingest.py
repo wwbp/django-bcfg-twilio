@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from .arbitrar import process_arbitrar_layer
+from .arbitrar import process_arbitrar_layer, send_strategy_responses
 from .completion import generate_response
 from .crud import load_chat_prompt, save_chat_round_group, verify_update_database, load_chat_history_json, save_chat_round, verify_update_database_group
 
@@ -34,5 +34,5 @@ def ingest_group_sync(group_id: str, data: dict):
         f"Generated responses for group {group_id}: {strategy_responses}")
     for _, response in strategy_responses.items():
         save_chat_round_group(group_id, None, "", response)
-    # asyncio.run(send_strategy_responses(group_id, strategy_responses))
+    asyncio.run(send_strategy_responses(group_id, strategy_responses))
     return strategy_responses
