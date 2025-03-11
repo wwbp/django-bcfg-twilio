@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 from .constant import MODERATION_MESSAGE_DEFAULT
@@ -11,6 +12,7 @@ class User(models.Model):
     name = models.CharField(max_length=255, default='')
     initial_message = models.TextField(default='')
     is_test = models.BooleanField(default=False)
+    week_number = models.IntegerField(null=True, blank=True)
 
 
 class Group(models.Model):
@@ -74,3 +76,31 @@ class Summary(models.Model):
     summary = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class StrategyPrompt(models.Model):
+    name = models.CharField(max_length=255)
+    what_prompt = models.TextField(
+        help_text="Prompt used to generate a response", default="")
+    when_prompt = models.TextField(
+        help_text="Conditions or triggers for using this strategy", default="")
+    who_prompt = models.TextField(
+        help_text="Criteria for selecting the response's addressee", default="")
+    is_active = models.BooleanField(default=True, help_text="Soft delete flag")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class IndividualPipelineRecord(models.Model):
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    participant_id = models.CharField(max_length=255)
+    ingested = models.BooleanField(default=False)
+    processed = models.BooleanField(default=False)
+    sent = models.BooleanField(default=False)
+    failed = models.BooleanField(default=False)
+    error_log = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
