@@ -11,6 +11,7 @@ class User(models.Model):
     name = models.CharField(max_length=255, default='')
     initial_message = models.TextField(default='')
     is_test = models.BooleanField(default=False)
+    week_number = models.IntegerField(null=True, blank=True)
 
 
 class Group(models.Model):
@@ -87,3 +88,17 @@ class StrategyPrompt(models.Model):
     is_active = models.BooleanField(default=True, help_text="Soft delete flag")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class IndividualPipelineRecord(models.Model):
+    participant_id = models.CharField(max_length=255, unique=True)
+    ingested = models.BooleanField(default=False)
+    processed = models.BooleanField(default=False)
+    sent = models.BooleanField(default=False)
+    failed = models.BooleanField(default=False)
+    error_log = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"IndividualPipelineRecord({self.participant_id})"

@@ -3,6 +3,8 @@ from django.views.generic import ListView, CreateView, UpdateView
 from django.http import JsonResponse
 from django.views import View
 from django import forms
+
+from .pipeline import individual_pipeline_ingest_task
 from .models import Prompt, Control, StrategyPrompt, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
@@ -21,7 +23,9 @@ class IngestIndividualView(APIView):
     def post(self, request, id):
         serializer = IncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            ingest_individual_task.delay(id, serializer.validated_data)
+            # ingest_individual_task.delay(id, serializer.validated_data)
+            individual_pipeline_ingest_task.delay(
+                id, serializer.validated_data)
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -179,7 +183,8 @@ class SummaryUpdateView(UpdateView):
 class StrategyPromptForm(forms.ModelForm):
     class Meta:
         model = StrategyPrompt
-        fields = ['name', 'what_prompt', 'when_prompt', 'who_prompt', 'is_active']
+        fields = ['name', 'what_prompt',
+                  'when_prompt', 'who_prompt', 'is_active']
 
 
 def strategy_list(request):
