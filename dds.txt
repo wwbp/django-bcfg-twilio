@@ -1,0 +1,1457 @@
+# Directory Structure:
+# ├── __init__.py
+# ├── admin.py
+# ├── apps.py
+# ├── arbitrar.py
+# ├── completion.py
+# ├── constant.py
+# ├── crud.py
+# ├── ingest.py
+# ├── migrations
+# │   ├── 0001_initial.py
+# │   ├── 0002_user_is_test.py
+# │   ├── 0003_group_groupchattranscript.py
+# │   ├── 0004_control_moderation.py
+# │   ├── 0005_summary.py
+# │   ├── 0006_summary_updated_at.py
+# │   ├── 0007_strategyprompt.py
+# │   ├── 0008_strategyprompt_who_prompt_and_more.py
+# │   └── __init__.py
+# ├── models.py
+# ├── moderation.py
+# ├── send.py
+# ├── serializers.py
+# ├── tasks.py
+# ├── templates
+# │   └── chat
+# │       ├── prompt_confirm_delete.html
+# │       ├── prompt_edit.html
+# │       ├── prompt_interface.html
+# │       ├── strategy_form.html
+# │       ├── strategy_list.html
+# │       ├── summary_form.html
+# │       └── summary_list.html
+# ├── tests.py
+# ├── urls.py
+# └── views.py
+
+
+# File: __init__.py
+
+
+# File: admin.py
+from django.contrib import admin
+
+# Register your models here.
+
+
+# File: apps.py
+from django.apps import AppConfig
+
+
+class ChatConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'chat'
+
+
+# File: arbitrar.py
+# chat/arbitrar.py
+import asyncio
+import json
+from .models import StrategyPrompt
+from .crud import load_detailed_transcript, save_chat_round_group
+from .completion import chat_completion
+from .send import send_message_to_participant_group
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def evaluate_strategy_confidence(transcript_text: str, strategy: StrategyPrompt) -> float:
+    """
+    For a given strategy, build a composite prompt that includes:
+      - The detailed transcript
+      - The strategy's 'when' condition (trigger)
+      - The strategy's 'what' instruction prompt
+
+    Then call GPT to generate a confidence score (0-1) for the strategy.
+    """
+
+    system_prompt = """
+    You are an evaluation engine whose task is to determine whether a given strategy is applicable to the conversation based on the following inputs:
+
+    **Your Task:**
+    Analyze the conversation transcript and assess whether the Strategy Timing conditions are met. Be objective in your reasoning—only conclude that the strategy is applicable if the evidence is strong and the criteria are clearly satisfied. If there is any doubt or insufficient evidence, err on the side of caution.
+
+    **Return Format:**
+    Output your response in strict JSON format with exactly these keys:
+    {
+    "applicable": <true/false>, 
+    "confidence": <a number between 0 and 1>, 
+    "explanation": <brief explanation (less than 100 words)>
+    }
+
+    Do not include any additional commentary outside the JSON output. Evaluate based on the actual turns and active participation; do not rely solely on keywords. If unsure, return "applicable": false with a low confidence score.
+    """
+
+    # ** Context Dump **
+    # 1. **Detailed Transcript:** A full transcript of a group conversation with multiple turns.
+    # """ + f"2. **Strategy Timing Intelligence:** which relates to when the chatbot should respond. {strategy.when_prompt}" + """ + f"2.
+    # 3. **Strategy Addressee Intelligence:** which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants) {strategy.when_prompt}" + """
+
+    context_prompt = (
+        f"1. **Detailed Transcript:** A full transcript of a group conversation with multiple turns.\n{transcript_text}\n\n"
+        "--------------------------------\n\n"
+        f"2. **Strategy Timing Intelligence:** which relates to when the chatbot should respond.\n {strategy.when_prompt}\n\n"
+        "--------------------------------\n\n"
+        f"3. **Strategy Addressee Intelligence:** which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants).\n {strategy.who_prompt}\n\n"
+        "--------------------------------\n\n"
+    )
+
+    composite_prompt = context_prompt + system_prompt
+
+    logging.info(
+        f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
+    try:
+        # Call the GPT completion function
+        response = asyncio.run(chat_completion(composite_prompt))
+        logging.info(
+            f"Response from GPT for strategy {strategy.name}: {response}")
+
+        # Attempt to parse the JSON output
+        result = json.loads(response)
+
+        # Check if required keys are in the JSON
+        for key in ("applicable", "confidence", "explanation"):
+            if key not in result:
+                raise ValueError(f"Missing key in JSON response: {key}")
+
+    except json.JSONDecodeError as e:
+        logging.error(f"JSON decoding error: {e}")
+        result = {
+            "applicable": False,
+            "confidence": 0.0,
+            "explanation": "Failed to decode JSON response from GPT."
+        }
+    except Exception as e:
+        logging.error(f"Error in strategy evaluation: {e}")
+        result = {
+            "applicable": False,
+            "confidence": 0.0,
+            "explanation": "An error occurred during strategy evaluation."
+        }
+
+    # Return tuple (is_applicable, detailed result)
+    return result["applicable"], result
+
+
+def evaluate_strategies_with_gpt(transcript_text: str):
+    """
+    Evaluate all active strategies by using GPT to generate a confidence score
+    for each strategy against the given transcript.
+
+    Returns:
+      A sorted list of tuples (strategy, score) for strategies scoring above the threshold.
+    """
+    logging.info("Evaluating strategies with GPT...")
+    applicable = []
+    active_strategies = StrategyPrompt.objects.filter(is_active=True)
+    for strategy in active_strategies:
+        is_applicable, response = evaluate_strategy_confidence(
+            transcript_text, strategy)
+        if is_applicable:
+            applicable.append((strategy, response))
+    return applicable
+
+
+def process_arbitrar_layer(group_id: str):
+    """
+    Process the arbitrar layer for a group conversation.
+
+    Steps:
+      1. Compile the detailed transcript.
+      2. For each active strategy, use GPT to get a confidence score.
+      3. For those with a score above the threshold, generate a response
+         using the strategy's 'what' prompt and the latest message.
+
+    Returns a dictionary mapping each strategy's name to its generated response and confidence score.
+    """
+    logging.info(f"Processing arbitrar layer for group ID: {group_id}")
+    transcript_text = load_detailed_transcript(group_id)
+    applicable_strategies = evaluate_strategies_with_gpt(transcript_text)
+
+    results = {}
+    for strategy, response in applicable_strategies:
+        instructions = (
+            f"Detailed Transcript:\n{transcript_text}\n\n"
+            "--------------------------------\n\n"
+            f"Strategy Intelligence, which relates to what the chatbot should respond.\n"
+            f"Strategy What Prompt: {strategy.what_prompt}\n\n"
+            "--------------------------------\n\n"
+            "Strategy Timing Intelligence, which relates to what the chatbot should respond.\n"
+            f"Strategy When Condition: {strategy.when_prompt}\n\n"
+            "Strategy Addressee Intelligence, which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants).\n"
+            f"Strategy Who Criteria: {strategy.who_prompt}\n\n"
+            f"Results on if the strategy is applicable: {response}\n\n"
+            "--------------------------------\n\n"
+            "Your task is to generate next assistant response based on the strategy's intelligence instructions."
+        )
+
+        response = asyncio.run(chat_completion(instructions))
+        results[strategy.id] = response
+    return results
+
+
+async def send_multiple_responses(group_id: str, responses: list[str]):
+    """
+    Asynchronously send each generated strategy response to the group.
+
+    Each message is prefixed with the strategy name.
+    """
+    logging.info(f"Sending strategy responses for group ID: {group_id}")
+    # TODO priority order and evaluation
+
+    # for _, response in responses.items():
+    #     await send_message_to_participant_group(group_id, response)
+
+    for response in responses:
+        await send_message_to_participant_group(group_id, response)
+
+# File: completion.py
+from asgiref.sync import sync_to_async
+import os
+from openai import OpenAI
+from .crud import get_moderation_message
+from .moderation import moderate_message
+from kani import Kani, ChatMessage
+from kani.engines.openai import OpenAIEngine
+
+
+api_key = os.getenv(
+    "OPENAI_API_KEY")
+
+
+async def _generate_response(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
+    blocked_str = moderate_message(message)
+    if blocked_str:
+        moderation_message = await sync_to_async(get_moderation_message)()
+        return moderation_message
+    engine = OpenAIEngine(api_key, model="gpt-4o-mini")
+    assistant = Kani(engine, system_prompt=instructions,
+                     chat_history=chat_history)
+    response = await assistant.chat_round_str(message)
+    return response
+
+
+async def generate_response(history_json: list[dict], instructions: str, message: str) -> ChatMessage:
+    chat_history = [ChatMessage.model_validate(chat) for chat in history_json]
+    response = await _generate_response(chat_history, instructions, message)
+    return response
+
+
+async def chat_completion(instructions: str):
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": instructions},
+        ],
+    )
+    response = completion.choices[0].message.content
+    return response
+
+
+# File: constant.py
+MODERATION_MESSAGE_DEFAULT = """I'm really sorry you're feeling this way, but I'm not equipped to help. It's important to talk to someone who can support you right now. Please contact UCLA resources such as UCLA CAPS: Counseling & Psychological Services | Counseling and Psychological Services (ucla.edu) at 310-825-0768, or the National Suicide Prevention Lifeline at 1-800-273-TALK (8255) or text HOME to 741741 to connect with a trained clinician. If you're in immediate danger, please call 911 or go to the nearest emergency room. Please also note that if you wish not to continue with the study, feel free to quit anytime."""
+
+
+# File: crud.py
+# chat/crud.py
+import json
+import logging
+
+from .constant import MODERATION_MESSAGE_DEFAULT
+from .models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
+from django.db import transaction
+
+logger = logging.getLogger(__name__)
+
+
+def verify_update_database(user_id: str, data: dict):
+    logger.info(f"Checking database for participant/group ID: {user_id}")
+    user, created = User.objects.get_or_create(id=user_id)
+    if created:
+        logger.info(
+            f"Participant/group ID {user_id} not found. Creating a new record.")
+        user.school_name = data["context"]["school_name"]
+        user.school_mascot = data["context"]["school_mascot"]
+        user.name = data["context"]["name"]
+        user.initial_message = data["context"]["initial_message"]
+        user.save()
+        ChatTranscript.objects.create(
+            user=user, role="assistant", content=data["context"]["initial_message"])
+    else:
+        logger.info(f"Participant/group ID {user_id} exists.")
+    return user
+
+
+def verify_update_database_group(group_id: str, data: dict):
+    logger.info(f"Checking database for group ID: {group_id}")
+    group, group_created = Group.objects.get_or_create(id=group_id)
+    if group_created:
+        logger.info(f"Group ID {group_id} not found. Creating a new record.")
+        group.initial_message = data["context"]["initial_message"]
+        group.save()
+        for participant in data["context"].get("participants", []):
+            user, user_created = User.objects.get_or_create(
+                id=participant["id"])
+            if user_created:
+                user.name = participant.get("name", user.name)
+                user.school_name = data["context"]["school_name"]
+                user.school_mascot = data["context"]["school_mascot"]
+                user.save()
+            group.users.add(user)
+        GroupChatTranscript.objects.create(
+            group=group, role="assistant", content=data["context"]["initial_message"])
+    else:
+        logger.info(f"Group ID {group_id} exists.")
+    return group
+
+
+def load_chat_history_json(user_id: str):
+    logger.info(f"Loading chat history for participant/group ID: {user_id}")
+    transcripts = ChatTranscript.objects.filter(
+        user_id=user_id).order_by("created_at")
+    history = [{"role": t.role, "content": t.content} for t in transcripts]
+    return history
+
+
+def load_detailed_transcript(group_id: str):
+    logger.info(f"Loading detailed transcript for group ID: {group_id}")
+    transcripts = GroupChatTranscript.objects.filter(
+        group_id=group_id).order_by("created_at")
+    messages = []
+    for t in transcripts:
+        sender_name = t.sender.name if t.sender else "assistant"  # TODO: pipe mascot name
+        messages.append({
+            "sender": sender_name,
+            "role": t.role,
+            "timestamp": str(t.created_at),
+            "content": t.content
+        })
+    return json.dumps(messages, indent=2)
+
+
+def load_chat_history_json_group(group_id: str):
+    logger.info(f"Loading chat history for group ID: {group_id}")
+    transcripts = GroupChatTranscript.objects.filter(
+        group_id=group_id).order_by("created_at")
+    history = [{"role": t.role, "content": t.content} for t in transcripts]
+    return history
+
+
+@transaction.atomic
+def save_chat_round(user_id: str, message, response):
+    logger.info(f"Saving chat round for participant/group ID: {user_id}")
+    user = User.objects.get(id=user_id)
+    ChatTranscript.objects.create(user=user, role="user", content=message)
+    ChatTranscript.objects.create(
+        user=user, role="assistant", content=response)
+    logger.info("Chat round saved successfully.")
+
+
+@transaction.atomic
+def save_chat_round_group(group_id: str, sender_id: str, message, response):
+    logger.info(f"Saving chat round for group ID: {group_id}")
+    group = Group.objects.get(id=group_id)
+    if message:
+        sender = User.objects.get(id=sender_id)
+        GroupChatTranscript.objects.create(
+            group=group, role="user", content=message, sender=sender)
+    if response:
+        GroupChatTranscript.objects.create(
+            group=group, role="assistant", content=response)
+    logger.info("Chat round saved successfully.")
+
+
+def load_chat_prompt(week: int, group=False):
+    try:
+        controls = Control.objects.latest('created_at')
+    except Control.DoesNotExist:
+        controls = Control.objects.create()
+    prompt = Prompt.objects.filter(week=week).last()
+    activity = prompt.activity if prompt else controls.default
+    prompt = f"System Prompt: {controls.system} \n AI BOT Persona: {controls.persona} \n Week's Activity: {activity}"
+    return prompt
+
+
+def get_moderation_message():
+    try:
+        controls = Control.objects.latest('created_at')
+    except Control.DoesNotExist:
+        controls = Control.objects.create()
+    if len(controls.moderation) > 0:
+        return controls.moderation
+    return MODERATION_MESSAGE_DEFAULT
+
+
+# File: ingest.py
+import asyncio
+import logging
+
+from .arbitrar import process_arbitrar_layer, send_strategy_responses
+from .completion import generate_response
+from .crud import load_chat_prompt, save_chat_round_group, verify_update_database, load_chat_history_json, save_chat_round, verify_update_database_group
+
+logger = logging.getLogger(__name__)
+
+
+def ingest_individual(user_id: str, data: dict):
+    verify_update_database(user_id, data)
+    history_json = load_chat_history_json(user_id)
+    instructions = load_chat_prompt(data['context']['week_number'])
+    response = asyncio.run(generate_response(
+        history_json, instructions, data['message']))
+    save_chat_round(user_id, data['message'], response)
+    print(f"Generated response for participant {user_id}: {response}")
+    return response
+
+
+def ingest_group_sync(group_id: str, data: dict):
+    print(
+        f"Group message received for group {group_id} from sender {data['sender_id']}: {data['message']}")
+    verify_update_database_group(group_id, data)
+    # history_json = load_chat_history_json(group_id)
+    # instructions = load_chat_prompt(data['context']['week_number'], group=True)
+    # response = asyncio.run(generate_response(
+    #     history_json, instructions, data['message']))
+    save_chat_round_group(
+        group_id, data['sender_id'], data['message'], "")
+    strategy_responses = process_arbitrar_layer(group_id)
+    logging.info(
+        f"Generated responses for group {group_id}: {strategy_responses}")
+    for _, response in strategy_responses.items():
+        save_chat_round_group(group_id, None, "", response)
+    asyncio.run(send_strategy_responses(group_id, strategy_responses))
+    return strategy_responses
+
+
+# File: migrations/0001_initial.py
+# Generated by Django 5.1.6 on 2025-03-02 16:50
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Control',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('persona', models.TextField()),
+                ('system', models.TextField()),
+                ('default', models.TextField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Prompt',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('week', models.IntegerField()),
+                ('activity', models.TextField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+        ),
+        migrations.CreateModel(
+            name='User',
+            fields=[
+                ('id', models.CharField(max_length=255, primary_key=True, serialize=False)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('school_name', models.CharField(default='', max_length=255)),
+                ('school_mascot', models.CharField(default='', max_length=255)),
+                ('name', models.CharField(default='', max_length=255)),
+                ('initial_message', models.TextField(default='')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='ChatTranscript',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('role', models.CharField(choices=[('user', 'User'), ('assistant', 'Assistant')], max_length=255)),
+                ('content', models.TextField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.DO_NOTHING, related_name='transcripts', to='chat.user')),
+            ],
+        ),
+    ]
+
+
+# File: migrations/0002_user_is_test.py
+# Generated by Django 5.1.6 on 2025-03-04 00:31
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='user',
+            name='is_test',
+            field=models.BooleanField(default=False),
+        ),
+    ]
+
+
+# File: migrations/0003_group_groupchattranscript.py
+# Generated by Django 5.1.6 on 2025-03-04 12:21
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0002_user_is_test'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Group',
+            fields=[
+                ('id', models.CharField(max_length=255, primary_key=True, serialize=False)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('is_test', models.BooleanField(default=False)),
+                ('users', models.ManyToManyField(related_name='groups', to='chat.user')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='GroupChatTranscript',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('role', models.CharField(choices=[('user', 'User'), ('assistant', 'Assistant')], max_length=255)),
+                ('content', models.TextField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('group', models.ForeignKey(on_delete=django.db.models.deletion.DO_NOTHING, related_name='transcripts', to='chat.group')),
+                ('sender', models.ForeignKey(null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='group_transcripts', to='chat.user')),
+            ],
+        ),
+    ]
+
+
+# File: migrations/0004_control_moderation.py
+# Generated by Django 5.1.6 on 2025-03-05 06:23
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0003_group_groupchattranscript'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='control',
+            name='moderation',
+            field=models.TextField(default="I'm really sorry you're feeling this way, but I'm not equipped to help. It's important to talk to someone who can support you right now. Please contact UCLA resources such as UCLA CAPS: Counseling & Psychological Services | Counseling and Psychological Services (ucla.edu) at 310-825-0768, or the National Suicide Prevention Lifeline at 1-800-273-TALK (8255) or text HOME to 741741 to connect with a trained clinician. If you're in immediate danger, please call 911 or go to the nearest emergency room. Please also note that if you wish not to continue with the study, feel free to quit anytime."),
+        ),
+    ]
+
+
+# File: migrations/0005_summary.py
+# Generated by Django 5.1.6 on 2025-03-06 13:54
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0004_control_moderation'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Summary',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('school', models.CharField(max_length=255)),
+                ('type', models.CharField(choices=[('influencer', 'Influencer'), ('song', 'Song'), ('spot', 'Spot'), ('idea', 'Idea'), ('pick', 'Pick')], max_length=20)),
+                ('summary', models.TextField()),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+        ),
+    ]
+
+
+# File: migrations/0006_summary_updated_at.py
+# Generated by Django 5.1.6 on 2025-03-06 13:58
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0005_summary'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='summary',
+            name='updated_at',
+            field=models.DateTimeField(auto_now=True),
+        ),
+    ]
+
+
+# File: migrations/0007_strategyprompt.py
+# Generated by Django 5.1.7 on 2025-03-07 08:03
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0006_summary_updated_at'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='StrategyPrompt',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=255)),
+                ('what_prompt', models.TextField(help_text='Prompt used to generate a response')),
+                ('when_prompt', models.TextField(help_text='Conditions or triggers for using this strategy')),
+                ('is_active', models.BooleanField(default=True, help_text='Soft delete flag')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+        ),
+    ]
+
+
+# File: migrations/0008_strategyprompt_who_prompt_and_more.py
+# Generated by Django 5.1.7 on 2025-03-07 15:57
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0007_strategyprompt'),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name='strategyprompt',
+            name='who_prompt',
+            field=models.TextField(default='', help_text="Criteria for selecting the response's addressee"),
+        ),
+        migrations.AlterField(
+            model_name='strategyprompt',
+            name='what_prompt',
+            field=models.TextField(default='', help_text='Prompt used to generate a response'),
+        ),
+        migrations.AlterField(
+            model_name='strategyprompt',
+            name='when_prompt',
+            field=models.TextField(default='', help_text='Conditions or triggers for using this strategy'),
+        ),
+    ]
+
+
+# File: migrations/__init__.py
+
+
+# File: models.py
+from django.db import models
+
+from .constant import MODERATION_MESSAGE_DEFAULT
+
+
+class User(models.Model):
+    id = models.CharField(primary_key=True, max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    school_name = models.CharField(max_length=255, default='')
+    school_mascot = models.CharField(max_length=255, default='')
+    name = models.CharField(max_length=255, default='')
+    initial_message = models.TextField(default='')
+    is_test = models.BooleanField(default=False)
+
+
+class Group(models.Model):
+    id = models.CharField(primary_key=True, max_length=255)
+    users = models.ManyToManyField(User, related_name="groups")
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_test = models.BooleanField(default=False)
+
+
+class ChatTranscript(models.Model):
+    ROLE_CHOICES = (
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.DO_NOTHING, related_name='transcripts')
+    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class GroupChatTranscript(models.Model):
+    ROLE_CHOICES = (
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+    )
+    group = models.ForeignKey(
+        Group, on_delete=models.DO_NOTHING, related_name='transcripts')
+    sender = models.ForeignKey(
+        User, on_delete=models.DO_NOTHING, related_name='group_transcripts', null=True)
+    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Prompt(models.Model):
+    week = models.IntegerField()
+    activity = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Control(models.Model):
+    persona = models.TextField()
+    system = models.TextField()
+    default = models.TextField()
+    moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Summary(models.Model):
+    TYPE_CHOICES = [
+        ('influencer', 'Influencer'),
+        ('song', 'Song'),
+        ('spot', 'Spot'),
+        ('idea', 'Idea'),
+        ('pick', 'Pick'),
+    ]
+
+    school = models.CharField(max_length=255)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    summary = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class StrategyPrompt(models.Model):
+    name = models.CharField(max_length=255)
+    what_prompt = models.TextField(
+        help_text="Prompt used to generate a response", default="")
+    when_prompt = models.TextField(
+        help_text="Conditions or triggers for using this strategy", default="")
+    who_prompt = models.TextField(
+        help_text="Criteria for selecting the response's addressee", default="")
+    is_active = models.BooleanField(default=True, help_text="Soft delete flag")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+# File: moderation.py
+from typing import Tuple
+from openai import OpenAI
+from openai._compat import model_dump
+client = OpenAI()
+
+MODERATION_VALUES_FOR_BLOCKED = {
+    "harassment": 0.5,
+    "harassment/threatening": 0.1,
+    "hate": 0.5,
+    "hate/threatening": 0.1,
+    "self-harm": 0.2,
+    "self-harm/instructions": 0.5,
+    "self-harm/intent": 0.7,
+    "sexual": 0.5,
+    "sexual/minors": 0.2,
+    "violence": 0.7,
+    "violence/graphic": 0.8,
+}
+
+
+def moderate_message(message: str) -> str:
+    moderation_response = client.moderations.create(
+        input=message, model="omni-moderation-latest"
+    )
+    category_scores = moderation_response.results[0].category_scores or {}
+
+    category_score_items = model_dump(category_scores)
+
+    blocked_str = ""
+    for category, score in category_score_items.items():
+        if score is None:
+            continue
+        if score > MODERATION_VALUES_FOR_BLOCKED.get(category, 1.0):
+            blocked_str += f"({category}: {score})"
+            break
+    return blocked_str
+
+
+# File: send.py
+import httpx
+import os
+
+BCFG_DOMAIN = os.getenv("BCFG_DOMAIN", "https://bcfg-domain.com")
+
+
+async def send_message_to_participant(participant_id: str, message: str):
+    """
+    Sends a message to a single participant via the BCFG endpoint.
+
+    Endpoint:
+      POST /ai/api/participant/{id}/send
+    Body:
+      { "message": "What a lovely day" }
+    """
+    url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    payload = {"message": message}
+    headers = {
+        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        # Log the HTTP error details and return a default value
+        print(
+            f"HTTP error sending message to participant {participant_id}: {exc.response.status_code} - {exc.response.text}")
+        return {"error": "HTTPStatusError", "details": str(exc)}
+    except httpx.RequestError as exc:
+        # Log connection related errors
+        print(
+            f"Request error sending message to participant {participant_id}: {exc}")
+        return {"error": "RequestError", "details": str(exc)}
+
+
+async def send_message_to_participant_group(group_id: str, message: str):
+    """
+    Sends a message to a participant group via the BCFG endpoint.
+
+    Endpoint:
+      POST /ai/api/participantgroup/{id}/send
+    Body:
+      { "message": "What a lovely day" }
+    """
+    url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    payload = {"message": message}
+    headers = {
+        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        # Log the HTTP error details and return a default value
+        print(
+            f"HTTP error sending message to participant group {group_id}: {exc.response.status_code} - {exc.response.text}")
+        return {"error": "HTTPStatusError", "details": str(exc)}
+    except httpx.RequestError as exc:
+        # Log connection related errors
+        print(
+            f"Request error sending message to participant group {group_id}: {exc}")
+        return {"error": "RequestError", "details": str(exc)}
+
+
+# File: serializers.py
+from rest_framework import serializers
+
+
+class ContextSerializer(serializers.Serializer):
+    school_name = serializers.CharField()
+    school_mascot = serializers.CharField()
+    initial_message = serializers.CharField()
+    week_number = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class IncomingMessageSerializer(serializers.Serializer):
+    context = ContextSerializer()
+    message = serializers.CharField()
+
+
+class ParticipantSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    id = serializers.CharField()
+
+
+class GroupContextSerializer(serializers.Serializer):
+    school_name = serializers.CharField()
+    school_mascot = serializers.CharField()
+    initial_message = serializers.CharField()
+    week_number = serializers.IntegerField()
+    participants = ParticipantSerializer(many=True)
+
+
+class GroupIncomingMessageSerializer(serializers.Serializer):
+    context = GroupContextSerializer()
+    sender_id = serializers.CharField()
+    message = serializers.CharField()
+
+
+# File: tasks.py
+from celery import shared_task, chain
+from .send import send_message_to_participant, send_message_to_participant_group
+import asyncio
+from .ingest import ingest_individual, ingest_group_sync
+from config.celery import app
+import logging
+from celery import shared_task
+
+
+logger = logging.getLogger(__name__)
+
+
+@shared_task
+def add(x, y):
+    return x + y
+
+
+@app.task
+def sample_task():
+    print("Celery beat: Running sample task!")
+    logger.info("Celery beat: Running sample task!")
+
+
+@shared_task(bind=True, max_retries=3)
+def ingest_individual_task(self, user_id, data):
+    """
+    Ingest individual chat data, generate a response,
+    then chain the sending task.
+    """
+    try:
+        response = ingest_individual(user_id, data)
+        # Chain the sending task to ensure proper sequencing
+        chain(
+            send_message_to_participant_task.s(user_id, response)
+        ).apply_async()
+        return response
+    except Exception as exc:
+        logger.error(f"Ingest individual task failed for {user_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(bind=True, max_retries=3)
+def ingest_group_task(self, group_id, data):
+    """
+    Ingest group chat data, generate a response,
+    then chain the group message sending task.
+    """
+    try:
+        response = ingest_group_sync(group_id, data)
+        # chain(
+        #     send_message_to_participant_group_task.s(group_id, response)
+        # ).apply_async()
+        return response
+    except Exception as exc:
+        logger.error(f"Ingest group task failed for {group_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(bind=True, max_retries=3)
+def send_message_to_participant_task(self, participant_id, message):
+    """
+    Sends a message to a single participant.
+    Retries on failure with a basic exponential backoff.
+    """
+    try:
+        result = asyncio.run(
+            send_message_to_participant(participant_id, message))
+        return result
+    except Exception as exc:
+        logger.error(
+            f"Sending message to participant {participant_id} failed: {exc}")
+        raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(bind=True, max_retries=3)
+def send_message_to_participant_group_task(self, group_id, message):
+    """
+    Sends a message to a participant group.
+    Retries on failure with a basic exponential backoff.
+    """
+    try:
+        result = asyncio.run(
+            send_message_to_participant_group(group_id, message))
+        return result
+    except Exception as exc:
+        logger.error(f"Sending message to group {group_id} failed: {exc}")
+        raise self.retry(exc=exc, countdown=10)
+
+
+# File: templates/chat/prompt_confirm_delete.html
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Delete Prompt</title>
+</head>
+<body>
+    <h2>Delete Prompt for Week {{ prompt.week }}</h2>
+    <p>Activity: {{ prompt.activity }}</p>
+    <p>Are you sure you want to delete this prompt?</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">Confirm Delete</button>
+        <a href="{% url 'chat:prompt_interface' %}">Cancel</a>
+    </form>
+</body>
+</html>
+
+
+# File: templates/chat/prompt_edit.html
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Prompt</title>
+</head>
+<body>
+    <h2>Edit Prompt for Week {{ prompt.week }}</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save Changes</button>
+    </form>
+    <a href="{% url 'chat:prompt_interface' %}">Back to Interface</a>
+</body>
+</html>
+
+
+# File: templates/chat/prompt_interface.html
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Prompt Interface</title>
+    <style>
+        .container { display: flex; }
+        .left-panel { width: 50%; padding: 10px; border-right: 1px solid #ccc; }
+        .right-panel { width: 50%; padding: 10px; }
+        .prompt-item { border: 1px solid #ccc; padding: 5px; margin-bottom: 5px; }
+        .prompt-actions { display: inline-block; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Panel: Activity Prompts -->
+        <div class="left-panel">
+            <h2>Activity Prompts</h2>
+            <form method="post">
+                {% csrf_token %}
+                {{ prompt_form.as_p }}
+                <button type="submit" name="prompt_submit">Add Prompt</button>
+            </form>
+            <hr/>
+            <h3>Existing Prompts</h3>
+            {% if prompts %}
+                <ul>
+                    {% for prompt in prompts %}
+                        <li class="prompt-item">
+                            <strong>Week {{ prompt.week }}:</strong> {{ prompt.activity }}
+                            <span class="prompt-actions">
+                                <!-- Edit link -->
+                                <a href="{% url 'chat:prompt_edit' prompt.id %}">Edit</a>
+                                <!-- Delete button: directs to a confirmation page -->
+                                <a href="{% url 'chat:prompt_delete' prompt.id %}">Delete</a>
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No prompts available.</p>
+            {% endif %}
+        </div>
+        <!-- Right Panel: Control Prompt -->
+        <div class="right-panel">
+            <h2>Control Prompt</h2>
+            <form method="post">
+                {% csrf_token %}
+                {{ control_form.as_p }}
+                <button type="submit" name="control_submit">Update Control</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+
+
+# File: templates/chat/strategy_form.html
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ action }} Strategy Prompt</title>
+</head>
+<body>
+    <h1>{{ action }} Strategy Prompt</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">{{ action }}</button>
+    </form>
+    <a href="{% url 'chat:strategy_list' %}">Back to list</a>
+</body>
+</html>
+
+
+# File: templates/chat/strategy_list.html
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Strategy Prompts List</title>
+</head>
+<body>
+    <h1>Strategy Prompts</h1>
+    <a href="{% url 'chat:strategy_create' %}">Create New Strategy</a>
+    <ul>
+        {% for strategy in strategies %}
+            <li>
+                <strong>{{ strategy.name }}</strong>
+                <a href="{% url 'chat:strategy_edit' strategy.pk %}">Edit</a>
+                <a href="{% url 'chat:strategy_delete' strategy.pk %}">Delete</a>
+            </li>
+        {% empty %}
+            <li>No strategies available.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+# File: templates/chat/summary_form.html
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% if object %}Edit{% else %}Create{% endif %} Summary</title>
+</head>
+<body>
+    <h1>{% if object %}Edit{% else %}Create{% endif %} Summary</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Submit</button>
+    </form>
+    <a href="{% url 'chat:summary_list' %}">Back to list</a>
+</body>
+</html>
+
+
+# File: templates/chat/summary_list.html
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Summary List</title>
+</head>
+<body>
+    <h1>Summary List</h1>
+    <a href="{% url 'chat:summary_create' %}">Create New Summary</a>
+    <ul>
+        {% for summary in summaries %}
+            <li>
+                {{ summary.school }} - {{ summary.type }} -
+                <a href="{% url 'chat:summary_update' summary.pk %}">Edit</a>
+            </li>
+        {% empty %}
+            <li>No summaries found.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+# File: tests.py
+from django.test import TestCase
+
+# Create your tests here.
+
+
+# File: urls.py
+from .views import strategy_list, strategy_create, strategy_edit, strategy_delete
+from .views import SummaryListView, SummaryCreateView, SummaryUpdateView
+from django.urls import path
+from .views import HealthCheckView, IngestIndividualView, IngestGroupView, PromptInterface, prompt_edit, prompt_delete, summary_view
+
+app_name = "chat"
+
+urlpatterns = [
+    path('health/', HealthCheckView.as_view(), name='health-check'),
+    path('participant/<str:id>/incoming',
+         IngestIndividualView.as_view(), name='ingest-individual'),
+    path('participantgroup/<str:id>/incoming',
+         IngestGroupView.as_view(), name='ingest-group'),
+    path('prompt/', PromptInterface.as_view(), name='prompt_interface'),
+    path('prompt/edit/<int:prompt_id>/', prompt_edit, name='prompt_edit'),
+    path('prompt/delete/<int:prompt_id>/', prompt_delete, name='prompt_delete'),
+    path('summary', summary_view, name='summary'),
+    path('summary/interface/', SummaryListView.as_view(), name='summary_list'),
+    path('summary/create/', SummaryCreateView.as_view(), name='summary_create'),
+    path('summary/<int:pk>/edit/',
+         SummaryUpdateView.as_view(), name='summary_update'),
+    path("strategies/", strategy_list, name="strategy_list"),
+    path("strategies/create/", strategy_create, name="strategy_create"),
+    path("strategies/<int:pk>/edit/", strategy_edit, name="strategy_edit"),
+    path("strategies/<int:pk>/delete/", strategy_delete, name="strategy_delete"),
+]
+
+
+# File: views.py
+from django.urls import reverse_lazy
+from django.views.generic import ListView, CreateView, UpdateView
+from django.http import JsonResponse
+from django.views import View
+from django import forms
+from .models import Prompt, Control, StrategyPrompt, Summary
+from django.shortcuts import render, redirect, get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import IncomingMessageSerializer, GroupIncomingMessageSerializer
+from .tasks import ingest_individual_task, ingest_group_task
+
+
+class HealthCheckView(APIView):
+    def get(self, request):
+        return Response({"message": "Service is healthy", "status": "ok", "code": 200}, status=status.HTTP_200_OK)
+
+
+class IngestIndividualView(APIView):
+    def post(self, request, id):
+        serializer = IncomingMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            ingest_individual_task.delay(id, serializer.validated_data)
+            return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IngestGroupView(APIView):
+    def post(self, request, id):
+        serializer = GroupIncomingMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            ingest_group_task.delay(id, serializer.validated_data)
+            return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PromptForm(forms.ModelForm):
+    class Meta:
+        model = Prompt
+        fields = ['week', 'activity']
+
+
+class ControlForm(forms.ModelForm):
+    class Meta:
+        model = Control
+        fields = ['persona', 'system', 'default', 'moderation']
+
+
+class PromptInterface(View):
+    def get(self, request):
+        prompts = Prompt.objects.all().order_by('-created_at')
+        control_instance = Control.objects.last()
+        if not control_instance:
+            control_instance = Control.objects.create(
+                persona='', system='', default='')
+        prompt_form = PromptForm()
+        control_form = ControlForm(instance=control_instance)
+        context = {
+            'prompts': prompts,
+            'prompt_form': prompt_form,
+            'control_form': control_form,
+        }
+        return render(request, 'chat/prompt_interface.html', context)
+
+    def post(self, request):
+        prompts = Prompt.objects.all().order_by('-created_at')
+        control_instance = Control.objects.last()
+        if 'prompt_submit' in request.POST:
+            prompt_form = PromptForm(request.POST)
+            if prompt_form.is_valid():
+                prompt_form.save()
+                return redirect('chat:prompt_interface')
+        elif 'control_submit' in request.POST:
+            if control_instance:
+                control_form = ControlForm(
+                    request.POST, instance=control_instance)
+            else:
+                control_form = ControlForm(request.POST)
+            if control_form.is_valid():
+                control_form.save()
+                return redirect('chat:prompt_interface')
+        prompt_form = PromptForm()
+        control_form = ControlForm(instance=control_instance)
+        context = {
+            'prompts': prompts,
+            'prompt_form': prompt_form,
+            'control_form': control_form,
+        }
+        return render(request, 'chat/prompt_interface.html', context)
+
+
+def prompt_edit(request, prompt_id):
+    """
+    Provides an interface to edit an existing activity prompt.
+    """
+    prompt = get_object_or_404(Prompt, id=prompt_id)
+    if request.method == 'POST':
+        form = PromptForm(request.POST, instance=prompt)
+        if form.is_valid():
+            form.save()
+            return redirect('chat:prompt_interface')
+    else:
+        form = PromptForm(instance=prompt)
+    return render(request, 'chat/prompt_edit.html', {'form': form, 'prompt': prompt})
+
+
+def prompt_delete(request, prompt_id):
+    """
+    Provides an interface to confirm and delete a prompt.
+    """
+    prompt = get_object_or_404(Prompt, id=prompt_id)
+    if request.method == 'POST':
+        prompt.delete()
+        return redirect('chat:prompt_interface')
+    return render(request, 'chat/prompt_confirm_delete.html', {'prompt': prompt})
+
+
+SUMMARY_ALLOWED_TYPES = ['influencer', 'song', 'spot', 'idea', 'pick']
+
+
+def summary_view(request):
+    school = request.GET.get('school')
+    type_param = request.GET.get('type')
+
+    # Validate query parameters
+    if not school:
+        return JsonResponse({"error": "Missing school parameter."}, status=400)
+    if not type_param:
+        return JsonResponse({"error": "Missing type parameter."}, status=400)
+    if type_param not in SUMMARY_ALLOWED_TYPES:
+        return JsonResponse(
+            {"error": f"Invalid type parameter. Allowed values: {', '.join(SUMMARY_ALLOWED_TYPES)}."},
+            status=400
+        )
+
+    # Check if the school exists in any summary record
+    if not Summary.objects.filter(school=school).exists():
+        return JsonResponse({"error": "School not found."}, status=404)
+
+    # Retrieve the most recently updated summary for the given school and type
+    summary = Summary.objects.filter(
+        school=school, type=type_param).order_by('-updated_at').first()
+
+    if not summary:
+        return JsonResponse({"error": f"No summary found for {school} with type {type_param}."}, status=404)
+
+    data = summary.summary
+
+    return JsonResponse({"summary": data}, status=200)
+
+
+class SummaryForm(forms.ModelForm):
+    class Meta:
+        model = Summary
+        fields = ['school', 'type', 'summary']
+
+
+class SummaryListView(ListView):
+    model = Summary
+    template_name = 'chat/summary_list.html'
+    context_object_name = 'summaries'
+
+
+class SummaryCreateView(CreateView):
+    model = Summary
+    form_class = SummaryForm
+    template_name = 'chat/summary_form.html'
+    success_url = reverse_lazy('chat:summary_list')
+
+
+class SummaryUpdateView(UpdateView):
+    model = Summary
+    form_class = SummaryForm
+    template_name = 'chat/summary_form.html'
+    success_url = reverse_lazy('chat:summary_list')
+
+
+class StrategyPromptForm(forms.ModelForm):
+    class Meta:
+        model = StrategyPrompt
+        fields = ['name', 'what_prompt', 'when_prompt', 'who_prompt', 'is_active']
+
+
+def strategy_list(request):
+    """List all active strategy prompts."""
+    strategies = StrategyPrompt.objects.filter(is_active=True)
+    return render(request, "chat/strategy_list.html", {"strategies": strategies})
+
+
+def strategy_create(request):
+    """Create a new strategy prompt."""
+    if request.method == "POST":
+        form = StrategyPromptForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect("chat:strategy_list")
+    else:
+        form = StrategyPromptForm()
+    return render(request, "chat/strategy_form.html", {"form": form, "action": "Create"})
+
+
+def strategy_edit(request, pk):
+    """Edit an existing strategy prompt."""
+    strategy = get_object_or_404(StrategyPrompt, pk=pk)
+    if request.method == "POST":
+        form = StrategyPromptForm(request.POST, instance=strategy)
+        if form.is_valid():
+            form.save()
+            return redirect("chat:strategy_list")
+    else:
+        form = StrategyPromptForm(instance=strategy)
+    return render(request, "chat/strategy_form.html", {"form": form, "action": "Edit"})
+
+
+def strategy_delete(request, pk):
+    """Soft delete a strategy prompt by marking it inactive."""
+    strategy = get_object_or_404(StrategyPrompt, pk=pk)
+    # Soft delete: mark as inactive
+    strategy.is_active = False
+    strategy.save()
+    return redirect("chat:strategy_list")
+
+
