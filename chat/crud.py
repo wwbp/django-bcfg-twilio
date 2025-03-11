@@ -9,24 +9,6 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
-def verify_update_database(user_id: str, data: dict):
-    logger.info(f"Checking database for participant/group ID: {user_id}")
-    user, created = User.objects.get_or_create(id=user_id)
-    if created:
-        logger.info(
-            f"Participant/group ID {user_id} not found. Creating a new record.")
-        user.school_name = data["context"]["school_name"]
-        user.school_mascot = data["context"]["school_mascot"]
-        user.name = data["context"]["name"]
-        user.initial_message = data["context"]["initial_message"]
-        user.save()
-        ChatTranscript.objects.create(
-            user=user, role="assistant", content=data["context"]["initial_message"])
-    else:
-        logger.info(f"Participant/group ID {user_id} exists.")
-    return user
-
-
 def is_test_user(participant_id: str):
     try:
         user = User.objects.get(id=participant_id)
@@ -112,14 +94,6 @@ def verify_update_database_group(group_id: str, data: dict):
     else:
         logger.info(f"Group ID {group_id} exists.")
     return group
-
-
-def load_chat_history_json(user_id: str):
-    logger.info(f"Loading chat history for participant/group ID: {user_id}")
-    transcripts = ChatTranscript.objects.filter(
-        user_id=user_id).order_by("created_at")
-    history = [{"role": t.role, "content": t.content} for t in transcripts]
-    return history
 
 
 def load_individual_chat_history(user_id: str):
@@ -218,17 +192,6 @@ def save_chat_round_group(group_id: str, sender_id: str, message, response):
         GroupChatTranscript.objects.create(
             group=group, role="assistant", content=response)
     logger.info("Chat round saved successfully.")
-
-
-def load_chat_prompt(week: int, group=False):
-    try:
-        controls = Control.objects.latest('created_at')
-    except Control.DoesNotExist:
-        controls = Control.objects.create()
-    prompt = Prompt.objects.filter(week=week).last()
-    activity = prompt.activity if prompt else controls.default
-    prompt = f"System Prompt: {controls.system} \n AI BOT Persona: {controls.persona} \n Week's Activity: {activity}"
-    return prompt
 
 
 INSTRUCTION_PROMPT_TEMPLATE = (

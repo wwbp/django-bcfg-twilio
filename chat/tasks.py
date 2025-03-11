@@ -1,7 +1,7 @@
 from celery import shared_task, chain
 from .send import send_message_to_participant, send_message_to_participant_group
 import asyncio
-from .ingest import ingest_individual, ingest_group_sync
+from .ingest import ingest_group_sync
 from config.celery import app
 import logging
 from celery import shared_task
@@ -19,24 +19,6 @@ def add(x, y):
 def sample_task():
     print("Celery beat: Running sample task!")
     logger.info("Celery beat: Running sample task!")
-
-
-@shared_task(bind=True, max_retries=3)
-def ingest_individual_task(self, user_id, data):
-    """
-    Ingest individual chat data, generate a response,
-    then chain the sending task.
-    """
-    try:
-        response = ingest_individual(user_id, data)
-        # Chain the sending task to ensure proper sequencing
-        chain(
-            send_message_to_participant_task.s(user_id, response)
-        ).apply_async()
-        return response
-    except Exception as exc:
-        logger.error(f"Ingest individual task failed for {user_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10)
 
 
 @shared_task(bind=True, max_retries=3)
