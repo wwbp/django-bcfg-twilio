@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 from .constant import MODERATION_MESSAGE_DEFAULT
@@ -91,7 +92,8 @@ class StrategyPrompt(models.Model):
 
 
 class IndividualPipelineRecord(models.Model):
-    participant_id = models.CharField(max_length=255, unique=True)
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    participant_id = models.CharField(max_length=255)
     ingested = models.BooleanField(default=False)
     processed = models.BooleanField(default=False)
     sent = models.BooleanField(default=False)
@@ -101,4 +103,4 @@ class IndividualPipelineRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"IndividualPipelineRecord({self.participant_id})"
+        return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
