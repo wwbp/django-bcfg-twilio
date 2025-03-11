@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import IncomingMessageSerializer, GroupIncomingMessageSerializer
-from .tasks import ingest_individual_task, ingest_group_task
+from .tasks import ingest_group_task
 
 
 class HealthCheckView(APIView):
@@ -23,7 +23,6 @@ class IngestIndividualView(APIView):
     def post(self, request, id):
         serializer = IncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            # ingest_individual_task.delay(id, serializer.validated_data)
             individual_pipeline_ingest_task.delay(
                 id, serializer.validated_data)
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
