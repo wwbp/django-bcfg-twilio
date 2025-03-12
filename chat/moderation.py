@@ -1,4 +1,3 @@
-from typing import Tuple
 from openai import OpenAI
 from openai._compat import model_dump
 client = OpenAI()

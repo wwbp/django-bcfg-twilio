@@ -167,6 +167,9 @@ def create_group_test_case(request):
         # Create or get the group.
         group, created = Group.objects.get_or_create(
             id=group_id, defaults={'is_test': True})
+        if created:
+            group.initial_message = initial_message
+            group.save()
         # Process participants (expected format: "id1:name1, id2:name2")
         for pair in participants_str.split(','):
             if ':' in pair:
