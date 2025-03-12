@@ -16,9 +16,11 @@
 # │   ├── 0006_summary_updated_at.py
 # │   ├── 0007_strategyprompt.py
 # │   ├── 0008_strategyprompt_who_prompt_and_more.py
+# │   ├── 0009_individualpipelinerecord_user_week_number.py
 # │   └── __init__.py
 # ├── models.py
 # ├── moderation.py
+# ├── pipeline.py
 # ├── send.py
 # ├── serializers.py
 # ├── tasks.py
@@ -278,22 +280,68 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
-def verify_update_database(user_id: str, data: dict):
-    logger.info(f"Checking database for participant/group ID: {user_id}")
-    user, created = User.objects.get_or_create(id=user_id)
+def is_test_user(participant_id: str):
+    try:
+        user = User.objects.get(id=participant_id)
+        return user.is_test
+    except User.DoesNotExist:
+        return False
+
+
+def validate_ingest_individual_request(participant_id: str, data: dict):
+    logger.info(
+        f"Checking database for participant ID: {participant_id}")
+    user, created = User.objects.get_or_create(id=participant_id)
+    context = data.get("context", {})
+    message = data.get("message", "")
+
     if created:
         logger.info(
-            f"Participant/group ID {user_id} not found. Creating a new record.")
-        user.school_name = data["context"]["school_name"]
-        user.school_mascot = data["context"]["school_mascot"]
-        user.name = data["context"]["name"]
-        user.initial_message = data["context"]["initial_message"]
+            f"Participant ID {participant_id} not found. Creating a new record.")
+        user.school_name = context.get("school_name", "")
+        user.school_mascot = context.get("school_mascot", "")
+        user.name = context.get("name", "")
+        user.initial_message = context.get("initial_message", "")
+        user.week_number = context.get("week_number")
         user.save()
+        # Create an initial chat transcript entry with the initial message
         ChatTranscript.objects.create(
-            user=user, role="assistant", content=data["context"]["initial_message"])
+            user=user, role="assistant", content=context.get("initial_message", "")
+        )
+        ChatTranscript.objects.create(
+            user=user, role="user", content=message
+        )
     else:
-        logger.info(f"Participant/group ID {user_id} exists.")
-    return user
+        logger.info(f"Participant ID {participant_id} exists.")
+        updated = False
+
+        # Check if week number has changed and update if needed
+        new_week = context.get("week_number")
+        if new_week is not None and new_week != user.week_number:
+            logger.info(
+                f"Week number changed for user {participant_id} from {user.week_number} to {new_week}.")
+            user.week_number = new_week
+            updated = True
+
+        # Check if initial message has changed
+        new_initial_message = context.get("initial_message")
+        if new_initial_message and new_initial_message != user.initial_message:
+            logger.info(
+                f"Initial message changed for user {participant_id}. Updating transcript.")
+            user.initial_message = new_initial_message
+            # Add the updated initial message to the transcript
+            ChatTranscript.objects.create(
+                user=user, role="assistant", content=new_initial_message
+            )
+            updated = True
+
+        # after new initial message update user
+        ChatTranscript.objects.create(
+            user=user, role="user", content=message
+        )
+
+        if updated:
+            user.save()
 
 
 def verify_update_database_group(group_id: str, data: dict):
@@ -319,12 +367,31 @@ def verify_update_database_group(group_id: str, data: dict):
     return group
 
 
-def load_chat_history_json(user_id: str):
-    logger.info(f"Loading chat history for participant/group ID: {user_id}")
+def load_individual_chat_history(user_id: str):
+    logger.info(f"Loading chat history for participant: {user_id}")
+
+    # Retrieve all transcripts in chronological order
     transcripts = ChatTranscript.objects.filter(
         user_id=user_id).order_by("created_at")
-    history = [{"role": t.role, "content": t.content} for t in transcripts]
-    return history
+
+    # Get the most recent user transcript
+    latest_user_transcript = (
+        ChatTranscript.objects.filter(user_id=user_id, role="user")
+        .order_by("-created_at")
+        .first()
+    )
+
+    # Build chat history, excluding the latest user message
+    history = [
+        {"role": t.role, "content": t.content}
+        for t in transcripts
+        if not (latest_user_transcript and t.id == latest_user_transcript.id)
+    ]
+
+    # Extract only the message content for the latest user message
+    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
+
+    return history, latest_user_message_content
 
 
 def load_detailed_transcript(group_id: str):
@@ -361,6 +428,29 @@ def save_chat_round(user_id: str, message, response):
     logger.info("Chat round saved successfully.")
 
 
+def get_latest_assistant_response(user_id: str):
+    logger.info(
+        f"Fetching latest assistant response for participant with id: {user_id}")
+
+    # Retrieve the most recent assistant response for the given user
+    latest_assistant_transcript = (
+        ChatTranscript.objects.filter(user_id=user_id, role="assistant")
+        .order_by("-created_at")
+        .first()
+    )
+
+    # Return the content if a transcript exists; otherwise, return None
+    return latest_assistant_transcript.content if latest_assistant_transcript else None
+
+
+def save_assistant_response(user_id: str, response):
+    logger.info(f"Saving assistant response for participant: {user_id}")
+    user = User.objects.get(id=user_id)
+    ChatTranscript.objects.create(
+        user=user, role="assistant", content=response)
+    logger.info("Assistant Response saved successfully.")
+
+
 @transaction.atomic
 def save_chat_round_group(group_id: str, sender_id: str, message, response):
     logger.info(f"Saving chat round for group ID: {group_id}")
@@ -375,15 +465,44 @@ def save_chat_round_group(group_id: str, sender_id: str, message, response):
     logger.info("Chat round saved successfully.")
 
 
-def load_chat_prompt(week: int, group=False):
+INSTRUCTION_PROMPT_TEMPLATE = (
+    "Using the below system prompt as your guide, engage with the user in a manner that reflects your assigned persona and follows the activity instructions"
+    "System Prompt: {system}\n\n"
+    "Assigned Persona: {persona}\n\n"
+    "Activity: {activity}\n\n"
+)
+
+
+def load_instruction_prompt(user_id: str):
+    try:
+        user = User.objects.get(id=user_id)
+        week = user.week_number
+    except User.DoesNotExist:
+        logger.warning(
+            f"User with id {user_id} not found. Using default prompt.")
+        week = None
+
+    # Load the most recent controls record
     try:
         controls = Control.objects.latest('created_at')
     except Control.DoesNotExist:
         controls = Control.objects.create()
-    prompt = Prompt.objects.filter(week=week).last()
-    activity = prompt.activity if prompt else controls.default
-    prompt = f"System Prompt: {controls.system} \n AI BOT Persona: {controls.persona} \n Week's Activity: {activity}"
-    return prompt
+
+    # Retrieve the prompt for the given week, falling back to a default if none is found
+    if week is not None:
+        prompt_obj = Prompt.objects.filter(week=week).last()
+    else:
+        prompt_obj = None
+
+    activity = prompt_obj.activity if prompt_obj else controls.default
+
+    # Format the final prompt using the template
+    instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=controls.system,
+        persona=controls.persona,
+        activity=activity,
+    )
+    return instruction_prompt
 
 
 def get_moderation_message():
@@ -400,22 +519,10 @@ def get_moderation_message():
 import asyncio
 import logging
 
-from .arbitrar import process_arbitrar_layer, send_strategy_responses
-from .completion import generate_response
-from .crud import load_chat_prompt, save_chat_round_group, verify_update_database, load_chat_history_json, save_chat_round, verify_update_database_group
+from .arbitrar import process_arbitrar_layer, send_multiple_responses
+from .crud import save_chat_round_group, verify_update_database_group
 
 logger = logging.getLogger(__name__)
-
-
-def ingest_individual(user_id: str, data: dict):
-    verify_update_database(user_id, data)
-    history_json = load_chat_history_json(user_id)
-    instructions = load_chat_prompt(data['context']['week_number'])
-    response = asyncio.run(generate_response(
-        history_json, instructions, data['message']))
-    save_chat_round(user_id, data['message'], response)
-    print(f"Generated response for participant {user_id}: {response}")
-    return response
 
 
 def ingest_group_sync(group_id: str, data: dict):
@@ -433,7 +540,7 @@ def ingest_group_sync(group_id: str, data: dict):
         f"Generated responses for group {group_id}: {strategy_responses}")
     for _, response in strategy_responses.items():
         save_chat_round_group(group_id, None, "", response)
-    asyncio.run(send_strategy_responses(group_id, strategy_responses))
+    asyncio.run(send_multiple_responses(group_id, strategy_responses))
     return strategy_responses
 
 
@@ -680,10 +787,48 @@ class Migration(migrations.Migration):
     ]
 
 
+# File: migrations/0009_individualpipelinerecord_user_week_number.py
+# Generated by Django 5.1.7 on 2025-03-11 17:22
+
+import uuid
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('chat', '0008_strategyprompt_who_prompt_and_more'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='IndividualPipelineRecord',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('run_id', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('participant_id', models.CharField(max_length=255)),
+                ('ingested', models.BooleanField(default=False)),
+                ('processed', models.BooleanField(default=False)),
+                ('sent', models.BooleanField(default=False)),
+                ('failed', models.BooleanField(default=False)),
+                ('error_log', models.TextField(blank=True, null=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+        ),
+        migrations.AddField(
+            model_name='user',
+            name='week_number',
+            field=models.IntegerField(blank=True, null=True),
+        ),
+    ]
+
+
 # File: migrations/__init__.py
 
 
 # File: models.py
+import uuid
 from django.db import models
 
 from .constant import MODERATION_MESSAGE_DEFAULT
@@ -697,6 +842,7 @@ class User(models.Model):
     name = models.CharField(max_length=255, default='')
     initial_message = models.TextField(default='')
     is_test = models.BooleanField(default=False)
+    week_number = models.IntegerField(null=True, blank=True)
 
 
 class Group(models.Model):
@@ -775,6 +921,21 @@ class StrategyPrompt(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class IndividualPipelineRecord(models.Model):
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    participant_id = models.CharField(max_length=255)
+    ingested = models.BooleanField(default=False)
+    processed = models.BooleanField(default=False)
+    sent = models.BooleanField(default=False)
+    failed = models.BooleanField(default=False)
+    error_log = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
+
+
 # File: moderation.py
 from typing import Tuple
 from openai import OpenAI
@@ -814,6 +975,164 @@ def moderate_message(message: str) -> str:
     return blocked_str
 
 
+# File: pipeline.py
+import asyncio
+import logging
+from celery import shared_task
+from .crud import get_latest_assistant_response, is_test_user, load_individual_chat_history, load_instruction_prompt, save_assistant_response, validate_ingest_individual_request
+from .completion import generate_response
+from .send import send_message_to_participant
+from .models import IndividualPipelineRecord
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Pipeline Functions
+# =============================================================================
+
+
+def individual_ingest_pipeline(participant_id: str, data: dict):
+    """
+    Stage 1: Validate and store incoming data, then create a new run record.
+    """
+    try:
+        # Validate and store incoming data
+        validate_ingest_individual_request(participant_id, data)
+
+        # Create a new record with a unique run_id
+        record = IndividualPipelineRecord.objects.create(
+            participant_id=participant_id,
+            ingested=True,
+            failed=False,
+            error_log=''
+        )
+        logger.info(
+            f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}"
+        )
+        return record.run_id
+    except Exception as e:
+        logger.error(
+            f"Individual ingest pipeline failed for {participant_id}: {e}")
+        # Create a record with the error flag if needed
+        record = IndividualPipelineRecord.objects.create(
+            participant_id=participant_id,
+            failed=True,
+            error_log=str(e)
+        )
+        record.save()
+        raise
+
+
+def individual_process_pipeline(run_id):
+    """
+    Stage 2: Process data via an LLM call.
+    """
+    try:
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        participant_id = record.participant_id
+
+        # Load chat history and instructions from the database
+        chat_history, message = load_individual_chat_history(participant_id)
+        instructions = load_instruction_prompt(participant_id)
+
+        # Generate a response using the LLM
+        response = asyncio.run(generate_response(
+            chat_history, instructions, message))
+
+        # Save the generated response to the database
+        save_assistant_response(participant_id, response)
+
+        # Update the pipeline record for the processing stage
+        record.processed = True
+        record.save()
+        logger.info(
+            f"Individual process pipeline complete for participant {participant_id}, run_id {run_id}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Individual process pipeline failed for run_id {run_id}: {e}"
+        )
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        record.failed = True
+        record.error_log = str(e)
+        record.save()
+        raise
+
+
+def individual_send_pipeline(run_id):
+    """
+    Stage 3: Retrieve the most recent response and send it to the participant.
+    """
+    try:
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        participant_id = record.participant_id
+
+        # Retrieve the most recent assistant response
+        response = get_latest_assistant_response(participant_id)
+
+        # Send the message via the external endpoint
+        asyncio.run(
+            send_message_to_participant(participant_id, response))
+        # Update the pipeline record for the sending stage
+        record.sent = True
+        record.save()
+        logger.info(
+            f"Individual send pipeline complete for participant {participant_id}, run_id {run_id}"
+        )
+    except Exception as e:
+        logger.error(
+            f"Individual send pipeline failed for run_id {run_id}: {e}"
+        )
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        record.failed = True
+        record.error_log = str(e)
+        record.save()
+        raise
+
+# =============================================================================
+# Celery Tasks: Tie the Stages Together
+# =============================================================================
+
+
+@shared_task(bind=True, max_retries=3)
+def individual_pipeline_ingest_task(self, participant_id, data):
+    try:
+        run_id = individual_ingest_pipeline(participant_id, data)
+        # Trigger the next stage: processing
+        individual_pipeline_process_task.delay(run_id)
+    except Exception as exc:
+        logger.error(
+            f"Individual pipeline ingestion failed for {participant_id}: {exc}"
+        )
+        raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(bind=True, max_retries=3)
+def individual_pipeline_process_task(self, run_id):
+    try:
+        individual_process_pipeline(run_id)
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        # Use participant_id from the record to check test user status
+        if not is_test_user(record.participant_id):
+            individual_pipeline_send_task.delay(run_id)
+    except Exception as exc:
+        logger.error(
+            f"Individual pipeline processing failed for run_id {run_id}: {exc}"
+        )
+        raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(bind=True, max_retries=3)
+def individual_pipeline_send_task(self, run_id):
+    try:
+        individual_send_pipeline(run_id)
+    except Exception as exc:
+        logger.error(
+            f"Individual pipeline sending failed for run_id {run_id}: {exc}"
+        )
+        raise self.retry(exc=exc, countdown=10)
+
+
 # File: send.py
 import httpx
 import os
@@ -833,7 +1152,7 @@ async def send_message_to_participant(participant_id: str, message: str):
     url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     payload = {"message": message}
     headers = {
-        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
+        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd" # TODO: sync with bcfg on managing authentication tokens
     }
     try:
         async with httpx.AsyncClient() as client:
@@ -923,7 +1242,7 @@ class GroupIncomingMessageSerializer(serializers.Serializer):
 from celery import shared_task, chain
 from .send import send_message_to_participant, send_message_to_participant_group
 import asyncio
-from .ingest import ingest_individual, ingest_group_sync
+from .ingest import ingest_group_sync
 from config.celery import app
 import logging
 from celery import shared_task
@@ -941,24 +1260,6 @@ def add(x, y):
 def sample_task():
     print("Celery beat: Running sample task!")
     logger.info("Celery beat: Running sample task!")
-
-
-@shared_task(bind=True, max_retries=3)
-def ingest_individual_task(self, user_id, data):
-    """
-    Ingest individual chat data, generate a response,
-    then chain the sending task.
-    """
-    try:
-        response = ingest_individual(user_id, data)
-        # Chain the sending task to ensure proper sequencing
-        chain(
-            send_message_to_participant_task.s(user_id, response)
-        ).apply_async()
-        return response
-    except Exception as exc:
-        logger.error(f"Ingest individual task failed for {user_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10)
 
 
 @shared_task(bind=True, max_retries=3)
@@ -1236,13 +1537,15 @@ from django.views.generic import ListView, CreateView, UpdateView
 from django.http import JsonResponse
 from django.views import View
 from django import forms
+
+from .pipeline import individual_pipeline_ingest_task
 from .models import Prompt, Control, StrategyPrompt, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import IncomingMessageSerializer, GroupIncomingMessageSerializer
-from .tasks import ingest_individual_task, ingest_group_task
+from .tasks import ingest_group_task
 
 
 class HealthCheckView(APIView):
@@ -1254,7 +1557,8 @@ class IngestIndividualView(APIView):
     def post(self, request, id):
         serializer = IncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            ingest_individual_task.delay(id, serializer.validated_data)
+            individual_pipeline_ingest_task.delay(
+                id, serializer.validated_data)
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1412,7 +1716,8 @@ class SummaryUpdateView(UpdateView):
 class StrategyPromptForm(forms.ModelForm):
     class Meta:
         model = StrategyPrompt
-        fields = ['name', 'what_prompt', 'when_prompt', 'who_prompt', 'is_active']
+        fields = ['name', 'what_prompt',
+                  'when_prompt', 'who_prompt', 'is_active']
 
 
 def strategy_list(request):

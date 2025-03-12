@@ -4,7 +4,8 @@ from django.http import JsonResponse
 from django.views import View
 from django import forms
 
-from .pipeline import individual_pipeline_ingest_task
+from .group_pipeline import group_pipeline_ingest_task
+from .individual_pipeline import individual_pipeline_ingest_task
 from .models import Prompt, Control, StrategyPrompt, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
@@ -33,7 +34,8 @@ class IngestGroupView(APIView):
     def post(self, request, id):
         serializer = GroupIncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            ingest_group_task.delay(id, serializer.validated_data)
+            # ingest_group_task.delay(id, serializer.validated_data)
+            group_pipeline_ingest_task.delay(id, serializer.validated_data)
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
