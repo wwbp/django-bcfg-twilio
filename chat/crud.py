@@ -24,6 +24,7 @@ def is_test_group(group_id: str):
     except Group.DoesNotExist:
         return False
 
+
 def validate_ingest_individual_request(participant_id: str, data: dict):
     logger.info(
         f"Checking database for participant ID: {participant_id}")
@@ -78,29 +79,6 @@ def validate_ingest_individual_request(participant_id: str, data: dict):
 
         if updated:
             user.save()
-
-
-def verify_update_database_group(group_id: str, data: dict):
-    logger.info(f"Checking database for group ID: {group_id}")
-    group, group_created = Group.objects.get_or_create(id=group_id)
-    if group_created:
-        logger.info(f"Group ID {group_id} not found. Creating a new record.")
-        group.initial_message = data["context"]["initial_message"]
-        group.save()
-        for participant in data["context"].get("participants", []):
-            user, user_created = User.objects.get_or_create(
-                id=participant["id"])
-            if user_created:
-                user.name = participant.get("name", user.name)
-                user.school_name = data["context"]["school_name"]
-                user.school_mascot = data["context"]["school_mascot"]
-                user.save()
-            group.users.add(user)
-        GroupChatTranscript.objects.create(
-            group=group, role="assistant", content=data["context"]["initial_message"])
-    else:
-        logger.info(f"Group ID {group_id} exists.")
-    return group
 
 
 def validate_ingest_group_request(group_id: str, data: dict):
@@ -239,16 +217,6 @@ def load_chat_history_json_group(group_id: str):
         group_id=group_id).order_by("created_at")
     history = [{"role": t.role, "content": t.content} for t in transcripts]
     return history
-
-
-@transaction.atomic
-def save_chat_round(user_id: str, message, response):
-    logger.info(f"Saving chat round for participant/group ID: {user_id}")
-    user = User.objects.get(id=user_id)
-    ChatTranscript.objects.create(user=user, role="user", content=message)
-    ChatTranscript.objects.create(
-        user=user, role="assistant", content=response)
-    logger.info("Chat round saved successfully.")
 
 
 def get_latest_assistant_response(user_id: str):
