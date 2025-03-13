@@ -183,11 +183,21 @@ def load_individual_chat_history(user_id: str):
     )
 
     # Build chat history, excluding the latest user message
-    history = [
-        {"role": t.role, "content": t.content}
-        for t in transcripts
-        if not (latest_user_transcript and t.id == latest_user_transcript.id)
-    ]
+    history = []
+    for t in transcripts:
+        if latest_user_transcript and t.id == latest_user_transcript.id:
+            continue
+
+        if t.role == "user":
+            sender_name = t.user.name if t.user.name else "user"
+        else:  # role is assistant
+            sender_name = t.user.school_mascot if t.user.school_mascot else "assistant"
+
+        history.append({
+            "role": t.role,
+            "content": t.content,
+            "name": sender_name,
+        })
 
     # Extract only the message content for the latest user message
     latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
