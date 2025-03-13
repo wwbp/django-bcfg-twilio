@@ -1,161 +1,117 @@
 import asyncio
 import json
+import logging
 from .models import StrategyPrompt
 from .crud import load_detailed_transcript
 from .completion import chat_completion
 from .send import send_message_to_participant_group
 
-import logging
-
 logger = logging.getLogger(__name__)
 
+# TODO: controllable variable pipe through db
+CONFIDENCE_THRESHOLD = 0.5
 
-def evaluate_strategy_confidence(transcript_text: str, strategy: StrategyPrompt) -> float:
-    """
-    For a given strategy, build a composite prompt that includes:
-      - The detailed transcript
-      - The strategy's 'when' condition (trigger)
-      - The strategy's 'what' instruction prompt
 
-    Then call GPT to generate a confidence score (0-1) for the strategy.
-    """
-
+def build_strategy_evaluation_prompt(transcript_text: str, strategy: StrategyPrompt) -> str:
     system_prompt = """
-    You are an evaluation engine whose task is to determine whether a given strategy is applicable to the conversation based on the following inputs:
-
-    **Your Task:**
-    Analyze the conversation transcript and assess whether the Strategy Timing conditions are met. Be objective in your reasoning—only conclude that the strategy is applicable if the evidence is strong and the criteria are clearly satisfied. If there is any doubt or insufficient evidence, err on the side of caution.
-
-    **Return Format:**
-    Output your response in strict JSON format with exactly these keys:
-    {
-    "applicable": <true/false>, 
-    "confidence": <a number between 0 and 1>, 
-    "explanation": <brief explanation (less than 100 words)>
-    }
-
-    Do not include any additional commentary outside the JSON output. Evaluate based on the actual turns and active participation; do not rely solely on keywords. If unsure, return "applicable": false with a low confidence score.
+        You are an evaluation engine tasked with determining the applicability of a given strategy to the conversation.
+        Analyze the transcript and assess the strength of evidence supporting the strategy.
+        Return your response in strict JSON format with exactly these keys:
+        {
+            "confidence": <a number between 0 and 1>,
+            "explanation": <brief explanation (less than 100 words)>
+        }
+        Do not include any additional commentary.
     """
-
-    # ** Context Dump **
-    # 1. **Detailed Transcript:** A full transcript of a group conversation with multiple turns.
-    # """ + f"2. **Strategy Timing Intelligence:** which relates to when the chatbot should respond. {strategy.when_prompt}" + """ + f"2.
-    # 3. **Strategy Addressee Intelligence:** which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants) {strategy.when_prompt}" + """
-
     context_prompt = (
-        f"1. **Detailed Transcript:** A full transcript of a group conversation with multiple turns.\n{transcript_text}\n\n"
+        f"Detailed Transcript:\n{transcript_text}\n\n"
         "--------------------------------\n\n"
-        f"2. **Strategy Timing Intelligence:** which relates to when the chatbot should respond.\n {strategy.when_prompt}\n\n"
+        f"Strategy Timing Intelligence:\n{strategy.when_prompt}\n\n"
         "--------------------------------\n\n"
-        f"3. **Strategy Addressee Intelligence:** which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants).\n {strategy.who_prompt}\n\n"
-        "--------------------------------\n\n"
+        f"Strategy Addressee Intelligence:\n{strategy.who_prompt}\n\n"
     )
+    return system_prompt + context_prompt
 
-    composite_prompt = context_prompt + system_prompt
 
-    logging.info(
+def evaluate_single_strategy(transcript_text: str, strategy: StrategyPrompt) -> dict:
+    composite_prompt = build_strategy_evaluation_prompt(
+        transcript_text, strategy)
+    logger.info(
         f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
     try:
-        # Call the GPT completion function
         response = asyncio.run(chat_completion(composite_prompt))
-        logging.info(
+        logger.info(
             f"Response from GPT for strategy {strategy.name}: {response}")
-
-        # Attempt to parse the JSON output
         result = json.loads(response)
-
-        # Check if required keys are in the JSON
-        for key in ("applicable", "confidence", "explanation"):
+        for key in ("confidence", "explanation"):
             if key not in result:
                 raise ValueError(f"Missing key in JSON response: {key}")
-
     except json.JSONDecodeError as e:
-        logging.error(f"JSON decoding error: {e}")
-        result = {
-            "applicable": False,
-            "confidence": 0.0,
-            "explanation": "Failed to decode JSON response from GPT."
-        }
+        logger.error(f"JSON decoding error: {e}")
+        result = {"confidence": 0.0,
+                  "explanation": "Failed to decode JSON response from GPT."}
     except Exception as e:
-        logging.error(f"Error in strategy evaluation: {e}")
-        result = {
-            "applicable": False,
-            "confidence": 0.0,
-            "explanation": "An error occurred during strategy evaluation."
-        }
-
-    # Return tuple (is_applicable, detailed result)
-    return result["applicable"], result
+        logger.error(f"Error in strategy evaluation: {e}")
+        result = {"confidence": 0.0,
+                  "explanation": "An error occurred during strategy evaluation."}
+    return result
 
 
-def evaluate_strategies_with_gpt(transcript_text: str):
-    """
-    Evaluate all active strategies by using GPT to generate a confidence score
-    for each strategy against the given transcript.
-
-    Returns:
-      A sorted list of tuples (strategy, score) for strategies scoring above the threshold.
-    """
-    logging.info("Evaluating strategies with GPT...")
+def evaluate_all_strategies(transcript_text: str):
+    logger.info("Evaluating strategies with GPT...")
     applicable = []
     active_strategies = StrategyPrompt.objects.filter(is_active=True)
     for strategy in active_strategies:
-        is_applicable, response = evaluate_strategy_confidence(
-            transcript_text, strategy)
-        if is_applicable:
-            applicable.append((strategy, response))
+        result = evaluate_single_strategy(transcript_text, strategy)
+        if result["confidence"] > CONFIDENCE_THRESHOLD:
+            applicable.append((strategy, result))
     return applicable
 
 
-def process_arbitrar_layer(group_id: str):
-    """
-    Process the arbitrar layer for a group conversation.
+def build_response_generation_prompt(transcript_text: str, strategy: StrategyPrompt, evaluation_result: dict) -> str:
+    prompt = (
+        f"Detailed Transcript:\n{transcript_text}\n\n"
+        "--------------------------------\n\n"
+        f"Strategy What Prompt:\n{strategy.what_prompt}\n\n"
+        "--------------------------------\n\n"
+        f"Strategy Timing Intelligence:\n{strategy.when_prompt}\n\n"
+        "--------------------------------\n\n"
+        f"Strategy Addressee Intelligence:\n{strategy.who_prompt}\n\n"
+        f"Evaluation Result:\n{evaluation_result}\n\n"
+        "Your task is to generate the next assistant response based on the above strategy."
+    )
+    return prompt
 
-    Steps:
-      1. Compile the detailed transcript.
-      2. For each active strategy, use GPT to get a confidence score.
-      3. For those with a score above the threshold, generate a response
-         using the strategy's 'what' prompt and the latest message.
 
-    Returns a dictionary mapping each strategy's name to its generated response and confidence score.
-    """
-    logging.info(f"Processing arbitrar layer for group ID: {group_id}")
-    transcript_text = load_detailed_transcript(group_id)
-    applicable_strategies = evaluate_strategies_with_gpt(transcript_text)
+def generate_response_for_strategy(transcript_text: str, strategy: StrategyPrompt, evaluation_result: dict) -> str:
+    prompt = build_response_generation_prompt(
+        transcript_text, strategy, evaluation_result)
+    logger.info(
+        f"Response generation prompt for strategy {strategy.id}: {prompt}")
+    response = asyncio.run(chat_completion(prompt))
+    return response
 
+
+def generate_all_strategy_responses(transcript_text: str, applicable_strategies: list):
     results = {}
-    for strategy, response in applicable_strategies:
-        instructions = (
-            f"Detailed Transcript:\n{transcript_text}\n\n"
-            "--------------------------------\n\n"
-            f"Strategy Intelligence, which relates to what the chatbot should respond.\n"
-            f"Strategy What Prompt: {strategy.what_prompt}\n\n"
-            "--------------------------------\n\n"
-            "Strategy Timing Intelligence, which relates to what the chatbot should respond.\n"
-            f"Strategy When Condition: {strategy.when_prompt}\n\n"
-            "Strategy Addressee Intelligence, which relates to whom the chatbot should respond (e.g., a specific group, unspecified participants, or all participants).\n"
-            f"Strategy Who Criteria: {strategy.who_prompt}\n\n"
-            f"Results on if the strategy is applicable: {response}\n\n"
-            "--------------------------------\n\n"
-            "Your task is to generate next assistant response based on the strategy's intelligence instructions."
-        )
-
-        response = asyncio.run(chat_completion(instructions))
+    for strategy, evaluation_result in applicable_strategies:
+        response = generate_response_for_strategy(
+            transcript_text, strategy, evaluation_result)
         results[strategy.id] = response
     return results
 
 
+def process_arbitrar_layer(group_id: str):
+    logger.info(f"Processing arbitrar layer for group ID: {group_id}")
+    transcript_text = load_detailed_transcript(group_id)
+    applicable_strategies = evaluate_all_strategies(transcript_text)
+    responses = generate_all_strategy_responses(
+        transcript_text, applicable_strategies)
+    return responses
+
+
 async def send_multiple_responses(group_id: str, responses: list[str]):
-    """
-    Asynchronously send each generated strategy response to the group.
-
-    Each message is prefixed with the strategy name.
-    """
-    logging.info(f"Sending strategy responses for group ID: {group_id}")
-    # TODO priority order and evaluation
-
-    # for _, response in responses.items():
-    #     await send_message_to_participant_group(group_id, response)
-
+    logger.info(f"Sending strategy responses for group ID: {group_id}")
+    # TODO: add priority ordering if needed
     for response in responses:
         await send_message_to_participant_group(group_id, response)
