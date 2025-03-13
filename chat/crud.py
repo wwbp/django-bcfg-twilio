@@ -270,6 +270,7 @@ INSTRUCTION_PROMPT_TEMPLATE = (
     "Using the below system prompt as your guide, engage with the user in a manner that reflects your assigned persona and follows the activity instructions"
     "System Prompt: {system}\n\n"
     "Assigned Persona: {persona}\n\n"
+    "Assistant Name: {assistant_name}\n\n"
     "Activity: {activity}\n\n"
 )
 
@@ -278,10 +279,12 @@ def load_instruction_prompt(user_id: str):
     try:
         user = User.objects.get(id=user_id)
         week = user.week_number
+        assistant_name = user.school_mascot if user.school_mascot else "Assistant"
     except User.DoesNotExist:
         logger.warning(
             f"User with id {user_id} not found. Using default prompt.")
         week = None
+        assistant_name = "Assistant"
 
     # Load the most recent controls record
     try:
@@ -301,6 +304,7 @@ def load_instruction_prompt(user_id: str):
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
         system=controls.system,
         persona=controls.persona,
+        assistant_name=assistant_name,
         activity=activity,
     )
     return instruction_prompt
