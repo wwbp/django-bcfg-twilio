@@ -1,4 +1,5 @@
 # chat/crud.py
+import re
 import json
 import logging
 
@@ -168,6 +169,15 @@ def validate_ingest_group_request(group_id: str, data: dict):
             group.save()
 
 
+def sanitize_name(name: str) -> str:
+    """
+    Remove any characters that are not letters, digits, underscores, or hyphens.
+    If the sanitized name is empty, return a default value.
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', name)
+    return sanitized if sanitized else "default"
+
+
 def load_individual_chat_history(user_id: str):
     logger.info(f"Loading chat history for participant: {user_id}")
 
@@ -193,6 +203,7 @@ def load_individual_chat_history(user_id: str):
         else:  # role is assistant
             sender_name = t.user.school_mascot if t.user.school_mascot else "assistant"
 
+        sender_name = sanitize_name(sender_name)
         history.append({
             "role": t.role,
             "content": t.content,
