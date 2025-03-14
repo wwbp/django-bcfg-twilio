@@ -88,6 +88,7 @@ def generate_response_for_strategy(transcript_text: str, strategy: StrategyPromp
         transcript_text, strategy, evaluation_result)
     logger.info(
         f"Response generation prompt for strategy {strategy.id}: {prompt}")
+    #TODO generate response from kani to have built in moderation and 320 charac limiter
     response = asyncio.run(chat_completion(prompt))
     return response
 
