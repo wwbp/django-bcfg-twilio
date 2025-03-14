@@ -1,3 +1,4 @@
+import re
 from asgiref.sync import sync_to_async
 import os
 from openai import OpenAI
@@ -20,6 +21,7 @@ async def _generate_response(chat_history: list[ChatMessage], instructions: str,
     assistant = Kani(engine, system_prompt=instructions,
                      chat_history=chat_history)
     response = await assistant.chat_round_str(message)
+    response = await ensure_320_character_limit(response)
     return response
 
 
@@ -39,3 +41,39 @@ async def chat_completion(instructions: str):
     )
     response = completion.choices[0].message.content
     return response
+
+
+async def ensure_320_character_limit(text: str) -> str:
+    if len(text) <= 320:
+        return text
+
+    current_text = text
+
+    for _ in range(2):
+        if len(current_text) > 320:
+            instructions = (
+                "Goal: Shorten the following text to under 320 characters. "
+                "Output format: just the shortened response text.\n\nText: " + current_text
+            )
+            shortened = await chat_completion(instructions)
+            current_text = shortened
+
+    if len(current_text) > 320:
+        sentences = re.split(r'(?<=\.)\s+', current_text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        if not sentences:
+            return current_text[:320]
+
+        while len(' '.join(sentences).strip()) > 320 and len(sentences) > 1:
+            sentences.pop()
+        shortened = ' '.join(sentences).strip()
+
+        if not shortened:
+            return current_text[:320]
+
+        if len(shortened) > 320:
+            shortened = shortened[:320]
+
+        return shortened
+
+    return current_text
