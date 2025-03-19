@@ -96,8 +96,13 @@ class StrategyPrompt(models.Model):
 class IndividualPipelineRecord(models.Model):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     participant_id = models.CharField(max_length=255)
+    message = models.TextField(blank=True, null=True)
+    response = models.TextField(blank=True, null=True)
     ingested = models.BooleanField(default=False)
+    moderated = models.BooleanField(default=False)
     processed = models.BooleanField(default=False)
+    shortened = models.BooleanField(default=False)
+    validated_message = models.TextField(blank=True, null=True)
     sent = models.BooleanField(default=False)
     failed = models.BooleanField(default=False)
     error_log = models.TextField(blank=True, null=True)

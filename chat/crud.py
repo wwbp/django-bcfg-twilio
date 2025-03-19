@@ -26,7 +26,7 @@ def is_test_group(group_id: str):
         return False
 
 
-def validate_ingest_individual_request(participant_id: str, data: dict):
+def ingest_individual_request(participant_id: str, data: dict):
     logger.info(
         f"Checking database for participant ID: {participant_id}")
     user, created = User.objects.get_or_create(id=participant_id)

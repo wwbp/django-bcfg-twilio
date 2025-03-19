@@ -4,11 +4,8 @@ import os
 import functools
 import asyncio
 
-from asgiref.sync import sync_to_async
 from openai import OpenAI
 
-from .crud import get_moderation_message
-from .moderation import moderate_message
 from kani import Kani, ChatMessage
 from kani.engines.openai import OpenAIEngine
 
@@ -46,16 +43,10 @@ async def _generate_response(
     instructions: str,
     message: str
 ) -> str:
-    blocked_str = moderate_message(message)
-    if blocked_str:
-        moderation_message = await sync_to_async(get_moderation_message)()
-        return moderation_message
-
     engine = OpenAIEngine(api_key, model="gpt-4o-mini")
     assistant = Kani(engine, system_prompt=instructions,
                      chat_history=chat_history)
     response = await assistant.chat_round_str(message)
-    response = await ensure_320_character_limit(response)
     return response
 
 
@@ -84,12 +75,7 @@ async def chat_completion(instructions: str) -> str:
 
 
 @log_exceptions
-async def ensure_320_character_limit(text: str) -> str:
-    if len(text) <= 320:
-        return text
-
-    current_text = text
-
+async def ensure_320_character_limit(current_text: str) -> str:
     for _ in range(2):
         if len(current_text) > 320:
             instructions = (
