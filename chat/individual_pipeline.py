@@ -87,15 +87,18 @@ def individual_process_pipeline(run_id):
 
         # Load chat history and instructions from the database
         chat_history, message = load_individual_chat_history(participant_id)
-        instructions = load_instruction_prompt(participant_id)
 
-        # Generate a response using the LLM
-        response = asyncio.run(generate_response(
-            chat_history, instructions, message))
+        # ensure the message is latest
+        if message.strip() != record.message.strip():
+            record.processed = False
+        else:
+            instructions = load_instruction_prompt(participant_id)
+            response = asyncio.run(generate_response(
+                chat_history, instructions, message))
 
-        # Update the pipeline record for the processing stage
-        record.response = response
-        record.processed = True
+            # Update the pipeline record for the processing stage
+            record.response = response
+            record.processed = True
         record.save()
         logger.info(
             f"Individual process pipeline complete for participant {participant_id}, run_id {run_id}"
@@ -211,7 +214,9 @@ def individual_pipeline_moderation_task(self, run_id):
 def individual_pipeline_process_task(self, run_id):
     try:
         individual_process_pipeline(run_id)
-        individual_pipeline_validate_task.delay(run_id)
+        record = IndividualPipelineRecord.objects.get(run_id=run_id)
+        if record.processed:
+            individual_pipeline_validate_task.delay(run_id)
     except Exception as exc:
         logger.error(
             f"Individual pipeline processing failed for run_id {run_id}: {exc}"
