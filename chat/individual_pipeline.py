@@ -97,6 +97,7 @@ def individual_process_pipeline(run_id):
                 chat_history, instructions, message))
 
             # Update the pipeline record for the processing stage
+            record.instruction_prompt = instructions
             record.response = response
             record.processed = True
         record.save()

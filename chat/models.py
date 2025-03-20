@@ -100,6 +100,7 @@ class IndividualPipelineRecord(models.Model):
     response = models.TextField(blank=True, null=True)
     ingested = models.BooleanField(default=False)
     moderated = models.BooleanField(default=False)
+    instruction_prompt = models.TextField(blank=True, null=True)
     processed = models.BooleanField(default=False)
     shortened = models.BooleanField(default=False)
     validated_message = models.TextField(blank=True, null=True)
