@@ -1,4 +1,4 @@
-# chat/crud.py
+from django.utils import timezone
 import re
 import json
 import logging
@@ -26,60 +26,110 @@ def is_test_group(group_id: str):
         return False
 
 
-def ingest_individual_request(participant_id: str, data: dict):
-    logger.info(
-        f"Checking database for participant ID: {participant_id}")
-    user, created = User.objects.get_or_create(id=participant_id)
-    context = data.get("context", {})
-    message = data.get("message", "")
-
-    if created:
-        logger.info(
-            f"Participant ID {participant_id} not found. Creating a new record.")
+def create_new_user(user, context: dict, message: str):
+    """
+    Populate a newly created user instance with context data and create the
+    initial chat transcripts.
+    """
+    try:
+        # Update the new user instance with provided context data
         user.school_name = context.get("school_name", "")
         user.school_mascot = context.get("school_mascot", "")
         user.name = context.get("name", "")
         user.initial_message = context.get("initial_message", "")
         user.week_number = context.get("week_number")
-        user.save()
-        # Create an initial chat transcript entry with the initial message
-        ChatTranscript.objects.create(
-            user=user, role="assistant", content=context.get("initial_message", "")
-        )
-        ChatTranscript.objects.create(
-            user=user, role="user", content=message
-        )
-    else:
-        logger.info(f"Participant ID {participant_id} exists.")
-        updated = False
+        user.save()  # Save updated fields
 
-        # Check if week number has changed and update if needed
+        # Create initial transcripts:
+        # 1. Assistant transcript with the initial message.
+        ChatTranscript.objects.create(
+            user=user,
+            role="assistant",
+            content=context.get("initial_message", "")
+        )
+        # 2. User transcript with the provided message.
+        ChatTranscript.objects.create(
+            user=user,
+            role="user",
+            content=message
+        )
+        return user
+    except Exception as e:
+        logger.exception("Error creating new user with ID %s: %s", user.id, e)
+        raise
+
+
+def update_existing_user(user, context: dict, message: str):
+    """
+    Update an existing user record if necessary and add a new user transcript.
+    """
+    updated = False
+    try:
+        # Check if week number changed
         new_week = context.get("week_number")
         if new_week is not None and new_week != user.week_number:
-            logger.info(
-                f"Week number changed for user {participant_id} from {user.week_number} to {new_week}.")
+            logger.info("Week number changed for user %s from %s to %s.",
+                        user.id, user.week_number, new_week)
             user.week_number = new_week
             updated = True
 
-        # Check if initial message has changed
+        # Check if initial message changed
         new_initial_message = context.get("initial_message")
         if new_initial_message and new_initial_message != user.initial_message:
             logger.info(
-                f"Initial message changed for user {participant_id}. Updating transcript.")
+                "Initial message changed for user %s. Updating transcript.", user.id)
             user.initial_message = new_initial_message
-            # Add the updated initial message to the transcript
+            # Create a new assistant transcript for the updated initial message
             ChatTranscript.objects.create(
-                user=user, role="assistant", content=new_initial_message
+                user=user,
+                role="assistant",
+                content=new_initial_message
             )
             updated = True
 
-        # after new initial message update user
+        # Always create a transcript for the new user message
         ChatTranscript.objects.create(
-            user=user, role="user", content=message
+            user=user,
+            role="user",
+            content=message
         )
 
         if updated:
             user.save()
+        return user
+    except Exception as e:
+        logger.exception("Error updating user %s: %s", user.id, e)
+        raise
+
+
+def ingest_individual_request(participant_id: str, data: dict):
+    """
+    Ingests an individual request by either creating a new user record or updating
+    an existing one. The operation is wrapped in an atomic transaction for consistency.
+    """
+    logger.info("Processing request for participant ID: %s", participant_id)
+    context = data.get("context", {})
+    message = data.get("message", "")
+
+    try:
+        with transaction.atomic():
+            # Provide a default for created_at to avoid null value issues.
+            user, created = User.objects.get_or_create(
+                id=participant_id,
+                defaults={'created_at': timezone.now()}
+            )
+            if created:
+                logger.info(
+                    "Participant ID %s not found. Creating a new record.", participant_id)
+                create_new_user(user, context, message)
+            else:
+                logger.info(
+                    "Participant ID %s exists. Processing update.", participant_id)
+                update_existing_user(user, context, message)
+    except Exception as e:
+        logger.exception(
+            "Error processing request for participant ID %s: %s", participant_id, e)
+        raise
 
 
 def validate_ingest_group_request(group_id: str, data: dict):
