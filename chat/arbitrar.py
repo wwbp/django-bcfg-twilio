@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from .models import StrategyPrompt
@@ -39,7 +38,7 @@ def evaluate_single_strategy(transcript_text: str, strategy: StrategyPrompt) -> 
     logger.info(
         f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
     try:
-        response = asyncio.run(chat_completion(composite_prompt))
+        response = chat_completion(composite_prompt)
         logger.info(
             f"Response from GPT for strategy {strategy.name}: {response}")
         result = json.loads(response)
@@ -89,7 +88,7 @@ def generate_response_for_strategy(transcript_text: str, strategy: StrategyPromp
     logger.info(
         f"Response generation prompt for strategy {strategy.id}: {prompt}")
     #TODO generate response from kani to have built in moderation and 320 charac limiter
-    response = asyncio.run(chat_completion(prompt))
+    response = chat_completion(prompt)
     return response
 
 
