@@ -6,3 +6,6 @@ empty-migration:
 
 migrate:
 	python manage.py migrate
+
+test-chat:
+	python manage.py test chat
