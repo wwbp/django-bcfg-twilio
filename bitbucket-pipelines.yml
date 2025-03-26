@@ -1,0 +1,53 @@
+#  Template python-build
+
+#  This template allows you to validate your python code.
+#  The workflow allows running tests and code linting on the default branch.
+
+image: python:3.11
+
+# testStep: &testStep
+#   step:
+#     name: Test
+#     caches:
+#       - pip
+#     script:
+#       - apt-get update && apt-get -y install binutils libproj-dev gdal-bin
+#       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+#       - pip install pytest
+#       - pytest -v bcfg -n auto --cov-context=test
+#       - make test-migrations
+#     services:
+#       - redis
+lintStep: &lintStep
+  step:
+    name: Lint code
+    script:
+      - pip install ruff
+      - ruff check .
+    caches:
+      - pip
+
+# securityStep: &securityStep
+#   step:
+#     name: Security scan
+#     caches:
+#       - node
+#       - pip
+#     script:
+#       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+#       - curl --compressed https://static.snyk.io/cli/latest/snyk-linux -o snyk
+#       - chmod +x ./snyk
+#       - ./snyk auth $SNYK_TOKEN
+#       - ./snyk test --file=requirements.txt -- --allow-missing
+
+pipelines:
+  default:
+    - parallel:
+        # - <<: *testStep
+        - <<: *lintStep
+        # - <<: *securityStep
+
+definitions:
+  services:
+    redis:
+      image: redis

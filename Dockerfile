@@ -20,11 +20,10 @@ RUN pip install --upgrade pip pipenv
 
 COPY Pipfile Pipfile.lock ./
 
-RUN pipenv install --deploy --system
-
-
 ### PRODUCTION ###
 FROM base AS production
+
+RUN pipenv install --deploy --system
 
 COPY . .
 
@@ -37,6 +36,8 @@ RUN chmod +x /entrypoint.prod.sh
 
 ### DEVELOPMENT ###
 FROM base AS development
+
+RUN pipenv install --dev --system
 
 # Install pip requirements
 WORKDIR /app

@@ -42,17 +42,9 @@ def create_new_user(user, context: dict, message: str):
 
         # Create initial transcripts:
         # 1. Assistant transcript with the initial message.
-        ChatTranscript.objects.create(
-            user=user,
-            role="assistant",
-            content=context.get("initial_message", "")
-        )
+        ChatTranscript.objects.create(user=user, role="assistant", content=context.get("initial_message", ""))
         # 2. User transcript with the provided message.
-        ChatTranscript.objects.create(
-            user=user,
-            role="user",
-            content=message
-        )
+        ChatTranscript.objects.create(user=user, role="user", content=message)
         return user
     except Exception as e:
         logger.exception("Error creating new user with ID %s: %s", user.id, e)
@@ -68,31 +60,21 @@ def update_existing_user(user, context: dict, message: str):
         # Check if week number changed
         new_week = context.get("week_number")
         if new_week is not None and new_week != user.week_number:
-            logger.info("Week number changed for user %s from %s to %s.",
-                        user.id, user.week_number, new_week)
+            logger.info("Week number changed for user %s from %s to %s.", user.id, user.week_number, new_week)
             user.week_number = new_week
             updated = True
 
         # Check if initial message changed
         new_initial_message = context.get("initial_message")
         if new_initial_message and new_initial_message != user.initial_message:
-            logger.info(
-                "Initial message changed for user %s. Updating transcript.", user.id)
+            logger.info("Initial message changed for user %s. Updating transcript.", user.id)
             user.initial_message = new_initial_message
             # Create a new assistant transcript for the updated initial message
-            ChatTranscript.objects.create(
-                user=user,
-                role="assistant",
-                content=new_initial_message
-            )
+            ChatTranscript.objects.create(user=user, role="assistant", content=new_initial_message)
             updated = True
 
         # Always create a transcript for the new user message
-        ChatTranscript.objects.create(
-            user=user,
-            role="user",
-            content=message
-        )
+        ChatTranscript.objects.create(user=user, role="user", content=message)
 
         if updated:
             user.save()
@@ -114,21 +96,15 @@ def ingest_individual_request(participant_id: str, data: dict):
     try:
         with transaction.atomic():
             # Provide a default for created_at to avoid null value issues.
-            user, created = User.objects.get_or_create(
-                id=participant_id,
-                defaults={'created_at': timezone.now()}
-            )
+            user, created = User.objects.get_or_create(id=participant_id, defaults={"created_at": timezone.now()})
             if created:
-                logger.info(
-                    "Participant ID %s not found. Creating a new record.", participant_id)
+                logger.info("Participant ID %s not found. Creating a new record.", participant_id)
                 create_new_user(user, context, message)
             else:
-                logger.info(
-                    "Participant ID %s exists. Processing update.", participant_id)
+                logger.info("Participant ID %s exists. Processing update.", participant_id)
                 update_existing_user(user, context, message)
     except Exception as e:
-        logger.exception(
-            "Error processing request for participant ID %s: %s", participant_id, e)
+        logger.exception("Error processing request for participant ID %s: %s", participant_id, e)
         raise
 
 
@@ -146,14 +122,11 @@ def validate_ingest_group_request(group_id: str, data: dict):
         group.save()
 
         # Create the initial assistant transcript entry (sender remains null)
-        GroupChatTranscript.objects.create(
-            group=group, role="assistant", content=group.initial_message
-        )
+        GroupChatTranscript.objects.create(group=group, role="assistant", content=group.initial_message)
 
         # Create and add participants to the group
         for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(
-                id=participant["id"])
+            user, user_created = User.objects.get_or_create(id=participant["id"])
             if user_created:
                 user.name = participant.get("name", "")
                 user.school_name = context.get("school_name", "")
@@ -167,9 +140,7 @@ def validate_ingest_group_request(group_id: str, data: dict):
         if sender_id:
             sender, _ = User.objects.get_or_create(id=sender_id)
 
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender
-        )
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
     else:
         logger.info(f"Group ID {group_id} exists.")
         updated = False
@@ -177,28 +148,21 @@ def validate_ingest_group_request(group_id: str, data: dict):
         # Check if week_number has changed and update if needed.
         new_week = context.get("week_number")
         if new_week is not None and new_week != group.week_number:
-            logger.info(
-                f"Week number changed for group {group_id} from {group.week_number} to {new_week}."
-            )
+            logger.info(f"Week number changed for group {group_id} from {group.week_number} to {new_week}.")
             group.week_number = new_week
             updated = True
 
         # Check if the initial message has changed and update transcript accordingly.
         new_initial_message = context.get("initial_message")
         if new_initial_message and new_initial_message != group.initial_message:
-            logger.info(
-                f"Initial message changed for group {group_id}. Updating transcript."
-            )
+            logger.info(f"Initial message changed for group {group_id}. Updating transcript.")
             group.initial_message = new_initial_message
-            GroupChatTranscript.objects.create(
-                group=group, role="assistant", content=new_initial_message
-            )
+            GroupChatTranscript.objects.create(group=group, role="assistant", content=new_initial_message)
             updated = True
 
         # Update or add new participants before saving the user message transcript.
         for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(
-                id=participant["id"])
+            user, user_created = User.objects.get_or_create(id=participant["id"])
             if user_created:
                 user.name = participant.get("name", "")
                 user.school_name = context.get("school_name", "")
@@ -211,9 +175,7 @@ def validate_ingest_group_request(group_id: str, data: dict):
         sender = None
         if sender_id:
             sender, _ = User.objects.get_or_create(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender
-        )
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
 
         if updated:
             group.save()
@@ -224,7 +186,7 @@ def sanitize_name(name: str) -> str:
     Remove any characters that are not letters, digits, underscores, or hyphens.
     If the sanitized name is empty, return a default value.
     """
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', name)
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", name)
     return sanitized if sanitized else "default"
 
 
@@ -232,15 +194,10 @@ def load_individual_chat_history(user_id: str):
     logger.info(f"Loading chat history for participant: {user_id}")
 
     # Retrieve all transcripts in chronological order
-    transcripts = ChatTranscript.objects.filter(
-        user_id=user_id).order_by("created_at")
+    transcripts = ChatTranscript.objects.filter(user_id=user_id).order_by("created_at")
 
     # Get the most recent user transcript
-    latest_user_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role="user")
-        .order_by("-created_at")
-        .first()
-    )
+    latest_user_transcript = ChatTranscript.objects.filter(user_id=user_id, role="user").order_by("-created_at").first()
 
     # Build chat history, excluding the latest user message
     history = []
@@ -254,11 +211,13 @@ def load_individual_chat_history(user_id: str):
             sender_name = t.user.school_mascot if t.user.school_mascot else "assistant"
 
         sender_name = sanitize_name(sender_name)
-        history.append({
-            "role": t.role,
-            "content": t.content,
-            "name": sender_name,
-        })
+        history.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "name": sender_name,
+            }
+        )
 
     # Extract only the message content for the latest user message
     latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
@@ -268,37 +227,27 @@ def load_individual_chat_history(user_id: str):
 
 def load_detailed_transcript(group_id: str):
     logger.info(f"Loading detailed transcript for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(
-        group_id=group_id).order_by("created_at")
+    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
     messages = []
     for t in transcripts:
         sender_name = t.sender.name if t.sender else "assistant"  # TODO: pipe mascot name
-        messages.append({
-            "sender": sender_name,
-            "role": t.role,
-            "timestamp": str(t.created_at),
-            "content": t.content
-        })
+        messages.append({"sender": sender_name, "role": t.role, "timestamp": str(t.created_at), "content": t.content})
     return json.dumps(messages, indent=2)
 
 
 def load_chat_history_json_group(group_id: str):
     logger.info(f"Loading chat history for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(
-        group_id=group_id).order_by("created_at")
+    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
     history = [{"role": t.role, "content": t.content} for t in transcripts]
     return history
 
 
 def get_latest_assistant_response(user_id: str):
-    logger.info(
-        f"Fetching latest assistant response for participant with id: {user_id}")
+    logger.info(f"Fetching latest assistant response for participant with id: {user_id}")
 
     # Retrieve the most recent assistant response for the given user
     latest_assistant_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role="assistant")
-        .order_by("-created_at")
-        .first()
+        ChatTranscript.objects.filter(user_id=user_id, role="assistant").order_by("-created_at").first()
     )
 
     # Return the content if a transcript exists; otherwise, return None
@@ -308,8 +257,7 @@ def get_latest_assistant_response(user_id: str):
 def save_assistant_response(user_id: str, response):
     logger.info(f"Saving assistant response for participant: {user_id}")
     user = User.objects.get(id=user_id)
-    ChatTranscript.objects.create(
-        user=user, role="assistant", content=response)
+    ChatTranscript.objects.create(user=user, role="assistant", content=response)
     logger.info("Assistant Response saved successfully.")
 
 
@@ -319,16 +267,15 @@ def save_chat_round_group(group_id: str, sender_id: str, message, response):
     group = Group.objects.get(id=group_id)
     if message:
         sender = User.objects.get(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender)
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
     if response:
-        GroupChatTranscript.objects.create(
-            group=group, role="assistant", content=response)
+        GroupChatTranscript.objects.create(group=group, role="assistant", content=response)
     logger.info("Chat round saved successfully.")
 
 
 INSTRUCTION_PROMPT_TEMPLATE = (
-    "Using the below system prompt as your guide, engage with the user in a manner that reflects your assigned persona and follows the activity instructions"
+    "Using the below system prompt as your guide, engage with the user in a "
+    "manner that reflects your assigned persona and follows the activity instructions"
     "System Prompt: {system}\n\n"
     "Assigned Persona: {persona}\n\n"
     "Assistant Name: {assistant_name}\n\n"
@@ -342,14 +289,13 @@ def load_instruction_prompt(user_id: str):
         week = user.week_number
         assistant_name = user.school_mascot if user.school_mascot else "Assistant"
     except User.DoesNotExist:
-        logger.warning(
-            f"User with id {user_id} not found. Using default prompt.")
+        logger.warning(f"User with id {user_id} not found. Using default prompt.")
         week = None
         assistant_name = "Assistant"
 
     # Load the most recent controls record
     try:
-        controls = Control.objects.latest('created_at')
+        controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
         controls = Control.objects.create()
 
@@ -373,7 +319,7 @@ def load_instruction_prompt(user_id: str):
 
 def get_moderation_message():
     try:
-        controls = Control.objects.latest('created_at')
+        controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
         controls = Control.objects.create()
     if len(controls.moderation) > 0:
