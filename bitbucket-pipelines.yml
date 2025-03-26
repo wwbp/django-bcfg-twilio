@@ -5,19 +5,20 @@
 
 image: python:3.11
 
-# testStep: &testStep
-#   step:
-#     name: Test
-#     caches:
-#       - pip
-#     script:
-#       - apt-get update && apt-get -y install binutils libproj-dev gdal-bin
-#       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-#       - pip install pytest
-#       - pytest -v bcfg -n auto --cov-context=test
-#       - make test-migrations
-#     services:
-#       - redis
+testStep: &testStep
+  step:
+    name: Test
+    caches:
+      - pip
+    script:
+      - apt-get update && apt-get -y install binutils libproj-dev gdal-bin default-mysql-client
+      - pip install --upgrade pip pipenv
+      - pipenv install --dev --system
+      - mysql -h 127.0.0.1 -u root -proot_password -e "GRANT ALL PRIVILEGES ON *.* TO 'bcfg_sa'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+      - pytest -n auto
+    services:
+      - mysql
+      - redis
 lintStep: &lintStep
   step:
     name: Lint code
@@ -44,11 +45,18 @@ securityStep: &securityStep
 pipelines:
   default:
     - parallel:
-        # - <<: *testStep
+        - <<: *testStep
         - <<: *lintStep
         - <<: *securityStep
 
 definitions:
   services:
+    mysql: 
+      image: mysql:8.0
+      variables: 
+        MYSQL_DATABASE: 'db'
+        MYSQL_ROOT_PASSWORD: 'root_password' 
+        MYSQL_USER: 'bcfg_sa'
+        MYSQL_PASSWORD: 'root_password'
     redis:
       image: redis

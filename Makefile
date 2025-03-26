@@ -13,6 +13,6 @@ lint:
 requirements:
 	pipenv lock
 	echo "Pipfile.lock updated, rebuild container to install new dependencies"
-	
-test-chat:
-	python manage.py test chat
+
+test:
+	pytest -n 2 --cov=chat --cov-report=html:coverage/coverage.html --cov-context=test --cov-report term

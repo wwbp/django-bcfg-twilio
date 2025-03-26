@@ -35,6 +35,19 @@
         "envFile": "${workspaceFolder}/.env",
         "django": true,
         "justMyCode": false
-      }
+      },
+      // https://stackoverflow.com/questions/76235458/in-vs-code-how-can-i-disable-justmycode-when-running-pytest-in-testing-tab
+      {
+        "name": "Python: Debug Tests",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${file}",
+        "purpose": ["debug-test"],
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "presentation": {
+            "hidden": true, // keep original launch order in 'run and debug' tab
+        }
+    },
     ]
   }

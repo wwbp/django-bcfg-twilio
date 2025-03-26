@@ -3,3 +3,4 @@ Chat DB.session.sql
 files/staticfiles*
 .DS_Store
 __pycache__
+.coverage
