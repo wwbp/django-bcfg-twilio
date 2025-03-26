@@ -6,3 +6,10 @@ empty-migration:
 
 migrate:
 	python manage.py migrate
+
+lint:
+	ruff check . --fix
+
+requirements:
+	pipenv lock
+	echo "Pipfile.lock updated, rebuild container to install new dependencies"

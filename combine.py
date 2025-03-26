@@ -7,7 +7,7 @@ def collect_py_files(directory):
     Returns a sorted list of file paths relative to the given directory.
     """
     py_files = []
-    for root, dirs, files in os.walk(directory):
+    for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".py") or file.endswith(".html"):
                 full_path = os.path.join(root, file)
@@ -78,10 +78,8 @@ def combine_py_files(directory, output_file="combined.py"):
 
 if __name__ == "__main__":
     # Prompt user for the directory path and optional output file name.
-    directory = input(
-        "Enter the directory path to search for .py and .html files: ").strip()
-    output_file = input(
-        "Enter output file name (or press Enter to use 'dds.txt'): ").strip()
+    directory = input("Enter the directory path to search for .py and .html files: ").strip()
+    output_file = input("Enter output file name (or press Enter to use 'dds.txt'): ").strip()
     if not output_file:
         output_file = "dds.txt"
     combine_py_files(directory, output_file)
