@@ -1,4 +1,5 @@
 import sys
+from django.test import override_settings
 import pytest
 import factory
 from pytest_factoryboy import register
@@ -19,6 +20,16 @@ def pytest_configure(config: pytest.Config):
 @pytest.fixture(autouse=True)
 def enable_db_access(db):
     pass
+
+
+@pytest.fixture(autouse=True)
+def overwrite_secrets():
+    # overwrite secrets to prevent hitting real services while unit testing, just in case
+    with override_settings(
+        OPENAI_API_KEY="fake-openai-api-key",
+        BCFG_API_KEY="fake-bcfg-api-key",
+    ):
+        yield
 
 
 class UserFactory(factory.django.DjangoModelFactory):
