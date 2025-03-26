@@ -1,6 +1,13 @@
 from openai import OpenAI
 from openai._compat import model_dump
-client = OpenAI()
+
+_client = None  
+
+def get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
 
 MODERATION_VALUES_FOR_BLOCKED = {
     "harassment": 0.5,
@@ -16,13 +23,11 @@ MODERATION_VALUES_FOR_BLOCKED = {
     "violence/graphic": 0.8,
 }
 
-
 def moderate_message(message: str) -> str:
-    moderation_response = client.moderations.create(
+    moderation_response = get_client().moderations.create(
         input=message, model="omni-moderation-latest"
     )
     category_scores = moderation_response.results[0].category_scores or {}
-
     category_score_items = model_dump(category_scores)
 
     blocked_str = ""
