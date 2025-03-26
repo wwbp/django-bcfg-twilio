@@ -24,6 +24,9 @@ pytest-django = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 black = "*"
+factory-boy = "*"
+pytest-factoryboy = "*"
+
 
 [requires]
 python_version = "3.11"
