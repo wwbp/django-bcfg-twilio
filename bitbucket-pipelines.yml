@@ -27,25 +27,26 @@ lintStep: &lintStep
     caches:
       - pip
 
-# securityStep: &securityStep
-#   step:
-#     name: Security scan
-#     caches:
-#       - node
-#       - pip
-#     script:
-#       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-#       - curl --compressed https://static.snyk.io/cli/latest/snyk-linux -o snyk
-#       - chmod +x ./snyk
-#       - ./snyk auth $SNYK_TOKEN
-#       - ./snyk test --file=requirements.txt -- --allow-missing
+securityStep: &securityStep
+  step:
+    name: Security scan
+    caches:
+      - node
+      - pip
+    script:
+      - pip install --upgrade pip pipenv
+      - pipenv install
+      - curl --compressed https://static.snyk.io/cli/latest/snyk-linux -o snyk
+      - chmod +x ./snyk
+      - ./snyk auth $SNYK_TOKEN
+      - ./snyk test
 
 pipelines:
   default:
     - parallel:
         # - <<: *testStep
         - <<: *lintStep
-        # - <<: *securityStep
+        - <<: *securityStep
 
 definitions:
   services:
