@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Python: Django Web",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/manage.py",
+        "args": [
+          "runserver",
+          "0.0.0.0:8000" 
+        ],
+        "django": true,
+        "justMyCode": false,
+        "envFile": "${workspaceFolder}/.env",
+      },
+      {
+        "name": "Python: Celery Workers",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "celery",
+        "console": "integratedTerminal",
+        "envFile": "${workspaceFolder}/.env",
+        "args": ["-A", "config", "worker", "-l", "debug", "--concurrency", "2"],
+        "justMyCode": false,
+      },
+      {
+        "name": "Python: Django Shell",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/manage.py",
+        "args": [
+          "shell"
+        ],
+        "envFile": "${workspaceFolder}/.env",
+        "django": true,
+        "justMyCode": false
+      }
+    ]
+  }

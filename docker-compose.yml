@@ -1,18 +1,21 @@
 services:
   web:
     build:
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
       context: .
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     ports:
       - "8000:8000"
     depends_on:
       - db
       - redis
-    # command: "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - .:/workspace:cached
+      - .:/app
+    command: /bin/sh -c "while sleep 1000; do :; done" 
 
 
   db:
@@ -32,7 +35,6 @@ services:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
-
   redis:
     image: redis:latest
     ports:
@@ -41,11 +43,10 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     command: celery -A config worker -l info
     depends_on:
       - redis
@@ -55,11 +56,10 @@ services:
   scheduler:
     build:
       context: .
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     command: celery -A config beat -l info
     depends_on:
       - redis
