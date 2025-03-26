@@ -10,7 +10,7 @@ from .crud import (
     ingest_individual_request,
     save_assistant_response,
 )
-from .completion import ensure_320_character_limit, generate_response
+from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
 from .send import send_message_to_participant
 from .models import IndividualPipelineRecord
 
@@ -108,11 +108,11 @@ def individual_validate_pipeline(run_id):
     try:
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
         response = record.response
-        if len(response) <= 320:
+        if len(response) <= MAX_RESPONSE_CHARACTER_LENGTH:
             record.shortened = False
             record.validated_message = response
         else:
-            processed_response = ensure_320_character_limit(response)
+            processed_response = ensure_within_character_limit(response)
             record.shortened = True
             record.validated_message = processed_response
         record.save()

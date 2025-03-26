@@ -33,26 +33,21 @@ def build_strategy_evaluation_prompt(transcript_text: str, strategy: StrategyPro
 
 
 def evaluate_single_strategy(transcript_text: str, strategy: StrategyPrompt) -> dict:
-    composite_prompt = build_strategy_evaluation_prompt(
-        transcript_text, strategy)
-    logger.info(
-        f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
+    composite_prompt = build_strategy_evaluation_prompt(transcript_text, strategy)
+    logger.info(f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
     try:
         response = chat_completion(composite_prompt)
-        logger.info(
-            f"Response from GPT for strategy {strategy.name}: {response}")
+        logger.info(f"Response from GPT for strategy {strategy.name}: {response}")
         result = json.loads(response)
         for key in ("confidence", "explanation"):
             if key not in result:
                 raise ValueError(f"Missing key in JSON response: {key}")
     except json.JSONDecodeError as e:
         logger.error(f"JSON decoding error: {e}")
-        result = {"confidence": 0.0,
-                  "explanation": "Failed to decode JSON response from GPT."}
+        result = {"confidence": 0.0, "explanation": "Failed to decode JSON response from GPT."}
     except Exception as e:
         logger.error(f"Error in strategy evaluation: {e}")
-        result = {"confidence": 0.0,
-                  "explanation": "An error occurred during strategy evaluation."}
+        result = {"confidence": 0.0, "explanation": "An error occurred during strategy evaluation."}
     return result
 
 
@@ -83,11 +78,9 @@ def build_response_generation_prompt(transcript_text: str, strategy: StrategyPro
 
 
 def generate_response_for_strategy(transcript_text: str, strategy: StrategyPrompt, evaluation_result: dict) -> str:
-    prompt = build_response_generation_prompt(
-        transcript_text, strategy, evaluation_result)
-    logger.info(
-        f"Response generation prompt for strategy {strategy.id}: {prompt}")
-    #TODO generate response from kani to have built in moderation and 320 charac limiter
+    prompt = build_response_generation_prompt(transcript_text, strategy, evaluation_result)
+    logger.info(f"Response generation prompt for strategy {strategy.id}: {prompt}")
+    # TODO generate response from kani to have built in moderation and charac limiter
     response = chat_completion(prompt)
     return response
 
@@ -95,8 +88,7 @@ def generate_response_for_strategy(transcript_text: str, strategy: StrategyPromp
 def generate_all_strategy_responses(transcript_text: str, applicable_strategies: list):
     results = {}
     for strategy, evaluation_result in applicable_strategies:
-        response = generate_response_for_strategy(
-            transcript_text, strategy, evaluation_result)
+        response = generate_response_for_strategy(transcript_text, strategy, evaluation_result)
         results[strategy.id] = response
     return results
 
@@ -105,8 +97,7 @@ def process_arbitrar_layer(group_id: str):
     logger.info(f"Processing arbitrar layer for group ID: {group_id}")
     transcript_text = load_detailed_transcript(group_id)
     applicable_strategies = evaluate_all_strategies(transcript_text)
-    responses = generate_all_strategy_responses(
-        transcript_text, applicable_strategies)
+    responses = generate_all_strategy_responses(transcript_text, applicable_strategies)
     return responses
 
 
