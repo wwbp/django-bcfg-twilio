@@ -85,7 +85,7 @@ def individual_process_pipeline(run_id):
             record.processed = False
         else:
             instructions = load_instruction_prompt(participant_id)
-            response = asyncio.run(generate_response(chat_history, instructions, message))
+            response = generate_response(chat_history, instructions, message)
 
             # Update the pipeline record for the processing stage
             record.instruction_prompt = instructions
@@ -113,7 +113,7 @@ def individual_validate_pipeline(run_id):
             record.shortened = False
             record.validated_message = response
         else:
-            processed_response = async_to_sync(ensure_320_character_limit)(response)
+            processed_response = ensure_320_character_limit(response)
             record.shortened = True
             record.validated_message = processed_response
         record.save()
