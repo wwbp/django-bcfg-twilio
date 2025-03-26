@@ -13,3 +13,7 @@ We use devcontainer for local dev in VSCode
 1. The server should be running at http://localhost:8000
 1. Create an admin via `python manage.py createsuperuser`
 1. You can access the admin at http://localhost:8000/admin and login with the superuser credentials
+
+### Dev tools
+- Linting: we use ruff for linting, black for formatting. Run `make lint` to lint the codebase
+- Package Management: We use pipenv for package management. Modify the Pipfile as needed, run `make requirements`, and then rebuild the devcontainer

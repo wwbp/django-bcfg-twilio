@@ -18,6 +18,12 @@ asgiref = "*"
 django-celery-results = "*"
 
 [dev-packages]
+ruff = "*"
+pytest = "*"
+pytest-django = "*"
+pytest-cov = "*"
+pytest-xdist = "*"
+black = "*"
 
 [requires]
 python_version = "3.11"
