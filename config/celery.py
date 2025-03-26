@@ -18,12 +18,3 @@ app.autodiscover_tasks()
 def debug_task(self):
     print(f"Request: {self.request!r}")
 
-
-# Add a simple beat schedule to run a sample task every minute.
-app.conf.beat_schedule = {
-    "run-sample-task-every-minute": {
-        # Make sure this task is defined in chat/tasks.py
-        "task": "chat.tasks.sample_task",
-        "schedule": crontab(minute="*/1"),  # Executes every minute
-    },
-}

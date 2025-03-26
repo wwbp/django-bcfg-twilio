@@ -1,6 +1,6 @@
 # tester/urls.py
 from django.urls import path
-from .views import ChatTestInterface, GroupChatTestInterface, ReceiveParticipantResponseView, chat_transcript, create_group_test_case, create_test_case, group_chat_transcript, test_celery
+from .views import ChatTestInterface, GroupChatTestInterface, ReceiveParticipantResponseView, chat_transcript, create_group_test_case, create_test_case, group_chat_transcript
 
 app_name = "tester"
 
@@ -9,7 +9,6 @@ urlpatterns = [
     # This endpoint will receive bot responses from chat app.
     path("ai/api/participant/<str:id>/send",
          ReceiveParticipantResponseView.as_view(), name="receive-participant-response"),
-    path('test-celery/', test_celery, name='test-celery'),
     path('create-test-case/', create_test_case, name='create-test-case'),
     path("chat_transcript/<str:test_case_id>/",
          chat_transcript, name="chat-transcript"),
