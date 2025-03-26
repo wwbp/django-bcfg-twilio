@@ -15,26 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 def log_exceptions(func):
-    if asyncio.iscoroutinefunction(func):
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            try:
-                logger.info("Entering %s", func.__name__)
-                return await func(*args, **kwargs)
-            except Exception as e:
-                logger.exception("Exception in %s: %s", func.__name__, e)
-                raise
-        return async_wrapper
-    else:
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            try:
-                logger.info("Entering %s", func.__name__)
-                return func(*args, **kwargs)
-            except Exception as e:
-                logger.exception("Exception in %s: %s", func.__name__, e)
-                raise
-        return sync_wrapper
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info("Entering %s", func.__name__)
+        try:
+            result = func(*args, **kwargs)
+        except Exception:
+            logger.exception("Exception in %s", func.__name__)
+            raise
+        else:
+            logger.info("Exiting %s", func.__name__)
+            return result
+    return wrapper
 
 
 @log_exceptions
