@@ -4,3 +4,5 @@ files/staticfiles*
 .DS_Store
 __pycache__
 .coverage
+dev-utils
+db.sqlite3

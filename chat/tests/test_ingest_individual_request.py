@@ -1,6 +1,6 @@
 import pytest
 from chat.models import User, ChatTranscript
-from chat.crud import ingest_individual_request
+from chat.services.crud import ingest_individual_request
 
 
 @pytest.fixture

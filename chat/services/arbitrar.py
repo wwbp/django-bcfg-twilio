@@ -1,8 +1,8 @@
 import json
 import logging
-from .models import StrategyPrompt
+from ..models import StrategyPrompt
 from .crud import load_detailed_transcript
-from .services.completion import chat_completion
+from .completion import chat_completion
 from .send import send_message_to_participant_group
 
 logger = logging.getLogger(__name__)

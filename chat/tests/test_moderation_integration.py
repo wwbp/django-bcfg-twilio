@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock, patch
-from chat.moderation import moderate_message
+from chat.services.moderation import moderate_message
 import pytest
 
 
-@patch("chat.moderation.OpenAI")
-@patch("chat.moderation.model_dump")
+@patch("chat.services.moderation.OpenAI")
+@patch("chat.services.moderation.model_dump")
 @pytest.mark.parametrize("self_harm_score,should_flag", [[0.1, False], [0.9, True]])
 def test_self_harm_triggered(model_dump_mock, open_ai_mock, self_harm_score, should_flag):
     moderation_response = MagicMock()

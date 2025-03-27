@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
 
-from .constant import MODERATION_MESSAGE_DEFAULT
+from .services.constant import MODERATION_MESSAGE_DEFAULT
 
 
 class User(models.Model):

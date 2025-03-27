@@ -4,7 +4,7 @@ import logging
 from celery import shared_task
 from .crud import is_test_group, validate_ingest_group_request, save_chat_round_group
 from .arbitrar import process_arbitrar_layer, send_multiple_responses
-from .models import GroupPipelineRecord
+from ..models import GroupPipelineRecord
 
 logger = logging.getLogger(__name__)
 

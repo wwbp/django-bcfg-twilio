@@ -1,6 +1,6 @@
 import pytest
 from chat.models import User, Control, Prompt
-from chat.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
+from chat.services.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
 
 @pytest.mark.django_db

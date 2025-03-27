@@ -2,7 +2,7 @@ import pytest
 import httpx
 from unittest.mock import patch, AsyncMock
 
-from chat.send import (
+from chat.services.send import (
     BCFG_DOMAIN,
     send_message_to_participant,
     send_message_to_participant_group,
@@ -37,7 +37,7 @@ async def test_send_message_to_participant_success():
     mock_client = AsyncMock()
     mock_client.post.return_value = fake_response
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant(participant_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         assert result == {"status": "ok"}
@@ -63,7 +63,7 @@ async def test_send_message_to_participant_http_status_error():
     mock_client = AsyncMock()
     mock_client.post.return_value = fake_response
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant(participant_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         # The function should catch the error and return a dict.
@@ -82,7 +82,7 @@ async def test_send_message_to_participant_request_error():
     # Simulate that the post call raises a RequestError.
     mock_client.post.side_effect = httpx.RequestError("Connection error")
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant(participant_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         assert result.get("error") == "RequestError"
@@ -106,7 +106,7 @@ async def test_send_message_to_participant_group_success():
     mock_client = AsyncMock()
     mock_client.post.return_value = fake_response
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant_group(group_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         assert result == {"status": "group ok"}
@@ -131,7 +131,7 @@ async def test_send_message_to_participant_group_http_status_error():
     mock_client = AsyncMock()
     mock_client.post.return_value = fake_response
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant_group(group_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         assert result.get("error") == "HTTPStatusError"
@@ -148,7 +148,7 @@ async def test_send_message_to_participant_group_request_error():
     mock_client = AsyncMock()
     mock_client.post.side_effect = httpx.RequestError("Timeout error")
 
-    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+    with patch("chat.services.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
         result = await send_message_to_participant_group(group_id, message)
         mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
         assert result.get("error") == "RequestError"
