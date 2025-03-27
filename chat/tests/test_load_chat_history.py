@@ -1,6 +1,6 @@
 from django.utils import timezone
 from chat.models import ChatTranscript
-from chat.crud import load_individual_chat_history
+from chat.services.crud import load_individual_chat_history
 
 
 def test_no_transcripts(user_factory):

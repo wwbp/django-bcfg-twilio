@@ -16,6 +16,7 @@ mysqlclient = "*"
 openai = "*"
 asgiref = "*"
 django-celery-results = "*"
+pytest-asyncio = "*"
 
 [dev-packages]
 ruff = "*"
@@ -26,7 +27,6 @@ pytest-xdist = "*"
 black = "*"
 factory-boy = "*"
 pytest-factoryboy = "*"
-
 
 [requires]
 python_version = "3.11"

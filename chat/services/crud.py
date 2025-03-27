@@ -4,7 +4,7 @@ import json
 import logging
 
 from .constant import MODERATION_MESSAGE_DEFAULT
-from .models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
+from ..models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
 logger = logging.getLogger(__name__)

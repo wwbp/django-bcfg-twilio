@@ -12,7 +12,7 @@ from .crud import (
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
 from .send import send_message_to_participant
-from .models import IndividualPipelineRecord
+from ..models import IndividualPipelineRecord
 
 logger = logging.getLogger(__name__)
 
