@@ -82,6 +82,9 @@ def individual_process_pipeline(run_id):
         # ensure the message is latest
         if message.strip() != record.message.strip():
             record.processed = False
+            record.error_log = (
+                "Message is not the latest in chat history."  # todo: need a sperate placeholder for notes
+            )
         else:
             instructions = load_instruction_prompt(participant_id)
             response = generate_response(chat_history, instructions, message)
@@ -157,6 +160,7 @@ def individual_send_pipeline(run_id):
 # Celery Tasks: Tie the Stages Together
 # =============================================================================
 
+
 @shared_task(bind=True, max_retries=3)
 def individual_pipeline_task(self, participant_id, data):
     try:
@@ -171,6 +175,9 @@ def individual_pipeline_task(self, participant_id, data):
         if not record.moderated:
             individual_process_pipeline(run_id)
 
+        if not record.processed:
+            return
+
         # Stage 4: Validate the outgoing response.
         individual_validate_pipeline(run_id)
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
@@ -181,4 +188,3 @@ def individual_pipeline_task(self, participant_id, data):
     except Exception as exc:
         logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
-
