@@ -10,7 +10,7 @@ from .crud import (
     ingest_individual_request,
     save_assistant_response,
 )
-from .completion import ensure_320_character_limit, generate_response
+from .services.completion import ensure_320_character_limit, generate_response
 from .send import send_message_to_participant
 from .models import IndividualPipelineRecord
 

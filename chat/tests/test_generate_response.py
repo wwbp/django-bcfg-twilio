@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 
-from chat.completion import _generate_response, generate_response
+from chat.services.completion import _generate_response, generate_response
 
 
 # Parameterized test for _generate_response
@@ -12,8 +12,8 @@ from chat.completion import _generate_response, generate_response
         ([{"role": "user", "content": "Hello"}], "Other instructions", "Another message", "mocked response"),
     ],
 )
-@patch("chat.completion.Kani")
-@patch("chat.completion.OpenAIEngine")
+@patch("chat.services.completion.Kani")
+@patch("chat.services.completion.OpenAIEngine")
 def test__generate_response_param(mock_openai, mock_kani, chat_history, instructions, message, expected_response):
     # Define a dummy async function to simulate assistant.chat_round_str.
     async def dummy_chat_round_str(msg):
@@ -36,8 +36,8 @@ def test__generate_response_param(mock_openai, mock_kani, chat_history, instruct
         ([], 0, "mocked response"),
     ],
 )
-@patch("chat.completion._generate_response", return_value="mocked response")
-@patch("chat.completion.ChatMessage")
+@patch("chat.services.completion._generate_response", return_value="mocked response")
+@patch("chat.services.completion.ChatMessage")
 def test_generate_response_param(
     mock_chatmessage, mock_generate_response, history_json, expected_call_count, expected_result
 ):

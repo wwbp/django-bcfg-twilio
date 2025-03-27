@@ -2,7 +2,7 @@ import json
 import logging
 from .models import StrategyPrompt
 from .crud import load_detailed_transcript
-from .completion import chat_completion
+from .services.completion import chat_completion
 from .send import send_message_to_participant_group
 
 logger = logging.getLogger(__name__)
