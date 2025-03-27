@@ -80,10 +80,12 @@ def individual_process_pipeline(run_id):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
+        # todo: need a sperate placeholder for notes
+        # todo broken handling of skipping
         if message.strip() != record.message.strip():
             record.processed = False
             record.error_log = (
-                "Message is not the latest in chat history."  # todo: need a sperate placeholder for notes
+                "Message is not the latest in chat history."  
             )
         else:
             instructions = load_instruction_prompt(participant_id)
@@ -174,9 +176,6 @@ def individual_pipeline_task(self, participant_id, data):
         # Stage 3: Process via LLM call if the message was not blocked.
         if not record.moderated:
             individual_process_pipeline(run_id)
-
-        if not record.processed:
-            return
 
         # Stage 4: Validate the outgoing response.
         individual_validate_pipeline(run_id)
