@@ -186,3 +186,8 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 CELERY_TASK_DEFAULT_PRIORITY = 0
 # CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
 # CELERY_ENABLE_UTC = True
+
+# Core app config
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+BCFG_DOMAIN = os.environ.get("BCFG_DOMAIN", "")
+BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd")

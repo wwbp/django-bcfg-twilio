@@ -17,3 +17,4 @@ We use devcontainer for local dev in VSCode
 ### Dev tools
 - Linting: we use ruff for linting, black for formatting. Run `make lint` to lint the codebase
 - Package Management: We use pipenv for package management. Modify the Pipfile as needed, run `make requirements`, and then rebuild the devcontainer
+- Testing: We use pytest for testing. Run `make test` to run the tests, or run from the test explorer in VSCode. Keep an eye on coverage reports.

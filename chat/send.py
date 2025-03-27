@@ -1,7 +1,5 @@
+from django.conf import settings
 import httpx
-import os
-
-BCFG_DOMAIN = os.getenv("BCFG_DOMAIN", "https://bcfg-domain.com")
 
 
 async def send_message_to_participant(participant_id: str, message: str):
@@ -13,11 +11,11 @@ async def send_message_to_participant(participant_id: str, message: str):
     Body:
       { "message": "What a lovely day" }
     """
-    url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     payload = {"message": message}
     headers = {
         # TODO: sync with bcfg on managing authentication tokens
-        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
+        "Authorization": f"Bearer {settings.BCFG_API_KEY}"
     }
     try:
         async with httpx.AsyncClient() as client:
@@ -46,9 +44,9 @@ async def send_message_to_participant_group(group_id: str, message: str):
     Body:
       { "message": "What a lovely day" }
     """
-    url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     payload = {"message": message}
-    headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers)
