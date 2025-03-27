@@ -80,8 +80,13 @@ def individual_process_pipeline(run_id):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
+        # todo: need a sperate placeholder for notes
+        # todo broken handling of skipping
         if message.strip() != record.message.strip():
             record.processed = False
+            record.error_log = (
+                "Message is not the latest in chat history."  
+            )
         else:
             instructions = load_instruction_prompt(participant_id)
             response = generate_response(chat_history, instructions, message)
@@ -159,58 +164,26 @@ def individual_send_pipeline(run_id):
 
 
 @shared_task(bind=True, max_retries=3)
-def individual_pipeline_ingest_task(self, participant_id, data):
+def individual_pipeline_task(self, participant_id, data):
     try:
+        # Stage 1: Ingest the data and create a run record.
         run_id = individual_ingest_pipeline(participant_id, data)
-        individual_pipeline_moderation_task.delay(run_id)
-    except Exception as exc:
-        logger.error(f"Individual pipeline ingestion failed for {participant_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10) from exc
 
-
-@shared_task(bind=True, max_retries=3)
-def individual_pipeline_moderation_task(self, run_id):
-    try:
+        # Stage 2: Moderate the incoming message.
         individual_moderation_pipeline(run_id)
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
-        # Trigger the send if moderated otherwise process
-        if record.moderated:
-            individual_pipeline_validate_task.delay(run_id)
-        else:
-            individual_pipeline_process_task.delay(run_id)
-    except Exception as exc:
-        logger.error(f"Individual pipeline moderation failed for run_id {run_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10) from exc
 
+        # Stage 3: Process via LLM call if the message was not blocked.
+        if not record.moderated:
+            individual_process_pipeline(run_id)
 
-@shared_task(bind=True, max_retries=3)
-def individual_pipeline_process_task(self, run_id):
-    try:
-        individual_process_pipeline(run_id)
-        record = IndividualPipelineRecord.objects.get(run_id=run_id)
-        if record.processed:
-            individual_pipeline_validate_task.delay(run_id)
-    except Exception as exc:
-        logger.error(f"Individual pipeline processing failed for run_id {run_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10) from exc
-
-
-@shared_task(bind=True, max_retries=3)
-def individual_pipeline_validate_task(self, run_id):
-    try:
+        # Stage 4: Validate the outgoing response.
         individual_validate_pipeline(run_id)
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
+
+        # Stage 5: Send the response if the participant is not a test user.
         if not is_test_user(record.participant_id):
-            individual_pipeline_send_task.delay(run_id)
+            individual_send_pipeline(run_id)
     except Exception as exc:
-        logger.error(f"Individual pipeline validation failed for {run_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10) from exc
-
-
-@shared_task(bind=True, max_retries=3)
-def individual_pipeline_send_task(self, run_id):
-    try:
-        individual_send_pipeline(run_id)
-    except Exception as exc:
-        logger.error(f"Individual pipeline sending failed for run_id {run_id}: {exc}")
+        logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
