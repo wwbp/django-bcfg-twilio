@@ -10,8 +10,7 @@ testStep: &testStep
     caches:
       - pip
     script:
-      # Install required packages including PostgreSQL client
-      - apt-get update && apt-get -y install binutils libproj-dev gdal-bin default-postgresql-client
+      - apt-get update && apt-get -y install binutils libproj-dev gdal-bin postgresql-client
       - pip install --upgrade pip pipenv
       - pipenv install --dev --system
       # Grant privileges on the database
@@ -20,6 +19,7 @@ testStep: &testStep
     services:
       - postgres
       - redis
+
 
 lintStep: &lintStep
   step:
