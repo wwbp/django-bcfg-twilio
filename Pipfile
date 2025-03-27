@@ -12,11 +12,11 @@ kani = {extras = ["openai"], version = "*"}
 gunicorn = "*"
 whitenoise = "*"
 requests = "*"
-mysqlclient = "*"
 openai = "*"
 asgiref = "*"
 django-celery-results = "*"
 pytest-asyncio = "*"
+psycopg2-binary = "*"
 
 [dev-packages]
 ruff = "*"
