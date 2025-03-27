@@ -1,9 +1,9 @@
 import pytest
 import httpx
 from unittest.mock import patch, AsyncMock
+from django.conf import settings
 
 from chat.services.send import (
-    BCFG_DOMAIN,
     send_message_to_participant,
     send_message_to_participant_group,
 )
@@ -23,9 +23,9 @@ def get_async_client_patch(mock_client):
 async def test_send_message_to_participant_success():
     participant_id = "participant1"
     message = "Hello"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     # Create a fake response that simulates a successful API call.
     fake_response = AsyncMock()
@@ -47,9 +47,9 @@ async def test_send_message_to_participant_success():
 async def test_send_message_to_participant_http_status_error():
     participant_id = "participant2"
     message = "Error message"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     # Create a fake response that raises HTTPStatusError when raise_for_status is called.
     def raise_error():
@@ -74,9 +74,9 @@ async def test_send_message_to_participant_http_status_error():
 async def test_send_message_to_participant_request_error():
     participant_id = "participant3"
     message = "Request error"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     mock_client = AsyncMock()
     # Simulate that the post call raises a RequestError.
@@ -95,9 +95,9 @@ async def test_send_message_to_participant_request_error():
 async def test_send_message_to_participant_group_success():
     group_id = "group1"
     message = "Group hello"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     fake_response = AsyncMock()
     fake_response.raise_for_status = lambda: None
@@ -116,9 +116,9 @@ async def test_send_message_to_participant_group_success():
 async def test_send_message_to_participant_group_http_status_error():
     group_id = "group2"
     message = "Group error"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     def raise_error():
         raise httpx.HTTPStatusError(
@@ -141,9 +141,9 @@ async def test_send_message_to_participant_group_http_status_error():
 async def test_send_message_to_participant_group_request_error():
     group_id = "group3"
     message = "Group request error"
-    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     expected_payload = {"message": message}
-    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
     mock_client = AsyncMock()
     mock_client.post.side_effect = httpx.RequestError("Timeout error")
