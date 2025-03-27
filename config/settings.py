@@ -81,7 +81,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
 
 
-# mysql dabase connection
+# postgres dabase connection
 if DBINFO:
     DATABASES = {
         "default": {
