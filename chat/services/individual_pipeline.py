@@ -179,6 +179,6 @@ def individual_pipeline_task(self, participant_id, data):
         if not is_test_user(record.participant_id):
             individual_send_pipeline(run_id)
     except Exception as exc:
-        logger.error(f"Individual pipeline failed for participant {participant_id}: {exc}")
+        logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
 
