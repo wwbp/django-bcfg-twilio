@@ -26,7 +26,6 @@
 # ├── moderation.py
 # ├── send.py
 # ├── serializers.py
-# ├── tasks.py
 # ├── templates
 # │   └── chat
 # │       ├── prompt_confirm_delete.html
@@ -38,10 +37,14 @@
 # │       └── summary_list.html
 # ├── tests
 # │   ├── __init__.py
+# │   ├── conftest.py
+# │   ├── test_ensure_320_char_limit.py
+# │   ├── test_generate_response.py
 # │   ├── test_ingest_individual_request.py
 # │   ├── test_load_chat_history.py
-# │   └── test_moderation_integration.py
-# ├── tests.py
+# │   ├── test_load_instruction_prompt.py
+# │   ├── test_moderation_integration.py
+# │   └── test_send_message.py
 # ├── urls.py
 # └── views.py
 
@@ -51,7 +54,18 @@
 
 # File: admin.py
 from django.contrib import admin
-from .models import User, Group, ChatTranscript, GroupChatTranscript, Prompt, Control, Summary, StrategyPrompt, IndividualPipelineRecord, GroupPipelineRecord
+from .models import (
+    User,
+    Group,
+    ChatTranscript,
+    GroupChatTranscript,
+    Prompt,
+    Control,
+    Summary,
+    StrategyPrompt,
+    IndividualPipelineRecord,
+    GroupPipelineRecord,
+)
 
 admin.site.register(User)
 admin.site.register(Group)
@@ -75,7 +89,6 @@ class ChatConfig(AppConfig):
 
 
 # File: arbitrar.py
-import asyncio
 import json
 import logging
 from .models import StrategyPrompt
@@ -116,7 +129,7 @@ def evaluate_single_strategy(transcript_text: str, strategy: StrategyPrompt) -> 
     logger.info(
         f"Composite prompt for strategy {strategy.id}: {composite_prompt}")
     try:
-        response = asyncio.run(chat_completion(composite_prompt))
+        response = chat_completion(composite_prompt)
         logger.info(
             f"Response from GPT for strategy {strategy.name}: {response}")
         result = json.loads(response)
@@ -166,7 +179,7 @@ def generate_response_for_strategy(transcript_text: str, strategy: StrategyPromp
     logger.info(
         f"Response generation prompt for strategy {strategy.id}: {prompt}")
     #TODO generate response from kani to have built in moderation and 320 charac limiter
-    response = asyncio.run(chat_completion(prompt))
+    response = chat_completion(prompt)
     return response
 
 
@@ -213,30 +226,22 @@ logger = logging.getLogger(__name__)
 
 
 def log_exceptions(func):
-    if asyncio.iscoroutinefunction(func):
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            try:
-                logger.info("Entering %s", func.__name__)
-                return await func(*args, **kwargs)
-            except Exception as e:
-                logger.exception("Exception in %s: %s", func.__name__, e)
-                raise
-        return async_wrapper
-    else:
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            try:
-                logger.info("Entering %s", func.__name__)
-                return func(*args, **kwargs)
-            except Exception as e:
-                logger.exception("Exception in %s: %s", func.__name__, e)
-                raise
-        return sync_wrapper
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info("Entering %s", func.__name__)
+        try:
+            result = func(*args, **kwargs)
+        except Exception:
+            logger.exception("Exception in %s", func.__name__)
+            raise
+        else:
+            logger.info("Exiting %s", func.__name__)
+            return result
+    return wrapper
 
 
 @log_exceptions
-async def _generate_response(
+def _generate_response(
     chat_history: list[ChatMessage],
     instructions: str,
     message: str
@@ -244,23 +249,23 @@ async def _generate_response(
     engine = OpenAIEngine(api_key, model="gpt-4o-mini")
     assistant = Kani(engine, system_prompt=instructions,
                      chat_history=chat_history)
-    response = await assistant.chat_round_str(message)
+    response = asyncio.run(assistant.chat_round_str(message))
     return response
 
 
 @log_exceptions
-async def generate_response(
+def generate_response(
     history_json: list[dict],
     instructions: str,
     message: str
 ) -> ChatMessage:
     chat_history = [ChatMessage.model_validate(chat) for chat in history_json]
-    response = await _generate_response(chat_history, instructions, message)
+    response = _generate_response(chat_history, instructions, message)
     return response
 
 
 @log_exceptions
-async def chat_completion(instructions: str) -> str:
+def chat_completion(instructions: str) -> str:
     client = OpenAI()
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -273,14 +278,14 @@ async def chat_completion(instructions: str) -> str:
 
 
 @log_exceptions
-async def ensure_320_character_limit(current_text: str) -> str:
+def ensure_320_character_limit(current_text: str) -> str:
     for _ in range(2):
         if len(current_text) > 320:
             instructions = (
                 "Goal: Shorten the following text to under 320 characters. "
                 "Output format: just the shortened response text.\n\nText: " + current_text
             )
-            shortened = await chat_completion(instructions)
+            shortened = chat_completion(instructions)
             current_text = shortened
 
     if len(current_text) > 320:
@@ -305,7 +310,16 @@ async def ensure_320_character_limit(current_text: str) -> str:
 
 
 # File: constant.py
-MODERATION_MESSAGE_DEFAULT = """I'm really sorry you're feeling this way, but I'm not equipped to help. It's important to talk to someone who can support you right now. Please contact UCLA resources such as UCLA CAPS: Counseling & Psychological Services | Counseling and Psychological Services (ucla.edu) at 310-825-0768, or the National Suicide Prevention Lifeline at 1-800-273-TALK (8255) or text HOME to 741741 to connect with a trained clinician. If you're in immediate danger, please call 911 or go to the nearest emergency room. Please also note that if you wish not to continue with the study, feel free to quit anytime."""
+MODERATION_MESSAGE_DEFAULT = (
+    "I'm really sorry you're feeling this way, but I'm not equipped to help. "
+    "It's important to talk to someone who can support you right now. "
+    "Please contact UCLA resources such as UCLA CAPS: "
+    "Counseling & Psychological Services | Counseling and Psychological Services (ucla.edu) at 310-825-0768, "
+    "or the National Suicide Prevention Lifeline at 1-800-273-TALK (8255) "
+    "or text HOME to 741741 to connect with a trained clinician. If you're in immediate danger, "
+    "please call 911 or go to the nearest emergency room. "
+    "Please also note that if you wish not to continue with the study, feel free to quit anytime."
+)
 
 
 # File: crud.py
@@ -353,17 +367,9 @@ def create_new_user(user, context: dict, message: str):
 
         # Create initial transcripts:
         # 1. Assistant transcript with the initial message.
-        ChatTranscript.objects.create(
-            user=user,
-            role="assistant",
-            content=context.get("initial_message", "")
-        )
+        ChatTranscript.objects.create(user=user, role="assistant", content=context.get("initial_message", ""))
         # 2. User transcript with the provided message.
-        ChatTranscript.objects.create(
-            user=user,
-            role="user",
-            content=message
-        )
+        ChatTranscript.objects.create(user=user, role="user", content=message)
         return user
     except Exception as e:
         logger.exception("Error creating new user with ID %s: %s", user.id, e)
@@ -379,31 +385,21 @@ def update_existing_user(user, context: dict, message: str):
         # Check if week number changed
         new_week = context.get("week_number")
         if new_week is not None and new_week != user.week_number:
-            logger.info("Week number changed for user %s from %s to %s.",
-                        user.id, user.week_number, new_week)
+            logger.info("Week number changed for user %s from %s to %s.", user.id, user.week_number, new_week)
             user.week_number = new_week
             updated = True
 
         # Check if initial message changed
         new_initial_message = context.get("initial_message")
         if new_initial_message and new_initial_message != user.initial_message:
-            logger.info(
-                "Initial message changed for user %s. Updating transcript.", user.id)
+            logger.info("Initial message changed for user %s. Updating transcript.", user.id)
             user.initial_message = new_initial_message
             # Create a new assistant transcript for the updated initial message
-            ChatTranscript.objects.create(
-                user=user,
-                role="assistant",
-                content=new_initial_message
-            )
+            ChatTranscript.objects.create(user=user, role="assistant", content=new_initial_message)
             updated = True
 
         # Always create a transcript for the new user message
-        ChatTranscript.objects.create(
-            user=user,
-            role="user",
-            content=message
-        )
+        ChatTranscript.objects.create(user=user, role="user", content=message)
 
         if updated:
             user.save()
@@ -425,21 +421,15 @@ def ingest_individual_request(participant_id: str, data: dict):
     try:
         with transaction.atomic():
             # Provide a default for created_at to avoid null value issues.
-            user, created = User.objects.get_or_create(
-                id=participant_id,
-                defaults={'created_at': timezone.now()}
-            )
+            user, created = User.objects.get_or_create(id=participant_id, defaults={"created_at": timezone.now()})
             if created:
-                logger.info(
-                    "Participant ID %s not found. Creating a new record.", participant_id)
+                logger.info("Participant ID %s not found. Creating a new record.", participant_id)
                 create_new_user(user, context, message)
             else:
-                logger.info(
-                    "Participant ID %s exists. Processing update.", participant_id)
+                logger.info("Participant ID %s exists. Processing update.", participant_id)
                 update_existing_user(user, context, message)
     except Exception as e:
-        logger.exception(
-            "Error processing request for participant ID %s: %s", participant_id, e)
+        logger.exception("Error processing request for participant ID %s: %s", participant_id, e)
         raise
 
 
@@ -457,14 +447,11 @@ def validate_ingest_group_request(group_id: str, data: dict):
         group.save()
 
         # Create the initial assistant transcript entry (sender remains null)
-        GroupChatTranscript.objects.create(
-            group=group, role="assistant", content=group.initial_message
-        )
+        GroupChatTranscript.objects.create(group=group, role="assistant", content=group.initial_message)
 
         # Create and add participants to the group
         for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(
-                id=participant["id"])
+            user, user_created = User.objects.get_or_create(id=participant["id"])
             if user_created:
                 user.name = participant.get("name", "")
                 user.school_name = context.get("school_name", "")
@@ -478,9 +465,7 @@ def validate_ingest_group_request(group_id: str, data: dict):
         if sender_id:
             sender, _ = User.objects.get_or_create(id=sender_id)
 
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender
-        )
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
     else:
         logger.info(f"Group ID {group_id} exists.")
         updated = False
@@ -488,28 +473,21 @@ def validate_ingest_group_request(group_id: str, data: dict):
         # Check if week_number has changed and update if needed.
         new_week = context.get("week_number")
         if new_week is not None and new_week != group.week_number:
-            logger.info(
-                f"Week number changed for group {group_id} from {group.week_number} to {new_week}."
-            )
+            logger.info(f"Week number changed for group {group_id} from {group.week_number} to {new_week}.")
             group.week_number = new_week
             updated = True
 
         # Check if the initial message has changed and update transcript accordingly.
         new_initial_message = context.get("initial_message")
         if new_initial_message and new_initial_message != group.initial_message:
-            logger.info(
-                f"Initial message changed for group {group_id}. Updating transcript."
-            )
+            logger.info(f"Initial message changed for group {group_id}. Updating transcript.")
             group.initial_message = new_initial_message
-            GroupChatTranscript.objects.create(
-                group=group, role="assistant", content=new_initial_message
-            )
+            GroupChatTranscript.objects.create(group=group, role="assistant", content=new_initial_message)
             updated = True
 
         # Update or add new participants before saving the user message transcript.
         for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(
-                id=participant["id"])
+            user, user_created = User.objects.get_or_create(id=participant["id"])
             if user_created:
                 user.name = participant.get("name", "")
                 user.school_name = context.get("school_name", "")
@@ -522,9 +500,7 @@ def validate_ingest_group_request(group_id: str, data: dict):
         sender = None
         if sender_id:
             sender, _ = User.objects.get_or_create(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender
-        )
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
 
         if updated:
             group.save()
@@ -535,7 +511,7 @@ def sanitize_name(name: str) -> str:
     Remove any characters that are not letters, digits, underscores, or hyphens.
     If the sanitized name is empty, return a default value.
     """
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '', name)
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", name)
     return sanitized if sanitized else "default"
 
 
@@ -543,15 +519,10 @@ def load_individual_chat_history(user_id: str):
     logger.info(f"Loading chat history for participant: {user_id}")
 
     # Retrieve all transcripts in chronological order
-    transcripts = ChatTranscript.objects.filter(
-        user_id=user_id).order_by("created_at")
+    transcripts = ChatTranscript.objects.filter(user_id=user_id).order_by("created_at")
 
     # Get the most recent user transcript
-    latest_user_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role="user")
-        .order_by("-created_at")
-        .first()
-    )
+    latest_user_transcript = ChatTranscript.objects.filter(user_id=user_id, role="user").order_by("-created_at").first()
 
     # Build chat history, excluding the latest user message
     history = []
@@ -565,11 +536,13 @@ def load_individual_chat_history(user_id: str):
             sender_name = t.user.school_mascot if t.user.school_mascot else "assistant"
 
         sender_name = sanitize_name(sender_name)
-        history.append({
-            "role": t.role,
-            "content": t.content,
-            "name": sender_name,
-        })
+        history.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "name": sender_name,
+            }
+        )
 
     # Extract only the message content for the latest user message
     latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
@@ -579,37 +552,27 @@ def load_individual_chat_history(user_id: str):
 
 def load_detailed_transcript(group_id: str):
     logger.info(f"Loading detailed transcript for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(
-        group_id=group_id).order_by("created_at")
+    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
     messages = []
     for t in transcripts:
         sender_name = t.sender.name if t.sender else "assistant"  # TODO: pipe mascot name
-        messages.append({
-            "sender": sender_name,
-            "role": t.role,
-            "timestamp": str(t.created_at),
-            "content": t.content
-        })
+        messages.append({"sender": sender_name, "role": t.role, "timestamp": str(t.created_at), "content": t.content})
     return json.dumps(messages, indent=2)
 
 
 def load_chat_history_json_group(group_id: str):
     logger.info(f"Loading chat history for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(
-        group_id=group_id).order_by("created_at")
+    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
     history = [{"role": t.role, "content": t.content} for t in transcripts]
     return history
 
 
 def get_latest_assistant_response(user_id: str):
-    logger.info(
-        f"Fetching latest assistant response for participant with id: {user_id}")
+    logger.info(f"Fetching latest assistant response for participant with id: {user_id}")
 
     # Retrieve the most recent assistant response for the given user
     latest_assistant_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role="assistant")
-        .order_by("-created_at")
-        .first()
+        ChatTranscript.objects.filter(user_id=user_id, role="assistant").order_by("-created_at").first()
     )
 
     # Return the content if a transcript exists; otherwise, return None
@@ -619,8 +582,7 @@ def get_latest_assistant_response(user_id: str):
 def save_assistant_response(user_id: str, response):
     logger.info(f"Saving assistant response for participant: {user_id}")
     user = User.objects.get(id=user_id)
-    ChatTranscript.objects.create(
-        user=user, role="assistant", content=response)
+    ChatTranscript.objects.create(user=user, role="assistant", content=response)
     logger.info("Assistant Response saved successfully.")
 
 
@@ -630,16 +592,15 @@ def save_chat_round_group(group_id: str, sender_id: str, message, response):
     group = Group.objects.get(id=group_id)
     if message:
         sender = User.objects.get(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role="user", content=message, sender=sender)
+        GroupChatTranscript.objects.create(group=group, role="user", content=message, sender=sender)
     if response:
-        GroupChatTranscript.objects.create(
-            group=group, role="assistant", content=response)
+        GroupChatTranscript.objects.create(group=group, role="assistant", content=response)
     logger.info("Chat round saved successfully.")
 
 
 INSTRUCTION_PROMPT_TEMPLATE = (
-    "Using the below system prompt as your guide, engage with the user in a manner that reflects your assigned persona and follows the activity instructions"
+    "Using the below system prompt as your guide, engage with the user in a "
+    "manner that reflects your assigned persona and follows the activity instructions"
     "System Prompt: {system}\n\n"
     "Assigned Persona: {persona}\n\n"
     "Assistant Name: {assistant_name}\n\n"
@@ -653,14 +614,13 @@ def load_instruction_prompt(user_id: str):
         week = user.week_number
         assistant_name = user.school_mascot if user.school_mascot else "Assistant"
     except User.DoesNotExist:
-        logger.warning(
-            f"User with id {user_id} not found. Using default prompt.")
+        logger.warning(f"User with id {user_id} not found. Using default prompt.")
         week = None
         assistant_name = "Assistant"
 
     # Load the most recent controls record
     try:
-        controls = Control.objects.latest('created_at')
+        controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
         controls = Control.objects.create()
 
@@ -684,7 +644,7 @@ def load_instruction_prompt(user_id: str):
 
 def get_moderation_message():
     try:
-        controls = Control.objects.latest('created_at')
+        controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
         controls = Control.objects.create()
     if len(controls.moderation) > 0:
@@ -718,23 +678,13 @@ def group_ingest_pipeline(group_id: str, data: dict):
 
         # Create a new pipeline record for the group.
         record = GroupPipelineRecord.objects.create(
-            group_id=group_id,
-            ingested=True,
-            processed=False,
-            sent=False,
-            failed=False,
-            error_log=''
+            group_id=group_id, ingested=True, processed=False, sent=False, failed=False, error_log=""
         )
-        logger.info(
-            f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
+        logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
         return record.run_id
     except Exception as e:
         logger.error(f"Group ingest pipeline failed for group {group_id}: {e}")
-        record = GroupPipelineRecord.objects.create(
-            group_id=group_id,
-            failed=True,
-            error_log=str(e)
-        )
+        record = GroupPipelineRecord.objects.create(group_id=group_id, failed=True, error_log=str(e))
         record.save()
         raise
 
@@ -751,14 +701,13 @@ def group_process_pipeline(run_id):
         strategy_responses = process_arbitrar_layer(group_id)
         responses_to_send = []
         # Save each generated strategy response into the group transcript.
-        for strategy_id, response in strategy_responses.items():
+        for _, response in strategy_responses.items():
             save_chat_round_group(group_id, None, "", response)
             responses_to_send.append(response)
 
         record.processed = True
         record.save()
-        logger.info(
-            f"Group process pipeline complete for group {group_id}, run_id {run_id}")
+        logger.info(f"Group process pipeline complete for group {group_id}, run_id {run_id}")
         return responses_to_send
     except Exception as e:
         logger.error(f"Group process pipeline failed for run_id {run_id}: {e}")
@@ -782,8 +731,7 @@ def group_send_pipeline(run_id, responses):
 
         record.sent = True
         record.save()
-        logger.info(
-            f"Group send pipeline complete for group {group_id}, run_id {run_id}")
+        logger.info(f"Group send pipeline complete for group {group_id}, run_id {run_id}")
     except Exception as e:
         logger.error(f"Group send pipeline failed for run_id {run_id}: {e}")
         record = GroupPipelineRecord.objects.get(run_id=run_id)
@@ -791,6 +739,7 @@ def group_send_pipeline(run_id, responses):
         record.error_log = str(e)
         record.save()
         raise
+
 
 # =============================================================================
 # Celery Tasks: Tie the Stages Together
@@ -805,9 +754,8 @@ def group_pipeline_ingest_task(self, group_id, data):
         # Trigger processing stage.
         group_pipeline_process_task.delay(run_id)
     except Exception as exc:
-        logger.error(
-            f"Group pipeline ingestion failed for group {group_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Group pipeline ingestion failed for group {group_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -819,9 +767,8 @@ def group_pipeline_process_task(self, run_id):
         if not is_test_group(record.group_id):
             group_pipeline_send_task.delay(run_id, responses)
     except Exception as exc:
-        logger.error(
-            f"Group pipeline processing failed for run_id {run_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Group pipeline processing failed for run_id {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -829,18 +776,23 @@ def group_pipeline_send_task(self, run_id, responses):
     try:
         group_send_pipeline(run_id, responses)
     except Exception as exc:
-        logger.error(
-            f"Group pipeline sending failed for run_id {run_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Group pipeline sending failed for run_id {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 # File: individual_pipeline.py
-from asgiref.sync import async_to_sync
 import asyncio
 import logging
 from celery import shared_task
 from .moderation import moderate_message
-from .crud import get_moderation_message, is_test_user, load_individual_chat_history, load_instruction_prompt, ingest_individual_request, save_assistant_response
+from .crud import (
+    get_moderation_message,
+    is_test_user,
+    load_individual_chat_history,
+    load_instruction_prompt,
+    ingest_individual_request,
+    save_assistant_response,
+)
 from .completion import ensure_320_character_limit, generate_response
 from .send import send_message_to_participant
 from .models import IndividualPipelineRecord
@@ -862,25 +814,14 @@ def individual_ingest_pipeline(participant_id: str, data: dict):
 
         # Create a new record with a unique run_id
         record = IndividualPipelineRecord.objects.create(
-            participant_id=participant_id,
-            ingested=True,
-            message=data.get('message', ''),
-            failed=False,
-            error_log=''
+            participant_id=participant_id, ingested=True, message=data.get("message", ""), failed=False, error_log=""
         )
-        logger.info(
-            f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}"
-        )
+        logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
         return record.run_id
     except Exception as e:
-        logger.error(
-            f"Individual ingest pipeline failed for {participant_id}: {e}")
+        logger.error(f"Individual ingest pipeline failed for {participant_id}: {e}")
         # Create a record with the error flag if needed
-        record = IndividualPipelineRecord.objects.create(
-            participant_id=participant_id,
-            failed=True,
-            error_log=str(e)
-        )
+        record = IndividualPipelineRecord.objects.create(participant_id=participant_id, failed=True, error_log=str(e))
         record.save()
         raise
 
@@ -900,13 +841,9 @@ def individual_moderation_pipeline(run_id):
         else:
             record.moderated = False
         record.save()
-        logger.info(
-            f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {run_id}"
-        )
+        logger.info(f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {run_id}")
     except Exception as e:
-        logger.error(
-            f"Individual moderation pipeline failed for run_id {run_id}: {e}"
-        )
+        logger.error(f"Individual moderation pipeline failed for run_id {run_id}: {e}")
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
         record.failed = True
         record.error_log = str(e)
@@ -930,21 +867,16 @@ def individual_process_pipeline(run_id):
             record.processed = False
         else:
             instructions = load_instruction_prompt(participant_id)
-            response = asyncio.run(generate_response(
-                chat_history, instructions, message))
+            response = generate_response(chat_history, instructions, message)
 
             # Update the pipeline record for the processing stage
             record.instruction_prompt = instructions
             record.response = response
             record.processed = True
         record.save()
-        logger.info(
-            f"Individual process pipeline complete for participant {participant_id}, run_id {run_id}"
-        )
+        logger.info(f"Individual process pipeline complete for participant {participant_id}, run_id {run_id}")
     except Exception as e:
-        logger.error(
-            f"Individual process pipeline failed for run_id {run_id}: {e}"
-        )
+        logger.error(f"Individual process pipeline failed for run_id {run_id}: {e}")
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
         record.failed = True
         record.error_log = str(e)
@@ -963,21 +895,15 @@ def individual_validate_pipeline(run_id):
             record.shortened = False
             record.validated_message = response
         else:
-            processed_response = async_to_sync(
-                ensure_320_character_limit)(response)
+            processed_response = ensure_320_character_limit(response)
             record.shortened = True
             record.validated_message = processed_response
         record.save()
         # Save the generated response to the database
-        save_assistant_response(record.participant_id,
-                                record.validated_message)
-        logger.info(
-            f"Individual validate pipeline complete for participant {record.participant_id}, run_id {run_id}"
-        )
+        save_assistant_response(record.participant_id, record.validated_message)
+        logger.info(f"Individual validate pipeline complete for participant {record.participant_id}, run_id {run_id}")
     except Exception as e:
-        logger.error(
-            f"Individual validate pipeline failed for run_id {run_id}: {e}"
-        )
+        logger.error(f"Individual validate pipeline failed for run_id {run_id}: {e}")
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
         record.failed = True
         record.error_log = str(e)
@@ -996,23 +922,19 @@ def individual_send_pipeline(run_id):
         response = record.validated_message
 
         # Send the message via the external endpoint
-        asyncio.run(
-            send_message_to_participant(participant_id, response))
+        asyncio.run(send_message_to_participant(participant_id, response))
         # Update the pipeline record for the sending stage
         record.sent = True
         record.save()
-        logger.info(
-            f"Individual send pipeline complete for participant {participant_id}, run_id {run_id}"
-        )
+        logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {run_id}")
     except Exception as e:
-        logger.error(
-            f"Individual send pipeline failed for run_id {run_id}: {e}"
-        )
+        logger.error(f"Individual send pipeline failed for run_id {run_id}: {e}")
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
         record.failed = True
         record.error_log = str(e)
         record.save()
         raise
+
 
 # =============================================================================
 # Celery Tasks: Tie the Stages Together
@@ -1025,10 +947,8 @@ def individual_pipeline_ingest_task(self, participant_id, data):
         run_id = individual_ingest_pipeline(participant_id, data)
         individual_pipeline_moderation_task.delay(run_id)
     except Exception as exc:
-        logger.error(
-            f"Individual pipeline ingestion failed for {participant_id}: {exc}"
-        )
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Individual pipeline ingestion failed for {participant_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -1042,10 +962,8 @@ def individual_pipeline_moderation_task(self, run_id):
         else:
             individual_pipeline_process_task.delay(run_id)
     except Exception as exc:
-        logger.error(
-            f"Individual pipeline moderation failed for run_id {run_id}: {exc}"
-        )
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Individual pipeline moderation failed for run_id {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -1056,10 +974,8 @@ def individual_pipeline_process_task(self, run_id):
         if record.processed:
             individual_pipeline_validate_task.delay(run_id)
     except Exception as exc:
-        logger.error(
-            f"Individual pipeline processing failed for run_id {run_id}: {exc}"
-        )
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Individual pipeline processing failed for run_id {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -1070,10 +986,8 @@ def individual_pipeline_validate_task(self, run_id):
         if not is_test_user(record.participant_id):
             individual_pipeline_send_task.delay(run_id)
     except Exception as exc:
-        logger.error(
-            f"Individual pipeline validation failed for {run_id}: {exc}"
-        )
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Individual pipeline validation failed for {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 @shared_task(bind=True, max_retries=3)
@@ -1081,10 +995,8 @@ def individual_pipeline_send_task(self, run_id):
     try:
         individual_send_pipeline(run_id)
     except Exception as exc:
-        logger.error(
-            f"Individual pipeline sending failed for run_id {run_id}: {exc}"
-        )
-        raise self.retry(exc=exc, countdown=10)
+        logger.error(f"Individual pipeline sending failed for run_id {run_id}: {exc}")
+        raise self.retry(exc=exc, countdown=10) from exc
 
 
 # File: migrations/0001_initial.py
@@ -1609,7 +1521,16 @@ class GroupPipelineRecord(models.Model):
 # File: moderation.py
 from openai import OpenAI
 from openai._compat import model_dump
-client = OpenAI()
+
+_client = None
+
+
+def get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
+
 
 MODERATION_VALUES_FOR_BLOCKED = {
     "harassment": 0.5,
@@ -1627,11 +1548,8 @@ MODERATION_VALUES_FOR_BLOCKED = {
 
 
 def moderate_message(message: str) -> str:
-    moderation_response = client.moderations.create(
-        input=message, model="omni-moderation-latest"
-    )
+    moderation_response = get_client().moderations.create(input=message, model="omni-moderation-latest")
     category_scores = moderation_response.results[0].category_scores or {}
-
     category_score_items = model_dump(category_scores)
 
     blocked_str = ""
@@ -1663,7 +1581,8 @@ async def send_message_to_participant(participant_id: str, message: str):
     url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     payload = {"message": message}
     headers = {
-        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd" # TODO: sync with bcfg on managing authentication tokens
+        # TODO: sync with bcfg on managing authentication tokens
+        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
     }
     try:
         async with httpx.AsyncClient() as client:
@@ -1673,12 +1592,13 @@ async def send_message_to_participant(participant_id: str, message: str):
     except httpx.HTTPStatusError as exc:
         # Log the HTTP error details and return a default value
         print(
-            f"HTTP error sending message to participant {participant_id}: {exc.response.status_code} - {exc.response.text}")
+            f"HTTP error sending message to participant {participant_id}: "
+            f"{exc.response.status_code} - {exc.response.text}"
+        )
         return {"error": "HTTPStatusError", "details": str(exc)}
     except httpx.RequestError as exc:
         # Log connection related errors
-        print(
-            f"Request error sending message to participant {participant_id}: {exc}")
+        print(f"Request error sending message to participant {participant_id}: {exc}")
         return {"error": "RequestError", "details": str(exc)}
 
 
@@ -1693,9 +1613,7 @@ async def send_message_to_participant_group(group_id: str, message: str):
     """
     url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     payload = {"message": message}
-    headers = {
-        "Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"
-    }
+    headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers)
@@ -1704,12 +1622,13 @@ async def send_message_to_participant_group(group_id: str, message: str):
     except httpx.HTTPStatusError as exc:
         # Log the HTTP error details and return a default value
         print(
-            f"HTTP error sending message to participant group {group_id}: {exc.response.status_code} - {exc.response.text}")
+            f"HTTP error sending message to participant group {group_id}: "
+            f"{exc.response.status_code} - {exc.response.text}"
+        )
         return {"error": "HTTPStatusError", "details": str(exc)}
     except httpx.RequestError as exc:
         # Log connection related errors
-        print(
-            f"Request error sending message to participant group {group_id}: {exc}")
+        print(f"Request error sending message to participant group {group_id}: {exc}")
         return {"error": "RequestError", "details": str(exc)}
 
 
@@ -1747,27 +1666,6 @@ class GroupIncomingMessageSerializer(serializers.Serializer):
     context = GroupContextSerializer()
     sender_id = serializers.CharField()
     message = serializers.CharField()
-
-
-# File: tasks.py
-from celery import shared_task
-from config.celery import app
-import logging
-from celery import shared_task
-
-
-logger = logging.getLogger(__name__)
-
-
-@shared_task
-def add(x, y):
-    return x + y
-
-
-@app.task
-def sample_task():
-    print("Celery beat: Running sample task!")
-    logger.info("Celery beat: Running sample task!")
 
 
 # File: templates/chat/prompt_confirm_delete.html
@@ -1956,363 +1854,686 @@ def sample_task():
 </html>
 
 
-# File: tests.py
-from django.test import TestCase
-
-# Create your tests here.
-
-
 # File: tests/__init__.py
 
 
+# File: tests/conftest.py
+import sys
+import pytest
+import factory
+from pytest_factoryboy import register
+
+from chat.models import User
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config: pytest.Config):
+    if "xdist" not in sys.modules:
+        return
+    if config.option.file_or_dir and len(config.option.file_or_dir) == 1 and "::" in config.option.file_or_dir[0]:
+        # if just running one test then disable xdist as generally this will be faster
+        config.option.dist = "no"
+        config.option.numprocesses = 0
+
+
+@pytest.fixture(autouse=True)
+def enable_db_access(db):
+    pass
+
+
+class UserFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = User
+
+    name = factory.Faker("first_name")
+    school_mascot = factory.Faker("word")
+
+
+# register factories as fixtures
+register(UserFactory)
+
+
+# File: tests/test_ensure_320_char_limit.py
+from unittest.mock import patch
+
+# Import the function under test.
+# Adjust the import path if your module is different.
+from chat.completion import ensure_320_character_limit
+
+
+# Case 1: When the input text is already under 320 characters,
+# no call to chat_completion should be made and the text is returned unchanged.
+def test_text_under_limit():
+    short_text = "Short text"
+    with patch("chat.completion.chat_completion") as mock_chat_completion:
+        result = ensure_320_character_limit(short_text)
+        assert result == short_text
+        mock_chat_completion.assert_not_called()
+
+
+# Case 2: When input is over 320 characters and chat_completion successfully shortens it
+# (i.e. the shortened text returned is under 320 characters).
+def test_successful_shortening():
+    long_text = "A" * 400
+    shortened_text = "B" * 300
+    # On the first iteration, chat_completion returns a shortened text.
+    with patch("chat.completion.chat_completion", return_value=shortened_text) as mock_chat_completion:
+        result = ensure_320_character_limit(long_text)
+        # After the first call, current_text becomes shortened_text (<320), so no further call.
+        assert result == shortened_text
+        mock_chat_completion.assert_called_once()
+
+
+# Case 3: When input is over 320 and chat_completion does not shorten the text,
+# and the text has no periods.
+# After two iterations, the splitting logic kicks in and returns text[:320].
+def test_unsuccessful_shortening_no_periods():
+    long_text = "C" * 400
+    # chat_completion returns the same text (no shortening).
+    with patch("chat.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+        result = ensure_320_character_limit(long_text)
+        # With no periods present, the splitting logic falls back to slicing the first 320 characters.
+        assert result == long_text[:320]
+        # Expect chat_completion to be called twice (once per iteration).
+        assert mock_chat_completion.call_count == 2
+
+
+# Case 4: When input is over 320, chat_completion is unsuccessful,
+# but the text contains multiple sentences.
+# The splitting logic should pop sentences until the joined text is under 320.
+def test_unsuccessful_shortening_with_sentences():
+    # Create three sentences; each sentence is 151 characters (150 letters + a period).
+    sentence1 = "A" * 150 + "."
+    sentence2 = "B" * 150 + "."
+    sentence3 = "C" * 150 + "."
+    # Combine sentences with spaces. Total length is >320.
+    long_text = f"{sentence1} {sentence2} {sentence3}"
+    # Simulate chat_completion being unsuccessful by returning the same text.
+    with patch("chat.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+        result = ensure_320_character_limit(long_text)
+        # re.split will split long_text into three sentences.
+        # The while loop will pop the last sentence, leaving sentence1 and sentence2.
+        expected = f"{sentence1} {sentence2}"
+        assert result == expected
+        assert mock_chat_completion.call_count == 2
+
+
+# Case 5: When input is over 320 and has no valid sentences after splitting
+# (e.g. a text consisting solely of spaces),
+# the function should return the first 320 characters.
+def test_unsuccessful_shortening_empty_sentences():
+    # 330 spaces: no periods, and stripping produces an empty sentence list.
+    long_text = " " * 330
+    with patch("chat.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+        result = ensure_320_character_limit(long_text)
+        # Since splitting yields no valid sentences, fallback to slicing.
+        assert result == long_text[:320]
+        assert mock_chat_completion.call_count == 2
+
+
+# File: tests/test_generate_response.py
+import pytest
+from unittest.mock import patch
+
+from chat.completion import _generate_response, generate_response
+
+
+# Parameterized test for _generate_response
+@pytest.mark.parametrize(
+    "chat_history, instructions, message, expected_response",
+    [
+        ([], "Test instructions", "Test message", "mocked response"),
+        ([{"role": "user", "content": "Hello"}], "Other instructions", "Another message", "mocked response"),
+    ],
+)
+@patch("chat.completion.Kani")
+@patch("chat.completion.OpenAIEngine")
+def test__generate_response_param(mock_openai, mock_kani, chat_history, instructions, message, expected_response):
+    # Define a dummy async function to simulate assistant.chat_round_str.
+    async def dummy_chat_round_str(msg):
+        return expected_response
+
+    # Configure the mocked Kani instance.
+    mock_kani.return_value.chat_round_str.side_effect = dummy_chat_round_str
+
+    result = _generate_response(chat_history, instructions, message)
+    assert result == expected_response
+    mock_kani.return_value.chat_round_str.assert_called_once_with(message)
+
+
+# Parameterized test for generate_response
+@pytest.mark.parametrize(
+    "history_json, expected_call_count, expected_result",
+    [
+        ([{"content": "Hello"}, {"content": "World"}], 2, "mocked response"),
+        ([{"content": "Only one"}], 1, "mocked response"),
+        ([], 0, "mocked response"),
+    ],
+)
+@patch("chat.completion._generate_response", return_value="mocked response")
+@patch("chat.completion.ChatMessage")
+def test_generate_response_param(
+    mock_chatmessage, mock_generate_response, history_json, expected_call_count, expected_result
+):
+    # Dummy model_validate simply returns the 'content' value.
+    def dummy_model_validate(data):
+        return data["content"]
+
+    mock_chatmessage.model_validate.side_effect = dummy_model_validate
+
+    result = generate_response(history_json, "Test instructions", "Test message")
+    # Verify model_validate was called once for each dict in history_json.
+    assert mock_chatmessage.model_validate.call_count == expected_call_count
+    assert result == expected_result
+
+
 # File: tests/test_ingest_individual_request.py
-from django.test import TestCase
+import pytest
 from chat.models import User, ChatTranscript
 from chat.crud import ingest_individual_request
 
 
-class IngestIndividualRequestTests(TestCase):
+@pytest.fixture
+def base_context():
+    return {
+        "school_name": "Test High",
+        "school_mascot": "Tigers",
+        "name": "Alice",
+        "initial_message": "Hello, world!",
+        "week_number": 1,
+    }
+
+
+def test_new_user_creation(base_context):
     """
-    Tests for the ingest_individual_request function which handles the processing
-    of incoming data for a participant. This suite verifies both the creation of a
-    new user (and associated transcripts) as well as updates to existing users.
+    When a user is not found, a new record should be created using context data,
+    and two ChatTranscript records should be generated.
     """
+    participant_id = "new_user_1"
+    input_data = {
+        "context": base_context,
+        "message": "I would like to enroll.",
+    }
 
-    def test_new_user_creation(self):
-        """
-        When a user is not found, a new record should be created using context data,
-        and two ChatTranscript records should be generated (one for assistant, one for user).
-        """
-        participant_id = "new_user_1"
-        input_data = {
-            "context": {
-                "school_name": "Test High",
-                "school_mascot": "Tigers",
-                "name": "Alice",
-                "initial_message": "Hello, world!",
-                "week_number": 1,
-            },
-            "message": "I would like to enroll.",
-        }
-        # Call the function under test
-        ingest_individual_request(participant_id, input_data)
+    ingest_individual_request(participant_id, input_data)
 
-        # Assert that the user was created with correct attributes
-        user = User.objects.get(id=participant_id)
-        self.assertEqual(user.school_name, "Test High")
-        self.assertEqual(user.school_mascot, "Tigers")
-        self.assertEqual(user.name, "Alice")
-        self.assertEqual(user.initial_message, "Hello, world!")
-        self.assertEqual(user.week_number, 1)
+    # Assert that the user was created with correct attributes
+    user = User.objects.get(id=participant_id)
+    assert user.school_name == "Test High"
+    assert user.school_mascot == "Tigers"
+    assert user.name == "Alice"
+    assert user.initial_message == "Hello, world!"
+    assert user.week_number == 1
 
-        # Assert that two transcripts were created: one assistant and one user
-        transcripts = ChatTranscript.objects.filter(user=user).order_by('id')
-        self.assertEqual(transcripts.count(), 2)
-        self.assertEqual(transcripts[0].role, "assistant")
-        self.assertEqual(transcripts[0].content, "Hello, world!")
-        self.assertEqual(transcripts[1].role, "user")
-        self.assertEqual(transcripts[1].content, "I would like to enroll.")
+    # Assert that two transcripts were created
+    transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
+    assert transcripts.count() == 2
+    assert transcripts[0].role == "assistant"
+    assert transcripts[0].content == "Hello, world!"
+    assert transcripts[1].role == "user"
+    assert transcripts[1].content == "I would like to enroll."
 
-    def test_existing_user_update_week_number(self):
-        """
-        When an existing user sends data with a changed week_number,
-        the user record should update and a new user transcript entry should be added.
-        """
-        participant_id = "existing_week_update"
-        # Create initial user record
-        user = User.objects.create(
-            id=participant_id,
-            school_name="Old School",
-            school_mascot="Lions",
-            name="Bob",
-            initial_message="Initial Hello",
-            week_number=1,
-        )
-        # Create an initial transcript to simulate previous ingestion
-        ChatTranscript.objects.create(
-            user=user, role="assistant", content="Initial Hello")
 
-        # Define input with updated week number
-        input_data = {
-            "context": {
-                "week_number": 2,  # changed week
-                # No change in initial_message
-            },
-            "message": "User message for week 2",
-        }
-        ingest_individual_request(participant_id, input_data)
+@pytest.fixture
+def existing_user():
+    return User.objects.create(
+        id="existing_week_update",
+        school_name="Old School",
+        school_mascot="Lions",
+        name="Bob",
+        initial_message="Initial Hello",
+        week_number=1,
+    )
 
-        # Refresh user from db and verify week_number updated
-        user.refresh_from_db()
-        self.assertEqual(user.week_number, 2)
-        # initial_message should remain unchanged
-        self.assertEqual(user.initial_message, "Initial Hello")
 
-        # Check that a new transcript for the user role has been added.
-        transcripts = ChatTranscript.objects.filter(user=user).order_by('id')
-        # Expecting: one initial assistant transcript + one new user transcript = 2 total
-        self.assertEqual(transcripts.count(), 2)
-        self.assertEqual(transcripts.last().role, "user")
-        self.assertEqual(transcripts.last().content, "User message for week 2")
+@pytest.fixture
+def existing_transcript(existing_user):
+    return ChatTranscript.objects.create(user=existing_user, role="assistant", content="Initial Hello")
 
-    def test_existing_user_update_initial_message(self):
-        """
-        When an existing user sends a new initial message in the context,
-        the user record should update the initial_message, and a new assistant transcript
-        should be created reflecting the updated message.
-        """
-        participant_id = "existing_initial_update"
-        # Create initial user record
-        user = User.objects.create(
-            id=participant_id,
-            school_name="Test School",
-            school_mascot="Eagles",
-            name="Carol",
-            initial_message="Old greeting",
-            week_number=1,
-        )
-        # Create an initial transcript for the existing initial message
-        ChatTranscript.objects.create(
-            user=user, role="assistant", content="Old greeting")
 
-        # Define input with an updated initial message
-        input_data = {
-            "context": {
-                "initial_message": "New greeting",  # new initial message
-                # week_number remains the same
-            },
-            "message": "Follow up message",
-        }
-        ingest_individual_request(participant_id, input_data)
+def test_existing_user_update_week_number(existing_user, existing_transcript):
+    """
+    When an existing user sends data with a changed week_number,
+    the user record should update and a new transcript entry should be added.
+    """
+    input_data = {
+        "context": {
+            "week_number": 2,
+        },
+        "message": "User message for week 2",
+    }
 
-        # Refresh user from db and verify initial_message updated
-        user.refresh_from_db()
-        self.assertEqual(user.initial_message, "New greeting")
+    ingest_individual_request(existing_user.id, input_data)
 
-        # Verify that two new transcripts have been created: one assistant (for the new initial message)
-        # and one user (for the new message). Total count should be previous count + 2.
-        transcripts = ChatTranscript.objects.filter(user=user).order_by('id')
-        # Initially one transcript existed, then two more are added = total of 3.
-        self.assertEqual(transcripts.count(), 3)
-        # The newly added assistant transcript is the second record
-        self.assertEqual(transcripts[1].role, "assistant")
-        self.assertEqual(transcripts[1].content, "New greeting")
-        # The last transcript is for the user
-        self.assertEqual(transcripts.last().role, "user")
-        self.assertEqual(transcripts.last().content, "Follow up message")
+    existing_user.refresh_from_db()
+    assert existing_user.week_number == 2
+    assert existing_user.initial_message == "Initial Hello"
 
-    def test_existing_user_no_update(self):
-        """
-        When an existing user sends data with context values identical to what is stored,
-        only a new user transcript entry should be created without any user field updates.
-        """
-        participant_id = "existing_no_update"
-        # Create initial user record with specific values
-        user = User.objects.create(
-            id=participant_id,
-            school_name="Same School",
-            school_mascot="Bears",
-            name="Dave",
-            initial_message="Static message",
-            week_number=1,
-        )
-        # Create an initial transcript
-        ChatTranscript.objects.create(
-            user=user, role="assistant", content="Static message")
+    transcripts = ChatTranscript.objects.filter(user=existing_user).order_by("id")
+    assert transcripts.count() == 2
+    assert transcripts.last().role == "user"
+    assert transcripts.last().content == "User message for week 2"
 
-        # Define input that does not change week_number or initial_message
-        input_data = {
-            "context": {
-                "week_number": 1,  # same as before
-                "initial_message": "Static message",  # same as before
-            },
-            "message": "Just another message",
-        }
-        ingest_individual_request(participant_id, input_data)
 
-        # Refresh user from db; no fields should be updated.
-        user.refresh_from_db()
-        self.assertEqual(user.week_number, 1)
-        self.assertEqual(user.initial_message, "Static message")
+def test_existing_user_update_initial_message(existing_user, existing_transcript):
+    """
+    When an existing user sends a new initial message in the context,
+    the user record should update and create new transcripts.
+    """
+    input_data = {
+        "context": {
+            "initial_message": "New greeting",
+        },
+        "message": "Follow up message",
+    }
 
-        # Check that a new transcript for the user role has been added.
-        transcripts = ChatTranscript.objects.filter(user=user).order_by('id')
-        # Initially one transcript exists, and now one more transcript for the user is added.
-        self.assertEqual(transcripts.count(), 2)
-        self.assertEqual(transcripts.last().role, "user")
-        self.assertEqual(transcripts.last().content, "Just another message")
+    ingest_individual_request(existing_user.id, input_data)
+
+    existing_user.refresh_from_db()
+    assert existing_user.initial_message == "New greeting"
+
+    transcripts = ChatTranscript.objects.filter(user=existing_user).order_by("id")
+    assert transcripts.count() == 3
+    assert transcripts[1].role == "assistant"
+    assert transcripts[1].content == "New greeting"
+    assert transcripts.last().role == "user"
+    assert transcripts.last().content == "Follow up message"
+
+
+def test_existing_user_no_update(existing_user, existing_transcript):
+    """
+    When an existing user sends unchanged context data,
+    only a new transcript entry should be created.
+    """
+    input_data = {
+        "context": {
+            "week_number": 1,
+            "initial_message": "Initial Hello",
+        },
+        "message": "Just another message",
+    }
+
+    ingest_individual_request(existing_user.id, input_data)
+
+    existing_user.refresh_from_db()
+    assert existing_user.week_number == 1
+    assert existing_user.initial_message == "Initial Hello"
+
+    transcripts = ChatTranscript.objects.filter(user=existing_user).order_by("id")
+    assert transcripts.count() == 2
+    assert transcripts.last().role == "user"
+    assert transcripts.last().content == "Just another message"
 
 
 # File: tests/test_load_chat_history.py
-import uuid
-from django.test import TestCase
 from django.utils import timezone
-from chat.models import ChatTranscript, User
+from chat.models import ChatTranscript
 from chat.crud import load_individual_chat_history
 
 
-class LoadChatHistoryTestCase(TestCase):
-    def setUp(self):
-        # Create a default user for tests with an explicit unique ID.
-        self.user = User.objects.create(
-            id=str(uuid.uuid4()),
-            name="Alice",
-            school_mascot="Lion"
-        )
-        # Create another user for testing assistant without a mascot.
-        self.user_no_mascot = User.objects.create(
-            id=str(uuid.uuid4()),
-            name="Charlie",
-            school_mascot=""
-        )
+def test_no_transcripts(user_factory):
+    user = user_factory()
+    history, latest_message = load_individual_chat_history(user.id)
+    assert history == []
+    assert latest_message == ""
 
-    def test_no_transcripts(self):
-        history, latest_message = load_individual_chat_history(self.user.id)
-        self.assertEqual(history, [])
-        self.assertEqual(latest_message, "")
 
-    def test_single_user_transcript(self):
-        now = timezone.now()
-        ChatTranscript.objects.create(
-            user_id=self.user.id,
-            user=self.user,
-            role="user",
-            content="Hello",
-            created_at=now
-        )
-        history, latest_message = load_individual_chat_history(self.user.id)
-        self.assertEqual(history, [])
-        self.assertEqual(latest_message, "Hello")
+def test_single_user_transcript(user_factory):
+    user = user_factory()
+    now = timezone.now()
+    ChatTranscript.objects.create(user=user, role="user", content="Hello", created_at=now)
+    history, latest_message = load_individual_chat_history(user.id)
+    assert history == []
+    assert latest_message == "Hello"
 
-    def test_multiple_transcripts(self):
-        now = timezone.now()
-        # Create an earlier user transcript.
-        ChatTranscript.objects.create(
-            user_id=self.user.id,
-            user=self.user,
-            role="user",
-            content="Hello",
-            created_at=now
-        )
-        # Create an assistant transcript.
-        ChatTranscript.objects.create(
-            user_id=self.user.id,
-            user=self.user,
-            role="assistant",
-            content="Hi, how can I help?",
-            created_at=now + timezone.timedelta(seconds=10)
-        )
-        # Create a later user transcript (latest user message).
-        ChatTranscript.objects.create(
-            user_id=self.user.id,
-            user=self.user,
-            role="user",
-            content="I need assistance",
-            created_at=now + timezone.timedelta(seconds=20)
-        )
 
-        history, latest_message = load_individual_chat_history(self.user.id)
-        expected_history = [
-            {
-                "role": "user",
-                "content": "Hello",
-                "name": self.user.name,
-            },
-            {
-                "role": "assistant",
-                "content": "Hi, how can I help?",
-                "name": self.user.school_mascot,
-            },
-        ]
-        self.assertEqual(history, expected_history)
-        self.assertEqual(latest_message, "I need assistance")
+def test_multiple_transcripts(user_factory):
+    user = user_factory()
+    now = timezone.now()
+    ChatTranscript.objects.create(user=user, role="user", content="Hello", created_at=now)
+    ChatTranscript.objects.create(
+        user=user,
+        role="assistant",
+        content="Hi, how can I help?",
+        created_at=now + timezone.timedelta(seconds=10),
+    )
+    ChatTranscript.objects.create(
+        user=user, role="user", content="I need assistance", created_at=now + timezone.timedelta(seconds=20)
+    )
 
-    def test_assistant_without_mascot(self):
-        now = timezone.now()
-        ChatTranscript.objects.create(
-            user_id=self.user_no_mascot.id,
-            user=self.user_no_mascot,
-            role="assistant",
-            content="Welcome",
-            created_at=now
-        )
-        ChatTranscript.objects.create(
-            user_id=self.user_no_mascot.id,
-            user=self.user_no_mascot,
-            role="user",
-            content="Thank you",
-            created_at=now + timezone.timedelta(seconds=5)
-        )
-        history, latest_message = load_individual_chat_history(
-            self.user_no_mascot.id)
-        expected_history = [
-            {
-                "role": "assistant",
-                "content": "Welcome",
-                "name": "assistant",  # Fallback when school_mascot is empty.
-            },
-        ]
-        self.assertEqual(history, expected_history)
-        self.assertEqual(latest_message, "Thank you")
+    history, latest_message = load_individual_chat_history(user.id)
+    expected_history = [
+        {
+            "role": "user",
+            "content": "Hello",
+            "name": user.name,
+        },
+        {
+            "role": "assistant",
+            "content": "Hi, how can I help?",
+            "name": user.school_mascot,
+        },
+    ]
+    assert history == expected_history
+    assert latest_message == "I need assistance"
+
+
+def test_assistant_without_mascot(user_factory):
+    user_no_mascot = user_factory(school_mascot="")
+    now = timezone.now()
+    ChatTranscript.objects.create(user=user_no_mascot, role="assistant", content="Welcome", created_at=now)
+    ChatTranscript.objects.create(
+        user=user_no_mascot, role="user", content="Thank you", created_at=now + timezone.timedelta(seconds=5)
+    )
+
+    history, latest_message = load_individual_chat_history(user_no_mascot.id)
+    expected_history = [
+        {
+            "role": "assistant",
+            "content": "Welcome",
+            "name": "assistant",  # Fallback when school_mascot is empty
+        },
+    ]
+    assert history == expected_history
+    assert latest_message == "Thank you"
+
+
+# File: tests/test_load_instruction_prompt.py
+import pytest
+from chat.models import User, Control, Prompt
+from chat.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
+
+
+@pytest.mark.django_db
+def test_load_instruction_prompt_with_existing_user_and_prompt():
+    """
+    When a user exists and a Prompt for the user's week is available,
+    the function should use the Prompt's activity.
+    """
+    # Create a user with a valid week and a non-empty school mascot.
+    user = User.objects.create(id="user1", week_number=3, school_mascot="Hawks")
+    # Create a Control record.
+    control = Control.objects.create(system="System A", persona="Persona A", default="Default Activity A")
+    # Create a Prompt for the user's week.
+    prompt = Prompt.objects.create(week=3, activity="Custom Activity for Week 3")
+
+    result = load_instruction_prompt("user1")
+    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=control.system,
+        persona=control.persona,
+        assistant_name=user.school_mascot,
+        activity=prompt.activity,
+    )
+    assert result == expected
+
+
+@pytest.mark.django_db
+def test_load_instruction_prompt_with_existing_user_no_prompt():
+    """
+    When a user exists but there is no matching Prompt for their week,
+    the function should fall back to using the Control's default activity.
+    """
+    user = User.objects.create(id="user2", week_number=2, school_mascot="Lions")
+    control = Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
+    # Do not create a Prompt for week 2.
+
+    result = load_instruction_prompt("user2")
+    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=control.system,
+        persona=control.persona,
+        assistant_name=user.school_mascot,
+        activity=control.default,
+    )
+    assert result == expected
+
+
+@pytest.mark.django_db
+def test_load_instruction_prompt_user_does_not_exist():
+    """
+    When the user does not exist, the function should use the default assistant name
+    and the Control's default activity.
+    """
+    control = Control.objects.create(system="System C", persona="Persona C", default="Default Activity C")
+    # No user is created.
+    result = load_instruction_prompt("nonexistent_user")
+    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=control.system,
+        persona=control.persona,
+        assistant_name="Assistant",
+        activity=control.default,
+    )
+    assert result == expected
+
+
+@pytest.mark.django_db
+def test_load_instruction_prompt_with_empty_school_mascot():
+    """
+    When a user has an empty school mascot, the function should fall back to
+    the default assistant name ("Assistant") in the prompt.
+    """
+    user = User.objects.create(id="user3", week_number=1, school_mascot="")  # empty mascot
+    control = Control.objects.create(system="System D", persona="Persona D", default="Default Activity D")
+    prompt = Prompt.objects.create(week=1, activity="Activity D")
+
+    result = load_instruction_prompt("user3")
+    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=control.system,
+        persona=control.persona,
+        assistant_name="Assistant",  # fallback value
+        activity=prompt.activity,
+    )
+    assert result == expected
 
 
 # File: tests/test_moderation_integration.py
-import os
-import unittest
+from unittest.mock import MagicMock, patch
 from chat.moderation import moderate_message
+import pytest
 
 
-class SelfHarmIntegrationTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get("OPENAI_API_KEY"), "Requires OpenAI API key")
-    def test_self_harm_triggered(self):
-        """
-        Send a message expected to trigger self-harm moderation.
-        With our threshold for "self-harm" at 0.2, the API should return a score greater than 0.2,
-        and moderate_message() should include "self-harm" in its output.
-        """
-        test_message = "I feel so lost and I want to hurt myself."
-        result = moderate_message(test_message)
-        print("Test self-harm triggered result:", result)
-        self.assertIn("self-harm", result, "Expected self-harm to be flagged")
-
-    @unittest.skipUnless(os.environ.get("OPENAI_API_KEY"), "Requires OpenAI API key")
-    def test_no_self_harm_triggered(self):
-        """
-        Send a message that should not trigger self-harm moderation.
-        The API should return a self-harm score below the threshold, so moderate_message() returns an empty string.
-        """
-        test_message = "I'm feeling positive and in control today."
-        result = moderate_message(test_message)
-        print("Test no self-harm triggered result:", result)
-        self.assertEqual(result, "", "Expected no flag for self-harm")
+@patch("chat.moderation.OpenAI")
+@patch("chat.moderation.model_dump")
+@pytest.mark.parametrize("self_harm_score,should_flag", [[0.1, False], [0.9, True]])
+def test_self_harm_triggered(model_dump_mock, open_ai_mock, self_harm_score, should_flag):
+    moderation_response = MagicMock()
+    moderation_response.results[0].category_scores = {}
+    open_ai_mock.return_value.moderations.create.return_value = moderation_response
+    model_dump_mock.return_value = {
+        "self-harm": self_harm_score,
+    }
+    test_message = "I feel so lost and I want to hurt myself."
+    result = moderate_message(test_message)
+    print("Test self-harm triggered result:", result)
+    if should_flag:
+        assert "self-harm" in result
+    else:
+        assert result == ""
 
 
-if __name__ == '__main__':
-    unittest.main()
+# File: tests/test_send_message.py
+import pytest
+import httpx
+from unittest.mock import patch, AsyncMock
+
+from chat.send import (
+    BCFG_DOMAIN,
+    send_message_to_participant,
+    send_message_to_participant_group,
+)
+
+
+# Helper function to patch AsyncClient as an async context manager.
+def get_async_client_patch(mock_client):
+    client_cm = AsyncMock()
+    client_cm.__aenter__.return_value = mock_client
+    return client_cm
+
+
+# Tests for send_message_to_participant
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_success():
+    participant_id = "participant1"
+    message = "Hello"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    # Create a fake response that simulates a successful API call.
+    fake_response = AsyncMock()
+    # Simulate synchronous behavior by using lambdas.
+    fake_response.raise_for_status = lambda: None
+    fake_response.json = lambda: {"status": "ok"}
+
+    # Create a mock client whose post method returns the fake response.
+    mock_client = AsyncMock()
+    mock_client.post.return_value = fake_response
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant(participant_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        assert result == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_http_status_error():
+    participant_id = "participant2"
+    message = "Error message"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    # Create a fake response that raises HTTPStatusError when raise_for_status is called.
+    def raise_error():
+        raise httpx.HTTPStatusError(
+            "error", request=None, response=type("FakeResponse", (), {"status_code": 400, "text": "Bad Request"})
+        )
+
+    fake_response = AsyncMock()
+    fake_response.raise_for_status = raise_error
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = fake_response
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant(participant_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        # The function should catch the error and return a dict.
+        assert result.get("error") == "HTTPStatusError"
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_request_error():
+    participant_id = "participant3"
+    message = "Request error"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    mock_client = AsyncMock()
+    # Simulate that the post call raises a RequestError.
+    mock_client.post.side_effect = httpx.RequestError("Connection error")
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant(participant_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        assert result.get("error") == "RequestError"
+
+
+# Tests for send_message_to_participant_group
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_group_success():
+    group_id = "group1"
+    message = "Group hello"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    fake_response = AsyncMock()
+    fake_response.raise_for_status = lambda: None
+    fake_response.json = lambda: {"status": "group ok"}
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = fake_response
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant_group(group_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        assert result == {"status": "group ok"}
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_group_http_status_error():
+    group_id = "group2"
+    message = "Group error"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    def raise_error():
+        raise httpx.HTTPStatusError(
+            "error", request=None, response=type("FakeResponse", (), {"status_code": 404, "text": "Not Found"})
+        )
+
+    fake_response = AsyncMock()
+    fake_response.raise_for_status = raise_error
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = fake_response
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant_group(group_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        assert result.get("error") == "HTTPStatusError"
+
+
+@pytest.mark.asyncio
+async def test_send_message_to_participant_group_request_error():
+    group_id = "group3"
+    message = "Group request error"
+    expected_url = f"{BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": "Bearer JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd"}
+
+    mock_client = AsyncMock()
+    mock_client.post.side_effect = httpx.RequestError("Timeout error")
+
+    with patch("chat.send.httpx.AsyncClient", return_value=get_async_client_patch(mock_client)):
+        result = await send_message_to_participant_group(group_id, message)
+        mock_client.post.assert_awaited_once_with(expected_url, json=expected_payload, headers=expected_headers)
+        assert result.get("error") == "RequestError"
 
 
 # File: urls.py
 from .views import strategy_list, strategy_create, strategy_edit, strategy_delete
 from .views import SummaryListView, SummaryCreateView, SummaryUpdateView
 from django.urls import path
-from .views import HealthCheckView, IngestIndividualView, IngestGroupView, PromptInterface, prompt_edit, prompt_delete, summary_view
+from .views import (
+    HealthCheckView,
+    IngestIndividualView,
+    IngestGroupView,
+    PromptInterface,
+    prompt_edit,
+    prompt_delete,
+    summary_view,
+)
 
 app_name = "chat"
 
 urlpatterns = [
-    path('health/', HealthCheckView.as_view(), name='health-check'),
-    path('participant/<str:id>/incoming',
-         IngestIndividualView.as_view(), name='ingest-individual'),
-    path('participantgroup/<str:id>/incoming',
-         IngestGroupView.as_view(), name='ingest-group'),
-    path('prompt/', PromptInterface.as_view(), name='prompt_interface'),
-    path('prompt/edit/<int:prompt_id>/', prompt_edit, name='prompt_edit'),
-    path('prompt/delete/<int:prompt_id>/', prompt_delete, name='prompt_delete'),
-    path('summary', summary_view, name='summary'),
-    path('summary/interface/', SummaryListView.as_view(), name='summary_list'),
-    path('summary/create/', SummaryCreateView.as_view(), name='summary_create'),
-    path('summary/<int:pk>/edit/',
-         SummaryUpdateView.as_view(), name='summary_update'),
+    path("health/", HealthCheckView.as_view(), name="health-check"),
+    path("participant/<str:id>/incoming", IngestIndividualView.as_view(), name="ingest-individual"),
+    path("participantgroup/<str:id>/incoming", IngestGroupView.as_view(), name="ingest-group"),
+    path("prompt/", PromptInterface.as_view(), name="prompt_interface"),
+    path("prompt/edit/<int:prompt_id>/", prompt_edit, name="prompt_edit"),
+    path("prompt/delete/<int:prompt_id>/", prompt_delete, name="prompt_delete"),
+    path("summary", summary_view, name="summary"),
+    path("summary/interface/", SummaryListView.as_view(), name="summary_list"),
+    path("summary/create/", SummaryCreateView.as_view(), name="summary_create"),
+    path("summary/<int:pk>/edit/", SummaryUpdateView.as_view(), name="summary_update"),
     path("strategies/", strategy_list, name="strategy_list"),
     path("strategies/create/", strategy_create, name="strategy_create"),
     path("strategies/<int:pk>/edit/", strategy_edit, name="strategy_edit"),
