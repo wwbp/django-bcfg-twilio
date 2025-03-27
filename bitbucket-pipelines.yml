@@ -53,6 +53,10 @@ definitions:
   services:
     postgres:
       image: postgres:15-alpine
+      networks:
+        default:
+          aliases:
+            - db
       variables:
         POSTGRES_DB: 'db'
         POSTGRES_USER: 'bcfg_sa'
