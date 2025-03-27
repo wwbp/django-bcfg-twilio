@@ -14,7 +14,6 @@ testStep: &testStep
       - pip install --upgrade pip pipenv
       - pipenv install --dev --system
       # Grant privileges on the database
-      - psql -h 127.0.0.1 -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE db TO bcfg_sa;"
       - pytest -n auto
     services:
       - postgres
