@@ -23,6 +23,7 @@
     },    
     "python.formatting.provider": "black",
     "python.testing.pytestArgs": [
+        "--cov=chat",
         "-n 2",
     ],
     "python.testing.unittestEnabled": false,
