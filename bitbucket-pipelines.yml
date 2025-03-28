@@ -56,6 +56,5 @@ definitions:
       variables:
         POSTGRES_DB: 'db'
         POSTGRES_USER: 'bcfg_sa'
-        POSTGRES_PASSWORD: 'root_password'
     redis:
       image: redis
