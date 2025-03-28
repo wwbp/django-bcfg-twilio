@@ -1,37 +1,36 @@
 services:
   web:
     build:
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
       context: .
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     ports:
       - "8000:8000"
     depends_on:
       - db
       - redis
-    # command: "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=3"
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - .:/workspace:cached
+      - .:/app
+    command: /bin/sh -c "while sleep 1000; do :; done" 
 
 
   db:
-    image: mysql:8.0
-    container_name: mysql_db
-    command: --default-authentication-plugin=mysql_native_password
+    image: postgres:15-alpine
+    container_name: postgres_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: "UTC"
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-
+      - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:latest
@@ -41,11 +40,10 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     command: celery -A config worker -l info
     depends_on:
       - redis
@@ -55,11 +53,10 @@ services:
   scheduler:
     build:
       context: .
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
+      target: development
     env_file:
       - .env
-    environment:
-      - TZ=UTC
     command: celery -A config beat -l info
     depends_on:
       - redis
@@ -67,4 +64,4 @@ services:
 
 
 volumes:
-  mysql_data:
+  postgres_data:

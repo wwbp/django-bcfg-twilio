@@ -10,6 +10,7 @@ type: Worker Service
 image:
   # Docker build arguments.
   build: Dockerfile
+  target: production
 
 entrypoint: "celery -A config beat --loglevel=info"
 

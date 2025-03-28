@@ -1,0 +1,61 @@
+#  Template python-build
+#  This template allows you to validate your python code.
+#  The workflow allows running tests and code linting on the default branch.
+
+image: python:3.11
+
+testStep: &testStep
+  step:
+    name: Test
+    caches:
+      - pip
+    script:
+      - apt-get update && apt-get -y install binutils libproj-dev gdal-bin postgresql-client
+      - pip install --upgrade pip pipenv
+      - pipenv install --dev --system
+      - pytest -n auto
+    services:
+      - postgres
+      - redis
+
+
+lintStep: &lintStep
+  step:
+    name: Lint code
+    script:
+      - pip install ruff
+      - ruff check .
+    caches:
+      - pip
+
+securityStep: &securityStep
+  step:
+    name: Security scan
+    caches:
+      - node
+      - pip
+    script:
+      - pip install --upgrade pip pipenv
+      - pipenv install
+      - curl --compressed https://static.snyk.io/cli/latest/snyk-linux -o snyk
+      - chmod +x ./snyk
+      - ./snyk auth $SNYK_TOKEN
+      - ./snyk test
+
+pipelines:
+  default:
+    - parallel:
+        - <<: *testStep
+        - <<: *lintStep
+        - <<: *securityStep
+
+definitions:
+  services:
+    postgres:
+      image: postgres:15-alpine
+      variables:
+        POSTGRES_DB: 'db'
+        POSTGRES_USER: 'bcfg_sa'
+        POSTGRES_PASSWORD: 'root_password'
+    redis:
+      image: redis
