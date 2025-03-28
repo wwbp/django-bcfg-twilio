@@ -81,43 +81,29 @@ WSGI_APPLICATION = "config.wsgi.application"
 DBINFO = json.loads(os.environ.get("DB_SECRET", "{}"))
 
 
-# mysql dabase connection
+# postgres dabase connection
 if DBINFO:
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.mysql",
+            "ENGINE": "django.db.backends.postgresql",
             "HOST": DBINFO["host"],
             "PORT": DBINFO["port"],
             "NAME": DBINFO["dbname"],
             "USER": DBINFO["username"],
             "PASSWORD": DBINFO["password"],
-            "OPTIONS": {
-                "charset": "utf8mb4",
-            },
         }
     }
 else:
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.mysql",
+            "ENGINE": "django.db.backends.postgresql",
             "HOST": os.environ.get("DB_HOST", "db"),
-            "PORT": 3306,
+            "PORT": 5432,
             "NAME": "db",
             "USER": "bcfg_sa",
             "PASSWORD": "root_password",
-            "OPTIONS": {
-                "charset": "utf8mb4",
-            },
         }
     }
-
-# Use sqlite3 for local development
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 STORAGES = {
     "staticfiles": {

@@ -3,8 +3,8 @@
         {
             "previewLimit": 50,
             "server": "db",
-            "port": 3306,
-            "driver": "MySQL",
+            "port": 5432,
+            "driver": "PostgreSQL",
             "name": "Chat DB",
             "database": "db",
             "username": "bcfg_sa",
