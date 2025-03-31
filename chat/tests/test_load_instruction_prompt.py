@@ -1,9 +1,7 @@
-import pytest
 from chat.models import User, Control, Prompt
 from chat.services.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
 
-@pytest.mark.django_db
 def test_load_instruction_prompt_with_existing_user_and_prompt():
     """
     When a user exists and a Prompt for the user's week is available,
@@ -26,7 +24,6 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
     assert result == expected
 
 
-@pytest.mark.django_db
 def test_load_instruction_prompt_with_existing_user_no_prompt():
     """
     When a user exists but there is no matching Prompt for their week,
@@ -46,7 +43,6 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
     assert result == expected
 
 
-@pytest.mark.django_db
 def test_load_instruction_prompt_user_does_not_exist():
     """
     When the user does not exist, the function should use the default assistant name
@@ -64,7 +60,6 @@ def test_load_instruction_prompt_user_does_not_exist():
     assert result == expected
 
 
-@pytest.mark.django_db
 def test_load_instruction_prompt_with_empty_school_mascot():
     """
     When a user has an empty school mascot, the function should fall back to
