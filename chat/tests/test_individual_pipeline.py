@@ -160,7 +160,8 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         0 if mocks["is_test_user"] or not (expected["expected_processed"] or expected["expected_moderated"]) else 1
     )
     assert mock_send.call_count == expected_send_calls, (
-        f"{description}: send_message_to_participant call count expected {expected_send_calls} but got {mock_send.call_count}"
+        f"{description}: send_message_to_participant call count expected {expected_send_calls} but "
+        f"got {mock_send.call_count}"
     )
 
     mock_is_test.assert_called_once_with(participant_id)
