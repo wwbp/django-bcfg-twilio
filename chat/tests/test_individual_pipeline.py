@@ -5,138 +5,102 @@ from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline_task
 from chat.models import IndividualPipelineRecord
 
-TEST_CASES = [
-    {
-        "description": "Standard Flow: Valid message, no moderation issues, non-test user.",
-        "participant_id": "user_normal",
-        "data": {
-            "message": "Test message",
-            "context": {
-                "school_name": "Test School",
-                "school_mascot": "Tiger",
-                "initial_message": "Hi",
-                "week_number": 1,
-                "name": "John",
-            },
-        },
-        "mocks": {
-            "moderation_return": "",
-            "get_moderation_message_return": None,
-            "generate_response_return": "LLM response",
-            "ensure_within_character_limit_return": "LLM response",
-            "is_test_user": False,
-        },
-        "expected": {
-            "expected_moderated": False,
-            "expected_processed": True,
-            "expected_sent": True,
-            "expected_response": "LLM response",
-            "expected_validated_message": "LLM response",
-        },
-    },
-    {
-        "description": "Safety Plan Flow: Message flagged as self-harm; processing halted and safety message is sent.",
-        "participant_id": "user_safety",
-        "data": {
-            "message": "Message with self-harm content",
-            "context": {
-                "school_name": "Test School",
-                "school_mascot": "Bear",
-                "initial_message": "Hello",
-                "week_number": 2,
-                "name": "Alice",
-            },
-        },
-        "mocks": {
-            "moderation_return": "self-harm",  # Indicates harmful content.
-            "get_moderation_message_return": "Self-harm safety plan message",
-            "generate_response_return": "LLM ignored",  # Not used when moderation blocks processing.
-            "ensure_within_character_limit_return": "Self-harm safety plan message",
-            "is_test_user": False,
-        },
-        "expected": {
-            "expected_moderated": True,
-            "expected_processed": False,
-            "expected_sent": True,  # The safety plan message is sent.
-            "expected_response": "Self-harm safety plan message",
-            "expected_validated_message": "Self-harm safety plan message",
-        },
-    },
-    {
-        "description": "Long Response Flow: LLM returns a response over 320 characters; it is shortened before sending.",
-        "participant_id": "user_long",
-        "data": {
-            "message": "Message requiring long response shortening",
-            "context": {
-                "school_name": "Test School",
-                "school_mascot": "Eagle",
-                "initial_message": "Greetings",
-                "week_number": 4,
-                "name": "Carol",
-            },
-        },
-        "mocks": {
-            "moderation_return": "",
-            "get_moderation_message_return": None,
-            "generate_response_return": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),  # Simulate a long LLM response.
-            "ensure_within_character_limit_return": "Shortened response",
-            "is_test_user": False,
-        },
-        "expected": {
-            "expected_moderated": False,
-            "expected_processed": True,
-            "expected_sent": True,
-            # Expect the raw response to be recorded while the validated message is shortened.
-            "expected_response": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
-            "expected_validated_message": "Shortened response",
-        },
-    },
-    {
-        "description": "Test User Flow: Processed normally but sending is skipped for test users.",
-        "participant_id": "user_test",
-        "data": {
-            "message": "Test message for test user",
-            "context": {
-                "school_name": "Test School",
-                "school_mascot": "Falcon",
-                "initial_message": "Hello",
-                "week_number": 1,
-                "name": "Dave",
-            },
-        },
-        "mocks": {
-            "moderation_return": "",
-            "get_moderation_message_return": None,
-            "generate_response_return": "LLM test response",
-            "ensure_within_character_limit_return": "LLM test response",
-            "is_test_user": True,
-        },
-        "expected": {
-            "expected_moderated": False,
-            "expected_processed": True,
-            "expected_sent": False,
-            "expected_response": "LLM test response",
-            "expected_validated_message": "LLM test response",
-        },
-    },
-]
+
+# Define a fixture for the default context that does not affect the test.
+@pytest.fixture
+def default_context():
+    return {
+        "school_name": "Test School",
+        "school_mascot": "Default Mascot",
+        "initial_message": "Hello",
+        "week_number": 1,
+        "name": "Default Name",
+    }
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "description, participant_id, data, mocks, expected",
+    "description, participant_id, message, mocks, expected",
     [
         (
-            case["description"],
-            case["participant_id"],
-            case["data"],
-            case["mocks"],
-            case["expected"],
-        )
-        for case in TEST_CASES
+            "Standard Flow: Valid message, no moderation issues, non-test user.",
+            "user_normal",
+            "Test message",
+            {
+                "moderation_return": "",
+                "get_moderation_message_return": None,
+                "generate_response_return": "LLM response",
+                "ensure_within_character_limit_return": "LLM response",
+                "is_test_user": False,
+            },
+            {
+                "expected_moderated": False,
+                "expected_processed": True,
+                "expected_sent": True,
+                "expected_response": "LLM response",
+                "expected_validated_message": "LLM response",
+            },
+        ),
+        (
+            "Safety Plan Flow: Message flagged as self-harm; processing halted and safety message is sent.",
+            "user_safety",
+            "Message with self-harm content",
+            {
+                "moderation_return": "self-harm",
+                "get_moderation_message_return": "Self-harm safety plan message",
+                "generate_response_return": "LLM ignored",
+                "ensure_within_character_limit_return": "Self-harm safety plan message",
+                "is_test_user": False,
+            },
+            {
+                "expected_moderated": True,
+                "expected_processed": False,
+                "expected_sent": True,
+                "expected_response": "Self-harm safety plan message",
+                "expected_validated_message": "Self-harm safety plan message",
+            },
+        ),
+        (
+            "Long Response Flow: LLM returns a response over 320 characters; it is shortened before sending.",
+            "user_long",
+            "Message requiring long response shortening",
+            {
+                "moderation_return": "",
+                "get_moderation_message_return": None,
+                "generate_response_return": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
+                "ensure_within_character_limit_return": "Shortened response",
+                "is_test_user": False,
+            },
+            {
+                "expected_moderated": False,
+                "expected_processed": True,
+                "expected_sent": True,
+                "expected_response": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
+                "expected_validated_message": "Shortened response",
+            },
+        ),
+        (
+            "Test User Flow: Processed normally but sending is skipped for test users.",
+            "user_test",
+            "Test message for test user",
+            {
+                "moderation_return": "",
+                "get_moderation_message_return": None,
+                "generate_response_return": "LLM test response",
+                "ensure_within_character_limit_return": "LLM test response",
+                "is_test_user": True,
+            },
+            {
+                "expected_moderated": False,
+                "expected_processed": True,
+                "expected_sent": False,
+                "expected_response": "LLM test response",
+                "expected_validated_message": "LLM test response",
+            },
+        ),
     ],
 )
-def test_individual_pipeline_parametrized(description, participant_id, data, mocks, expected):
+def test_individual_pipeline_parametrized(default_context, description, participant_id, message, mocks, expected):
     """
     Test the individual_pipeline_task for UC-AI-001 by simulating:
       - Message reception, queuing, and saving.
@@ -144,6 +108,11 @@ def test_individual_pipeline_parametrized(description, participant_id, data, moc
       - Prompt assembly, response generation, and (if applicable) response shortening.
       - API call to the Hub to send the final response.
     """
+    # Build the data with a uniform context from the fixture.
+    data = {
+        "message": message,
+        "context": default_context,
+    }
     with (
         patch(
             "chat.services.individual_pipeline.moderate_message", return_value=mocks["moderation_return"]
@@ -168,32 +137,30 @@ def test_individual_pipeline_parametrized(description, participant_id, data, moc
 
     record = IndividualPipelineRecord.objects.get(participant_id=participant_id)
 
-    # Simple, uniform asserts for record fields.
-    fields = [
+    # Asserts for record fields.
+    for field, expected_field in [
         ("moderated", "expected_moderated"),
         ("processed", "expected_processed"),
         ("sent", "expected_sent"),
         ("response", "expected_response"),
         ("validated_message", "expected_validated_message"),
-    ]
-    for field, expected_field in fields:
+    ]:
         actual = getattr(record, field)
         exp_value = expected[expected_field]
         assert actual == exp_value, f"{description}: {field} expected {exp_value} but got {actual}"
 
-    # Uniform assert for generate_response call count.
+    # Assert generate_response call count.
     expected_gen_calls = 0 if expected["expected_moderated"] else 1
     assert mock_gen.call_count == expected_gen_calls, (
         f"{description}: generate_response call count expected {expected_gen_calls} but got {mock_gen.call_count}"
     )
 
-    # Uniform assert for send_message_to_participant call count.
+    # Assert send_message_to_participant call count.
     expected_send_calls = (
         0 if mocks["is_test_user"] or not (expected["expected_processed"] or expected["expected_moderated"]) else 1
     )
     assert mock_send.call_count == expected_send_calls, (
-        f"{description}: send_message_to_participant call count expected "
-        f"{expected_send_calls} but got {mock_send.call_count}"
+        f"{description}: send_message_to_participant call count expected {expected_send_calls} but got {mock_send.call_count}"
     )
 
     mock_is_test.assert_called_once_with(participant_id)
