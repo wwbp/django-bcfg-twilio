@@ -9,7 +9,7 @@ Parameters:
   dbDBName:
     Type: String
     Description: The name of the initial database to be created in the Aurora Serverless v2 cluster.
-    Default: db
+    Default: chatbot
     # Cannot have special characters
     # Naming constraints: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Limits.html#RDS_Limits.Constraints
   VPCID:
@@ -27,9 +27,20 @@ Mappings:
       "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
       "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
     
-    All:
+    test:
       "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
       "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
+    
+    prod:
+      "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
+      "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
+  mydbclusterSnapshotsMap:
+    dev:
+      ARN: ''
+    test:
+      ARN: ''
+    prod:
+      ARN: ''
 
 Resources:
   dbDBSubnetGroup:
@@ -89,7 +100,7 @@ Resources:
     Type: 'AWS::RDS::DBClusterParameterGroup'
     Properties:
       Description: !Ref 'AWS::StackName'
-      Family: 'aurora-postgresql14'
+      Family: 'aurora-postgresql16'
       Parameters:
         client_encoding: 'UTF8'
   
@@ -104,7 +115,7 @@ Resources:
         !Join [ "",  [ '{{resolve:secretsmanager:', !Ref dbAuroraSecret, ":SecretString:password}}" ]]
       DatabaseName: !Ref dbDBName
       Engine: 'aurora-postgresql'
-      EngineVersion: '14.4'
+      EngineVersion: '16.6'
       DBClusterParameterGroupName: !Ref dbDBClusterParameterGroup
       DBSubnetGroupName: !Ref dbDBSubnetGroup
       Port: 5432
@@ -112,9 +123,10 @@ Resources:
         - !Ref dbDBClusterSecurityGroup
       ServerlessV2ScalingConfiguration:
         # Replace "All" below with "!Ref Env" to set different autoscaling limits per environment.
-        MinCapacity: !FindInMap [dbEnvScalingConfigurationMap, All, DBMinCapacity]
-        MaxCapacity: !FindInMap [dbEnvScalingConfigurationMap, All, DBMaxCapacity]
-  
+        MinCapacity: !FindInMap [dbEnvScalingConfigurationMap, !Ref Env, DBMinCapacity]
+        MaxCapacity: !FindInMap [dbEnvScalingConfigurationMap, !Ref Env, DBMaxCapacity]
+      SnapshotIdentifier: !FindInMap [mydbclusterSnapshotsMap, !Ref Env, ARN]
+
   dbDBWriterInstance:
     Metadata:
       'aws:copilot:description': 'The db Aurora Serverless v2 writer instance'

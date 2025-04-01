@@ -99,7 +99,7 @@ else:
             "ENGINE": "django.db.backends.postgresql",
             "HOST": os.environ.get("DB_HOST", "db"),
             "PORT": 5432,
-            "NAME": "db",
+            "NAME": "chatbot",
             "USER": "bcfg_sa",
             "PASSWORD": "root_password",
         }

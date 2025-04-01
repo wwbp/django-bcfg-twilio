@@ -63,7 +63,7 @@ definitions:
     postgres:
       image: postgres:15-alpine
       variables:
-        POSTGRES_DB: 'db'
+        POSTGRES_DB: 'chatbot'
         POSTGRES_USER: 'bcfg_sa'
         POSTGRES_PASSWORD: 'root_password'
     redis:
