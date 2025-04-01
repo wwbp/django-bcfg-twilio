@@ -1,5 +1,6 @@
 from openai import OpenAI
 from openai._compat import model_dump
+from django.conf import settings
 
 
 MODERATION_VALUES_FOR_BLOCKED = {
@@ -18,7 +19,9 @@ MODERATION_VALUES_FOR_BLOCKED = {
 
 
 def moderate_message(message: str) -> str:
-    moderation_response = OpenAI().moderations.create(input=message, model="omni-moderation-latest")
+    moderation_response = OpenAI(api_key=settings.OPENAI_API_KEY).moderations.create(
+        input=message, model="omni-moderation-latest"
+    )
     category_scores = moderation_response.results[0].category_scores or {}
     category_score_items = model_dump(category_scores)
 

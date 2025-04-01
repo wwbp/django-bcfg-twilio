@@ -47,7 +47,7 @@ def generate_response(history_json: list[dict], instructions: str, message: str)
 
 @log_exceptions
 def chat_completion(instructions: str) -> str:
-    client = OpenAI()
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
