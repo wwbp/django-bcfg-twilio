@@ -6,6 +6,9 @@ image: python:3.11
 
 testStep: &testStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Test
     caches:
       - pip
@@ -21,6 +24,9 @@ testStep: &testStep
 
 lintStep: &lintStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Lint code
     script:
       - pip install ruff
@@ -30,6 +36,9 @@ lintStep: &lintStep
 
 securityStep: &securityStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Security scan
     caches:
       - node
