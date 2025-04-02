@@ -6,15 +6,15 @@
 name: dev
 type: Environment
 
-# Import your own VPC and subnets or configure how they should be created.
-# network:
-#   vpc:
-#     id:
-
 # Configure the load balancers in your environment, once created.
-# http:
-#   public:
-#   private:
+http:
+  public:
+    access_logs: true
+    # This is the URN of a certificate in AWS Certificate Manager (ACM) that includes all domains
+    # that will be used to access the application. If it changes, just updated it here and run
+    # `copilot env deploy`
+    certificates:
+      - arn:aws:acm:us-east-1:336162656437:certificate/34771f1b-e42a-4e00-b725-551b6459e3d8
 
 # Configure observability for your environment resources.
 observability:

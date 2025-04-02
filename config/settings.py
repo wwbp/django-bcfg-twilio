@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-#7lq@_7b#8v!+1^6!$0@5v!u7z7x0^v1x0v0#4q8t^k9^3!%zr"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "True") == "True"
+DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = ["*"]
 
@@ -99,7 +99,7 @@ else:
             "ENGINE": "django.db.backends.postgresql",
             "HOST": os.environ.get("DB_HOST", "db"),
             "PORT": 5432,
-            "NAME": "db",
+            "NAME": "chatbot",
             "USER": "bcfg_sa",
             "PASSWORD": "root_password",
         }
@@ -176,4 +176,4 @@ CELERY_TASK_DEFAULT_PRIORITY = 0
 # Core app config
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 BCFG_DOMAIN = os.environ.get("BCFG_DOMAIN", "")
-BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd")
+BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "")

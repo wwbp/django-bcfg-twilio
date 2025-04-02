@@ -80,10 +80,9 @@ def individual_process_pipeline(run_id):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
-        # todo: need a sperate placeholder for notes
-        # todo broken handling of skipping
+        # todo broken https://dev.azure.com/pod-consulting/AI%20Chatbot%20Application/_workitems/edit/9959
         if message.strip() != record.message.strip():
-            record.processed = False
+            record.skipped = True
             record.error_log = (
                 "Message is not the latest in chat history."  
             )
@@ -176,6 +175,9 @@ def individual_pipeline_task(self, participant_id, data):
         # Stage 3: Process via LLM call if the message was not blocked.
         if not record.moderated:
             individual_process_pipeline(run_id)
+
+        if record.skipped:
+            return
 
         # Stage 4: Validate the outgoing response.
         individual_validate_pipeline(run_id)

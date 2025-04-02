@@ -101,6 +101,7 @@ class IndividualPipelineRecord(models.Model):
     ingested = models.BooleanField(default=False)
     moderated = models.BooleanField(default=False)
     instruction_prompt = models.TextField(blank=True, null=True)
+    skipped = models.BooleanField(default=False)
     processed = models.BooleanField(default=False)
     shortened = models.BooleanField(default=False)
     validated_message = models.TextField(blank=True, null=True)

@@ -6,6 +6,9 @@ image: python:3.11
 
 testStep: &testStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Test
     caches:
       - pip
@@ -21,6 +24,9 @@ testStep: &testStep
 
 lintStep: &lintStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Lint code
     script:
       - pip install ruff
@@ -30,6 +36,9 @@ lintStep: &lintStep
 
 securityStep: &securityStep
   step:
+    runs-on:
+          - self.hosted
+          - linux
     name: Security scan
     caches:
       - node
@@ -42,20 +51,68 @@ securityStep: &securityStep
       - ./snyk auth $SNYK_TOKEN
       - ./snyk test
 
+definitions:
+  deployScriptCommon: &deployScriptCommon
+    export AWS_REGION=us-east-1
+    && export AWS_ROLE_ARN=arn:aws:iam::336162656437:role/chatbot-bitbucket
+    && export AWS_WEB_IDENTITY_TOKEN_FILE=$(pwd)/web-identity-token
+    && echo $BITBUCKET_STEP_OIDC_TOKEN > $(pwd)/web-identity-token
+    && curl -Lo copilot-bin https://github.com/aws/copilot-cli/releases/latest/download/copilot-linux
+    && chmod +x copilot-bin
+  steps:
+    step: &deployStepCommon
+      runs-on:
+        - self.hosted
+        - linux
+      image: amazon/aws-cli:latest
+      oidc: true
+      services:
+        - docker
+      caches:
+        - docker
+
+
 pipelines:
   default:
     - parallel:
         - <<: *testStep
         - <<: *lintStep
         - <<: *securityStep
+  branches:
+    develop:
+      - parallel:
+          - <<: *testStep
+          - <<: *lintStep
+          - <<: *securityStep
+      - parallel:
+          - step:
+              <<: *deployStepCommon
+              name: Deploy web to Development environment
+              deployment: Development
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name web --env=dev
+          - step:
+              <<: *deployStepCommon
+              name: Deploy worker to Development environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name worker --env=dev
+          - step:
+              <<: *deployStepCommon
+              name: Deploy scheduler to Development environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name scheduler --env=dev
 
 definitions:
   services:
     postgres:
       image: postgres:15-alpine
       variables:
-        POSTGRES_DB: 'db'
+        POSTGRES_DB: 'chatbot'
         POSTGRES_USER: 'bcfg_sa'
         POSTGRES_PASSWORD: 'root_password'
     redis:
       image: redis
+
