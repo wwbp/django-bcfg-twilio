@@ -38,6 +38,7 @@ def create_new_user(user, context: dict, message: str):
         user.name = context.get("name", "")
         user.initial_message = context.get("initial_message", "")
         user.week_number = context.get("week_number")
+        user.message_type = context.get("message_type", "fallback")
         user.save()  # Save updated fields
 
         # Create initial transcripts:
@@ -71,6 +72,13 @@ def update_existing_user(user, context: dict, message: str):
             user.initial_message = new_initial_message
             # Create a new assistant transcript for the updated initial message
             ChatTranscript.objects.create(user=user, role="assistant", content=new_initial_message)
+            updated = True
+
+        # Check if message type changed
+        new_message_type = context.get("message_type")
+        if new_message_type and new_message_type != user.message_type:
+            logger.info("Message type changed for user %s from %s to %s.", user.id, user.message_type, new_message_type)
+            user.message_type = new_message_type
             updated = True
 
         # Always create a transcript for the new user message
