@@ -47,7 +47,7 @@ def test_unsuccessful_shortening_with_sentences():
 
 # Over max with invalid sentences: if splitting yields no valid content, do a hard cutoff.
 def test_unsuccessful_shortening_empty_sentences():
-    long_text = " " * (MAX_RESPONSE_CHARACTER_LENGTH + 10)
+    long_text = "A1" * (MAX_RESPONSE_CHARACTER_LENGTH + 10)
     with patch("chat.services.completion.chat_completion", return_value=long_text) as mock_chat_completion:
         result = ensure_within_character_limit(long_text)
         assert result == long_text[:MAX_RESPONSE_CHARACTER_LENGTH]
