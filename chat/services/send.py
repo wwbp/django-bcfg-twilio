@@ -13,10 +13,7 @@ async def send_message_to_participant(participant_id: str, message: str):
     """
     url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     payload = {"message": message}
-    headers = {
-        # TODO: sync with bcfg on managing authentication tokens
-        "Authorization": f"Bearer {settings.BCFG_API_KEY}"
-    }
+    headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers)

@@ -176,4 +176,4 @@ CELERY_TASK_DEFAULT_PRIORITY = 0
 # Core app config
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 BCFG_DOMAIN = os.environ.get("BCFG_DOMAIN", "")
-BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "JLGasdfJH8lkdasop93q4lkjsedf56012879lksdfhgsd")
+BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "")
