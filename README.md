@@ -58,6 +58,15 @@ These steps only need to be run once per environment (where ENVIRONMENT_NAME = d
     copilot svc deploy --name worker --env ENVIRONMENT_NAME
     copilot svc deploy --name scheduler --env ENVIRONMENT_NAME
     ```
+1. Create a DNS record to route traffic to the load balancer in Route53
+    1. Find the load balancer via ECS > your cluster > web service > load balancer
+    1. Create a new record set in Route53 for the domain you specified in the app init step
+    1. Set the type to A - IPv4 address, with the name being the subdomain you want to use (e.g. dev.wwbp-bcfg-chatbot.org)
+    1. Toggle Alias to True
+    1. Choose "Alias to Application and Classic Load Balancer" for the alias target
+    1. Choose the region where the load balancer is located
+    1. Choose the load balancer you found in the first step from the list
+    1. Leave the remainder of the config untouched (TTL 300s, simple routing)
 1. Create an admin user. Set the username and password to the PennKey of the desired user. Authentication is done via PennKey.
     ```bash
     copilot svc exec --name web --env ENVIRONMENT_NAME --command "python manage.py createsuperuser"

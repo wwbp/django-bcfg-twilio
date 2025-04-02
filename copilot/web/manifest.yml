@@ -15,6 +15,7 @@ http:
   healthcheck:
     path: '/api/health/'
     healthy_threshold: 2
+  target_container: 'nginx'
   alias: '*.wwbp-bcfg-chatbot.org'
 
 # Configuration for your containers and service.
@@ -67,3 +68,11 @@ environments:
     variables:
       DJANGO_ENV: prod
       BCFG_DOMAIN: https://2025.joinstarterkit.org
+
+sidecars:
+  nginx:
+    port: 80
+    image:
+      build: nginx/Dockerfile
+    variables:
+      NGINX_PORT: 80
