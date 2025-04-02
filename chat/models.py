@@ -3,6 +3,13 @@ from django.db import models
 
 from .services.constant import MODERATION_MESSAGE_DEFAULT
 
+MESSAGE_TYPE_CHOICES = (
+    ("initial", "Initial"),
+    ("reminder", "Reminder"),
+    ("check-in", "Check-in"),
+    ("summary", "Summary"),
+    ("fallback", "Fallback"),
+)
 
 class User(models.Model):
     id = models.CharField(primary_key=True, max_length=255)
@@ -13,6 +20,7 @@ class User(models.Model):
     initial_message = models.TextField(default='')
     is_test = models.BooleanField(default=False)
     week_number = models.IntegerField(null=True, blank=True)
+    message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES, default='fallback')
 
 
 class Group(models.Model):
@@ -54,6 +62,7 @@ class Prompt(models.Model):
     week = models.IntegerField()
     activity = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES, default="fallback")
 
 
 class Control(models.Model):
