@@ -4,7 +4,7 @@ import json
 import logging
 
 from .constant import MODERATION_MESSAGE_DEFAULT
-from ..models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
+from ..models import Group, GroupChatTranscript, MessageType, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
@@ -301,7 +301,7 @@ def load_instruction_prompt(user_id: str):
         logger.warning(f"User with id {user_id} not found. Using default prompt.")
         week = None
         assistant_name = "Assistant"
-        message_type = "fallback"
+        message_type = None
 
     # Load the most recent controls record
     try:
@@ -311,7 +311,7 @@ def load_instruction_prompt(user_id: str):
 
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None
-    if week is not None and message_type != "fallback":
+    if week is not None and message_type is not None:
         prompt_obj = Prompt.objects.filter(week=week, type=message_type).order_by("created_at").last()
 
     if prompt_obj:
