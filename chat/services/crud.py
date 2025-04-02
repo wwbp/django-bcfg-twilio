@@ -38,7 +38,7 @@ def create_new_user(user, context: dict, message: str):
         user.name = context.get("name", "")
         user.initial_message = context.get("initial_message", "")
         user.week_number = context.get("week_number")
-        user.message_type = context.get("message_type", "fallback")
+        user.message_type = context.get("message_type")
         user.save()  # Save updated fields
 
         # Create initial transcripts:
