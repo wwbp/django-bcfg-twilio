@@ -1,5 +1,5 @@
 # tester/views.py
-from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
+from chat.models import ChatTranscript, GroupChatTranscript, MessageType, User as ChatUser, Group
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -98,7 +98,8 @@ def create_test_case(request):
             school_name=school_name,
             school_mascot=school_mascot,
             initial_message=initial_message,
-            is_test=True
+            is_test=True,
+            message_type=MessageType.INITIAL
         )
         # Insert the initial message as the first assistant message in the transcript.
         ChatTranscript.objects.create(

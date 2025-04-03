@@ -99,22 +99,30 @@ class StrategyPrompt(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
+class IndividualPipelineStage(models.TextChoices):
+    INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
+    INGEST_FAILED = "INGEST_FAILED", "Ingest Failed"
+    MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
+    MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
+    MODERATION_FAILED = "MODERATION_FAILED", "Moderation Failed"
+    PROCESS_PASSED = "PROCESS_PASSED", "Process Passed"
+    PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
+    PROCESS_FAILED = "PROCESS_FAILED", "Process Failed"
+    VALIDATE_CHARACTER_LIMIT_HIT = "VALIDATE_CHARACTER_LIMIT_HIT", "Validate Character Limit Hit"
+    VALIDATE_PASSED = "VALIDATE_PASSED", "Validate Passed"
+    VALIDATE_FAILED = "VALIDATE_FAILED", "Validate Failed"
+    SEND_PASSED = "SEND_PASSED", "Send Passed"
+    SEND_FAILED = "SEND_FAILED", "Send Failed"
+    
 class IndividualPipelineRecord(models.Model):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     participant_id = models.CharField(max_length=255)
     message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
-    ingested = models.BooleanField(default=False)
-    moderated = models.BooleanField(default=False)
     instruction_prompt = models.TextField(blank=True, null=True)
-    skipped = models.BooleanField(default=False)
-    processed = models.BooleanField(default=False)
-    shortened = models.BooleanField(default=False)
     validated_message = models.TextField(blank=True, null=True)
-    sent = models.BooleanField(default=False)
-    failed = models.BooleanField(default=False)
     error_log = models.TextField(blank=True, null=True)
+    stages = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
