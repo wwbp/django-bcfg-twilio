@@ -109,9 +109,6 @@ def individual_validate(record: IndividualPipelineRecord):
             record.validated_message = processed_response
             record.stages.append(IndividualPipelineStage.VALIDATE_CHARACTER_LIMIT_HIT)
         record.save()
-        # Save the generated response to the database
-        # todo move outside validation better be in send
-        save_assistant_response(record.participant_id, record.validated_message)
         logger.info(f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}")
     except Exception as e:
         logger.error(f"Individual validate pipeline failed for run_id {record.run_id}: {e}")
@@ -128,10 +125,13 @@ def individual_send(record: IndividualPipelineRecord):
     participant_id = record.participant_id
     response = record.validated_message
     try:
+        # save the assistant response to the database
+        save_assistant_response(record.participant_id, record.validated_message)
         # Send the message via the external endpoint
-        asyncio.run(send_message_to_participant(participant_id, response))
-        # Update the pipeline record for the sending stage
-        record.stages.append(IndividualPipelineStage.SEND_PASSED)
+        if not is_test_user(record.participant_id):
+            asyncio.run(send_message_to_participant(participant_id, response))
+            # Update the pipeline record for the sending stage
+            record.stages.append(IndividualPipelineStage.SEND_PASSED)
         record.save()
         logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
@@ -166,8 +166,7 @@ def individual_pipeline(self, participant_id, data):
         individual_validate(record)
 
         # Stage 5: Send the response if the participant is not a test user.
-        if not is_test_user(record.participant_id):
-            individual_send(record)
+        individual_send(record)
     except Exception as exc:
         logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
