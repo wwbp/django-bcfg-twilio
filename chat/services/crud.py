@@ -4,11 +4,15 @@ import json
 import logging
 
 from .constant import MODERATION_MESSAGE_DEFAULT
-from ..models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
+from ..models import Group, GroupChatTranscript, IndividualPipelineRecord, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+def is_latest_run(run_id):
+    current_record = IndividualPipelineRecord.objects.get(run_id=run_id)
+    latest_record = IndividualPipelineRecord.objects.order_by('-created_at').first()
+    return current_record.created_at == latest_record.created_at
 
 def is_test_user(participant_id: str):
     try:

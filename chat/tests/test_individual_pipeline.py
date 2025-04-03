@@ -23,7 +23,6 @@ def default_context():
     }
 
 
-@pytest.mark.django_db
 @pytest.mark.parametrize(
     "description, participant_id, message, mocks, expected",
     [

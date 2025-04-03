@@ -4,6 +4,7 @@ from celery import shared_task
 from .moderation import moderate_message
 from .crud import (
     get_moderation_message,
+    is_latest_run,
     is_test_user,
     load_individual_chat_history,
     load_instruction_prompt,
@@ -25,9 +26,7 @@ def individual_ingest(participant_id: str, data: dict):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
-    record = IndividualPipelineRecord.objects.create(
-        participant_id=participant_id, message=data.get("message", "")
-    )
+    record = IndividualPipelineRecord.objects.create(participant_id=participant_id, message=data.get("message", ""))
     try:
         ingest_request(participant_id, data)
         record.stages.append(IndividualPipelineStage.INGEST_PASSED)
@@ -56,7 +55,9 @@ def individual_moderation(record: IndividualPipelineRecord):
         else:
             record.stages.append(IndividualPipelineStage.MODERATION_PASSED)
         record.save()
-        logger.info(f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {record.run_id}")
+        logger.info(
+            f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {record.run_id}"
+        )
     except Exception as e:
         logger.error(f"Individual moderation pipeline failed for run_id {record.run_id}: {e}")
         record.stages.append(IndividualPipelineStage.MODERATION_FAILED)
@@ -75,10 +76,8 @@ def individual_process(record: IndividualPipelineRecord):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
-        # todo broken https://dev.azure.com/pod-consulting/AI%20Chatbot%20Application/_workitems/edit/9959
-        if message.strip() != record.message.strip():
+        if not is_latest_run(record.run_id):
             record.stages.append(IndividualPipelineStage.PROCESS_SKIPPED)
-            record.error_log = "Message is not the latest in chat history."
         else:
             instructions = load_instruction_prompt(participant_id)
             response = generate_response(chat_history, instructions, message)
@@ -109,7 +108,9 @@ def individual_validate(record: IndividualPipelineRecord):
             record.validated_message = processed_response
             record.stages.append(IndividualPipelineStage.VALIDATE_CHARACTER_LIMIT_HIT)
         record.save()
-        logger.info(f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}")
+        logger.info(
+            f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}"
+        )
     except Exception as e:
         logger.error(f"Individual validate pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
