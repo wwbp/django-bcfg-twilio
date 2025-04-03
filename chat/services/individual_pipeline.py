@@ -33,7 +33,7 @@ def individual_ingest(participant_id: str, data: dict):
         record.stages.append(IndividualPipelineStage.INGEST_PASSED)
         record.save()
         logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
-        return record.run_id
+        return record
     except Exception as e:
         record.error_log = str(e)
         record.stages.append(IndividualPipelineStage.INGEST_FAILED)
@@ -42,11 +42,10 @@ def individual_ingest(participant_id: str, data: dict):
         raise
 
 
-def individual_moderation(run_id):
+def individual_moderation(record: IndividualPipelineRecord):
     """
     Stage 2: Moderate the incoming message before processing.
     """
-    record = IndividualPipelineRecord.objects.get(run_id=run_id)
     message = record.message
     try:
         blocked_str = moderate_message(message)
@@ -57,20 +56,19 @@ def individual_moderation(run_id):
         else:
             record.stages.append(IndividualPipelineStage.MODERATION_PASSED)
         record.save()
-        logger.info(f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {run_id}")
+        logger.info(f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {record.run_id}")
     except Exception as e:
-        logger.error(f"Individual moderation pipeline failed for run_id {run_id}: {e}")
+        logger.error(f"Individual moderation pipeline failed for run_id {record.run_id}: {e}")
         record.stages.append(IndividualPipelineStage.MODERATION_FAILED)
         record.error_log = str(e)
         record.save()
         raise
 
 
-def individual_process(run_id):
+def individual_process(record: IndividualPipelineRecord):
     """
     Stage 3: Process data via an LLM call.
     """
-    record = IndividualPipelineRecord.objects.get(run_id=run_id)
     participant_id = record.participant_id
     try:
         # Load chat history and instructions from the database
@@ -88,20 +86,19 @@ def individual_process(run_id):
             record.response = response
             record.stages.append(IndividualPipelineStage.PROCESS_PASSED)
         record.save()
-        logger.info(f"Individual process pipeline complete for participant {participant_id}, run_id {run_id}")
+        logger.info(f"Individual process pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
-        logger.error(f"Individual process pipeline failed for run_id {run_id}: {e}")
+        logger.error(f"Individual process pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
         record.stages.append(IndividualPipelineStage.PROCESS_FAILED)
         record.save()
         raise
 
 
-def individual_validate(run_id):
+def individual_validate(record: IndividualPipelineRecord):
     """
     Stage 4: Validate the outgoing response before sending.
     """
-    record = IndividualPipelineRecord.objects.get(run_id=run_id)
     response = record.response
     try:
         if len(response) <= MAX_RESPONSE_CHARACTER_LENGTH:
@@ -115,20 +112,19 @@ def individual_validate(run_id):
         # Save the generated response to the database
         # todo move outside validation better be in send
         save_assistant_response(record.participant_id, record.validated_message)
-        logger.info(f"Individual validate pipeline complete for participant {record.participant_id}, run_id {run_id}")
+        logger.info(f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}")
     except Exception as e:
-        logger.error(f"Individual validate pipeline failed for run_id {run_id}: {e}")
+        logger.error(f"Individual validate pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
         record.stages.append(IndividualPipelineStage.VALIDATE_FAILED)
         record.save()
         raise
 
 
-def individual_send(run_id):
+def individual_send(record: IndividualPipelineRecord):
     """
     Stage 5: Retrieve the most recent response and send it to the participant.
     """
-    record = IndividualPipelineRecord.objects.get(run_id=run_id)
     participant_id = record.participant_id
     response = record.validated_message
     try:
@@ -137,9 +133,9 @@ def individual_send(run_id):
         # Update the pipeline record for the sending stage
         record.stages.append(IndividualPipelineStage.SEND_PASSED)
         record.save()
-        logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {run_id}")
+        logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
-        logger.error(f"Individual send pipeline failed for run_id {run_id}: {e}")
+        logger.error(f"Individual send pipeline failed for run_id {record.run_id}: {e}")
         record.stages.append(IndividualPipelineStage.SEND_FAILED)
         record.error_log = str(e)
         record.save()
@@ -155,25 +151,23 @@ def individual_send(run_id):
 def individual_pipeline(self, participant_id, data):
     try:
         # Stage 1: Ingest the data and create a run record.
-        run_id = individual_ingest(participant_id, data)
+        record = individual_ingest(participant_id, data)
 
         # Stage 2: Moderate the incoming message.
-        individual_moderation(run_id)
+        individual_moderation(record)
 
-        record = IndividualPipelineRecord.objects.get(run_id=run_id)
         # Stage 3: Process via LLM call if the message was not blocked.
         if IndividualPipelineStage.MODERATION_PASSED in record.stages:
-            individual_process(run_id)
-
+            individual_process(record)
         if IndividualPipelineStage.PROCESS_SKIPPED in record.stages:
             return
 
         # Stage 4: Validate the outgoing response.
-        individual_validate(run_id)
+        individual_validate(record)
 
         # Stage 5: Send the response if the participant is not a test user.
         if not is_test_user(record.participant_id):
-            individual_send(run_id)
+            individual_send(record)
     except Exception as exc:
         logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
