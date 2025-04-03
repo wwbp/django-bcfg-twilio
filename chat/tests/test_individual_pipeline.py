@@ -166,7 +166,8 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         f"{description}: response expected {expected['expected_response']} but got {record.response}"
     )
     assert record.validated_message == expected["expected_validated_message"], (
-        f"{description}: validated_message expected {expected['expected_validated_message']} but got {record.validated_message}"
+        f"{description}: validated_message expected {expected['expected_validated_message']} "
+        f"but got {record.validated_message}"
     )
 
     # Assert generate_response call count:
@@ -180,7 +181,8 @@ def test_individual_pipeline_parametrized(default_context, description, particip
     # Should be 1 only if SEND_PASSED is in the expected stages.
     expected_send_calls = 1 if IndividualPipelineStage.SEND_PASSED in expected["expected_stages"] else 0
     assert mock_send.call_count == expected_send_calls, (
-        f"{description}: send_message_to_participant call count expected {expected_send_calls} but got {mock_send.call_count}"
+        f"{description}: send_message_to_participant call count expected {expected_send_calls} "
+        f"but got {mock_send.call_count}"
     )
 
     mock_is_test.assert_called_once_with(participant_id)
