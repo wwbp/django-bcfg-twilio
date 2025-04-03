@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
-from chat.services.individual_pipeline import individual_pipeline_task
+from chat.services.individual_pipeline import individual_pipeline
 from chat.models import IndividualPipelineRecord, MessageType
 
 
@@ -134,7 +134,7 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         ) as mock_send,
         patch("chat.services.individual_pipeline.is_test_user", return_value=mocks["is_test_user"]) as mock_is_test,
     ):
-        individual_pipeline_task.run(participant_id, data)
+        individual_pipeline.run(participant_id, data)
 
     record = IndividualPipelineRecord.objects.get(participant_id=participant_id)
 

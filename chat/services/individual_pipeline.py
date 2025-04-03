@@ -7,7 +7,7 @@ from .crud import (
     is_test_user,
     load_individual_chat_history,
     load_instruction_prompt,
-    ingest_individual_request,
+    ingest_request,
     save_assistant_response,
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def individual_ingest_pipeline(participant_id: str, data: dict):
+def individual_ingest(participant_id: str, data: dict):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
     try:
         # Validate and store incoming data
-        ingest_individual_request(participant_id, data)
+        ingest_request(participant_id, data)
 
         # Create a new record with a unique run_id
         record = IndividualPipelineRecord.objects.create(
@@ -43,7 +43,7 @@ def individual_ingest_pipeline(participant_id: str, data: dict):
         raise
 
 
-def individual_moderation_pipeline(run_id):
+def individual_moderation(run_id):
     """
     Stage 2: Moderate the incoming message before processing.
     """
@@ -68,7 +68,7 @@ def individual_moderation_pipeline(run_id):
         raise
 
 
-def individual_process_pipeline(run_id):
+def individual_process(run_id):
     """
     Stage 3: Process data via an LLM call.
     """
@@ -83,9 +83,7 @@ def individual_process_pipeline(run_id):
         # todo broken https://dev.azure.com/pod-consulting/AI%20Chatbot%20Application/_workitems/edit/9959
         if message.strip() != record.message.strip():
             record.skipped = True
-            record.error_log = (
-                "Message is not the latest in chat history."  
-            )
+            record.error_log = "Message is not the latest in chat history."
         else:
             instructions = load_instruction_prompt(participant_id)
             response = generate_response(chat_history, instructions, message)
@@ -105,7 +103,7 @@ def individual_process_pipeline(run_id):
         raise
 
 
-def individual_validate_pipeline(run_id):
+def individual_validate(run_id):
     """
     Stage 4: Validate the outgoing response before sending.
     """
@@ -132,7 +130,7 @@ def individual_validate_pipeline(run_id):
         raise
 
 
-def individual_send_pipeline(run_id):
+def individual_send(run_id):
     """
     Stage 5: Retrieve the most recent response and send it to the participant.
     """
@@ -163,29 +161,29 @@ def individual_send_pipeline(run_id):
 
 
 @shared_task(bind=True, max_retries=3)
-def individual_pipeline_task(self, participant_id, data):
+def individual_pipeline(self, participant_id, data):
     try:
         # Stage 1: Ingest the data and create a run record.
-        run_id = individual_ingest_pipeline(participant_id, data)
+        run_id = individual_ingest(participant_id, data)
 
         # Stage 2: Moderate the incoming message.
-        individual_moderation_pipeline(run_id)
+        individual_moderation(run_id)
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
 
         # Stage 3: Process via LLM call if the message was not blocked.
         if not record.moderated:
-            individual_process_pipeline(run_id)
+            individual_process(run_id)
 
         if record.skipped:
             return
 
         # Stage 4: Validate the outgoing response.
-        individual_validate_pipeline(run_id)
+        individual_validate(run_id)
         record = IndividualPipelineRecord.objects.get(run_id=run_id)
 
         # Stage 5: Send the response if the participant is not a test user.
         if not is_test_user(record.participant_id):
-            individual_send_pipeline(run_id)
+            individual_send(run_id)
     except Exception as exc:
         logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
         raise self.retry(exc=exc, countdown=10) from exc
