@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline_task
-from chat.models import IndividualPipelineRecord
+from chat.models import IndividualPipelineRecord, MessageType
 
 
 # Define a fixture for the default context that does not affect the test.
@@ -15,6 +15,7 @@ def default_context():
         "initial_message": "Hello",
         "week_number": 1,
         "name": "Default Name",
+        "message_type": MessageType.INITIAL,
     }
 
 

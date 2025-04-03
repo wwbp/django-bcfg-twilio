@@ -1,3 +1,4 @@
+from chat.models import MessageType
 from rest_framework import serializers
 
 
@@ -7,6 +8,7 @@ class ContextSerializer(serializers.Serializer):
     initial_message = serializers.CharField()
     week_number = serializers.IntegerField()
     name = serializers.CharField()
+    message_type = serializers.CharField(default=MessageType.INITIAL)
 
 
 class IncomingMessageSerializer(serializers.Serializer):

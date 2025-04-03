@@ -38,6 +38,7 @@ def create_new_user(user, context: dict, message: str):
         user.name = context.get("name", "")
         user.initial_message = context.get("initial_message", "")
         user.week_number = context.get("week_number")
+        user.message_type = context.get("message_type")
         user.save()  # Save updated fields
 
         # Create initial transcripts:
@@ -71,6 +72,13 @@ def update_existing_user(user, context: dict, message: str):
             user.initial_message = new_initial_message
             # Create a new assistant transcript for the updated initial message
             ChatTranscript.objects.create(user=user, role="assistant", content=new_initial_message)
+            updated = True
+
+        # Check if message type changed
+        new_message_type = context.get("message_type")
+        if new_message_type and new_message_type != user.message_type:
+            logger.info("Message type changed for user %s from %s to %s.", user.id, user.message_type, new_message_type)
+            user.message_type = new_message_type
             updated = True
 
         # Always create a transcript for the new user message
@@ -288,10 +296,12 @@ def load_instruction_prompt(user_id: str):
         user = User.objects.get(id=user_id)
         week = user.week_number
         assistant_name = user.school_mascot if user.school_mascot else "Assistant"
+        message_type = user.message_type
     except User.DoesNotExist:
         logger.warning(f"User with id {user_id} not found. Using default prompt.")
         week = None
         assistant_name = "Assistant"
+        message_type = None
 
     # Load the most recent controls record
     try:
@@ -300,12 +310,15 @@ def load_instruction_prompt(user_id: str):
         controls = Control.objects.create()
 
     # Retrieve the prompt for the given week, falling back to a default if none is found
-    if week is not None:
-        prompt_obj = Prompt.objects.filter(week=week).last()
-    else:
-        prompt_obj = None
+    prompt_obj = None
+    if week is not None and message_type is not None:
+        prompt_obj = Prompt.objects.filter(week=week, type=message_type).order_by("created_at").last()
 
-    activity = prompt_obj.activity if prompt_obj else controls.default
+    if prompt_obj:
+        activity = prompt_obj.activity
+    else:
+        logger.info(f"No Prompt found for week '{week}' and type '{message_type}'. Falling back to default activity.")
+        activity = controls.default
 
     # Format the final prompt using the template
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
