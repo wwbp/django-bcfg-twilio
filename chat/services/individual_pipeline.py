@@ -4,7 +4,6 @@ from celery import shared_task
 from .moderation import moderate_message
 from .crud import (
     get_moderation_message,
-    is_latest_run,
     is_test_user,
     load_individual_chat_history,
     load_instruction_prompt,
@@ -76,7 +75,7 @@ def individual_process(record: IndividualPipelineRecord):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
-        if not is_latest_run(record.run_id):
+        if record != IndividualPipelineRecord.objects.order_by('-created_at').first():
             record.stages.append(IndividualPipelineStage.PROCESS_SKIPPED)
         else:
             instructions = load_instruction_prompt(participant_id)
