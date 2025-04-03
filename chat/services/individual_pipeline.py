@@ -26,7 +26,7 @@ def individual_ingest(participant_id: str, data: dict):
     Stage 1: Validate and store incoming data, then create a new run record.
     """
     record = IndividualPipelineRecord.objects.create(
-        participant_id=participant_id, message=data.get("message", ""), error_log=""
+        participant_id=participant_id, message=data.get("message", "")
     )
     try:
         ingest_request(participant_id, data)
