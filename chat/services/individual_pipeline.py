@@ -34,7 +34,7 @@ def individual_ingest(participant_id: str, data: dict):
         return record
     except Exception as e:
         record.error_log = str(e)
-        record.status = IndividualPipelineRecord.StageStatus.INGEST_FAILED
+        record.status = IndividualPipelineRecord.StageStatus.FAILED
         record.save()
         logger.error(f"Individual ingest pipeline failed for {participant_id}: {e}")
         raise
@@ -59,7 +59,7 @@ def individual_moderation(record: IndividualPipelineRecord):
         )
     except Exception as e:
         logger.error(f"Individual moderation pipeline failed for run_id {record.run_id}: {e}")
-        record.status = IndividualPipelineRecord.StageStatus.MODERATION_FAILED
+        record.status = IndividualPipelineRecord.StageStatus.FAILED
         record.error_log = str(e)
         record.save()
         raise
@@ -88,7 +88,7 @@ def individual_process(record: IndividualPipelineRecord):
     except Exception as e:
         logger.error(f"Individual process pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
-        record.status = IndividualPipelineRecord.StageStatus.PROCESS_FAILED
+        record.status = IndividualPipelineRecord.StageStatus.FAILED
         record.save()
         raise
 
@@ -101,11 +101,10 @@ def individual_validate(record: IndividualPipelineRecord):
     try:
         if len(response) <= MAX_RESPONSE_CHARACTER_LENGTH:
             record.validated_message = response
-            record.status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
         else:
             processed_response = ensure_within_character_limit(response)
             record.validated_message = processed_response
-            record.status = IndividualPipelineRecord.StageStatus.VALIDATE_CHARACTER_LIMIT_HIT
+        record.status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
         record.save()
         logger.info(
             f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}"
@@ -113,7 +112,7 @@ def individual_validate(record: IndividualPipelineRecord):
     except Exception as e:
         logger.error(f"Individual validate pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
-        record.status = IndividualPipelineRecord.StageStatus.VALIDATE_FAILED
+        record.status = IndividualPipelineRecord.StageStatus.FAILED
         record.save()
         raise
 
@@ -136,7 +135,7 @@ def individual_send(record: IndividualPipelineRecord):
         logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
         logger.error(f"Individual send pipeline failed for run_id {record.run_id}: {e}")
-        record.status = IndividualPipelineRecord.StageStatus.SEND_FAILED
+        record.status = IndividualPipelineRecord.StageStatus.FAILED
         record.error_log = str(e)
         record.save()
         raise

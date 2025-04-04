@@ -102,18 +102,13 @@ class StrategyPrompt(models.Model):
 class IndividualPipelineRecord(models.Model):
     class StageStatus(models.TextChoices):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
-        INGEST_FAILED = "INGEST_FAILED", "Ingest Failed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
         MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
-        MODERATION_FAILED = "MODERATION_FAILED", "Moderation Failed"
         PROCESS_PASSED = "PROCESS_PASSED", "Process Passed"
         PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
-        PROCESS_FAILED = "PROCESS_FAILED", "Process Failed"
-        VALIDATE_CHARACTER_LIMIT_HIT = "VALIDATE_CHARACTER_LIMIT_HIT", "Validate Character Limit Hit"
         VALIDATE_PASSED = "VALIDATE_PASSED", "Validate Passed"
-        VALIDATE_FAILED = "VALIDATE_FAILED", "Validate Failed"
         SEND_PASSED = "SEND_PASSED", "Send Passed"
-        SEND_FAILED = "SEND_FAILED", "Send Failed"
+        FAILED = "FAILED", "Failed"
 
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     participant_id = models.CharField(max_length=255)
