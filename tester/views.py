@@ -1,5 +1,5 @@
 # tester/views.py
-from chat.models import ChatTranscript, GroupChatTranscript, MessageType, User as ChatUser, Group
+from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
