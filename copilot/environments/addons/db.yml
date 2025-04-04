@@ -9,7 +9,7 @@ Parameters:
   dbDBName:
     Type: String
     Description: The name of the initial database to be created in the Aurora Serverless v2 cluster.
-    Default: mysql_db
+    Default: chatbot
     # Cannot have special characters
     # Naming constraints: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Limits.html#RDS_Limits.Constraints
   VPCID:
@@ -27,9 +27,20 @@ Mappings:
       "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
       "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
     
-    All:
+    test:
       "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
       "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
+    
+    prod:
+      "DBMinCapacity": 0.5 # AllowedValues: from 0.5 through 128
+      "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
+  mydbclusterSnapshotsMap:
+    dev:
+      ARN: ''
+    test:
+      ARN: ''
+    prod:
+      ARN: ''
 
 Resources:
   dbDBSubnetGroup:
@@ -67,8 +78,8 @@ Resources:
       Description: Ingress from one or more workloads in the environment.
       GroupId: !Ref dbDBClusterSecurityGroup
       IpProtocol: tcp
-      ToPort: 3306
-      FromPort: 3306
+      ToPort: 5432
+      FromPort: 5432
       SourceSecurityGroupId: !Ref dbWorkloadSecurityGroup
   
   dbAuroraSecret:
@@ -78,7 +89,7 @@ Resources:
     Properties:
       Description: !Sub Aurora main user secret for ${AWS::StackName}
       GenerateSecretString:
-        SecretStringTemplate: '{"username": "admin"}'
+        SecretStringTemplate: '{"username": "postgres"}'
         GenerateStringKey: "password"
         ExcludePunctuation: true
         IncludeSpace: false
@@ -89,9 +100,9 @@ Resources:
     Type: 'AWS::RDS::DBClusterParameterGroup'
     Properties:
       Description: !Ref 'AWS::StackName'
-      Family: 'aurora-mysql8.0'
+      Family: 'aurora-postgresql16'
       Parameters:
-        character_set_client: 'utf8'
+        client_encoding: 'UTF8'
   
   dbDBCluster:
     Metadata:
@@ -103,18 +114,19 @@ Resources:
       MasterUserPassword:
         !Join [ "",  [ '{{resolve:secretsmanager:', !Ref dbAuroraSecret, ":SecretString:password}}" ]]
       DatabaseName: !Ref dbDBName
-      Engine: 'aurora-mysql'
-      EngineVersion: '8.0.mysql_aurora.3.06.0'
+      Engine: 'aurora-postgresql'
+      EngineVersion: '16.6'
       DBClusterParameterGroupName: !Ref dbDBClusterParameterGroup
       DBSubnetGroupName: !Ref dbDBSubnetGroup
-      Port: 3306
+      Port: 5432
       VpcSecurityGroupIds:
         - !Ref dbDBClusterSecurityGroup
       ServerlessV2ScalingConfiguration:
         # Replace "All" below with "!Ref Env" to set different autoscaling limits per environment.
-        MinCapacity: !FindInMap [dbEnvScalingConfigurationMap, All, DBMinCapacity]
-        MaxCapacity: !FindInMap [dbEnvScalingConfigurationMap, All, DBMaxCapacity]
-  
+        MinCapacity: !FindInMap [dbEnvScalingConfigurationMap, !Ref Env, DBMinCapacity]
+        MaxCapacity: !FindInMap [dbEnvScalingConfigurationMap, !Ref Env, DBMaxCapacity]
+      SnapshotIdentifier: !FindInMap [mydbclusterSnapshotsMap, !Ref Env, ARN]
+
   dbDBWriterInstance:
     Metadata:
       'aws:copilot:description': 'The db Aurora Serverless v2 writer instance'
@@ -122,7 +134,7 @@ Resources:
     Properties:
       DBClusterIdentifier: !Ref dbDBCluster
       DBInstanceClass: db.serverless
-      Engine: 'aurora-mysql'
+      Engine: 'aurora-postgresql'
       PromotionTier: 1
       AvailabilityZone: !Select
         - 0
