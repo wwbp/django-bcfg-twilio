@@ -306,7 +306,7 @@ def load_instruction_prompt(user_id: str):
     try:
         controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
-        raise ValueError("No Control record found for persona and system prompts.")
+        raise 
 
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None
