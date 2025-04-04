@@ -292,7 +292,11 @@ INSTRUCTION_PROMPT_TEMPLATE = (
 
 
 def load_instruction_prompt(user_id: str):
-    user = User.objects.get(id=user_id)
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        raise
+    
     week = user.week_number
     message_type = user.message_type
 

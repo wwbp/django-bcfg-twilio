@@ -55,6 +55,14 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
     with pytest.raises(ValueError):
         load_instruction_prompt("user2")
 
+def test_load_instruction_prompt_user_does_not_exist():
+    """
+    When the user does not exist, the function should use the default assistant name
+    and the Control's default activity.
+    """
+    control = Control.objects.create(system="System C", persona="Persona C", default="Default Activity C")
+    with pytest.raises(User.DoesNotExist):
+        load_instruction_prompt("non_existent_user")
 
 def test_load_instruction_prompt_with_empty_school_mascot():
     """
