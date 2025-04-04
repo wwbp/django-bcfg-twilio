@@ -1,9 +1,6 @@
 # tester/views.py
-from django.http import HttpResponse
 from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
-from chat.models import ChatTranscript
 from django.views.decorators.http import require_POST
-from chat.tasks import add
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -12,7 +9,6 @@ from django.views import View
 from django.http import JsonResponse
 from django.urls import reverse
 import requests
-from chat.models import User as ChatUser
 from tester.models import ChatResponse
 
 
@@ -82,15 +78,6 @@ class ReceiveParticipantResponseView(View):
             bot_response=bot_response
         )
         return JsonResponse({"message": "Bot response received"}, status=200)
-
-
-def test_celery(request):
-    # Dispatch the task asynchronously
-    task_result = add.delay(3, 4)
-    return JsonResponse({
-        'message': 'Task submitted successfully!',
-        'task_id': task_result.id
-    })
 
 
 @csrf_exempt

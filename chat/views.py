@@ -4,8 +4,8 @@ from django.http import JsonResponse
 from django.views import View
 from django import forms
 
-from .group_pipeline import group_pipeline_ingest_task
-from .individual_pipeline import individual_pipeline_ingest_task
+from .services.group_pipeline import group_pipeline_ingest_task
+from .services.individual_pipeline import individual_pipeline_task
 from .models import Prompt, Control, StrategyPrompt, Summary
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.views import APIView
@@ -23,7 +23,7 @@ class IngestIndividualView(APIView):
     def post(self, request, id):
         serializer = IncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            individual_pipeline_ingest_task.delay(
+            individual_pipeline_task.delay(
                 id, serializer.validated_data)
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -11,6 +11,18 @@ Parameters:
     Default: ""
 
 Resources:
+  RedisSlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/copilot/${App}/${Env}/redis-slow-log'
+      RetentionInDays: 30
+
+  RedisEngineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/copilot/${App}/${Env}/redis-engine-log'
+      RetentionInDays: 30
+
   # Subnet group to control where the Redis gets placed
   RedisSubnetGroup:
     Type: AWS::ElastiCache::SubnetGroup
@@ -54,6 +66,19 @@ Resources:
       CacheSubnetGroupName: !Ref 'RedisSubnetGroup'
       VpcSecurityGroupIds:
         - !GetAtt 'RedisSecurityGroup.GroupId'
+      LogDeliveryConfigurations:
+        - DestinationType: cloudwatch-logs
+          LogFormat: json
+          LogType: slow-log
+          DestinationDetails:
+            CloudWatchLogsDetails:
+              LogGroup: !Ref 'RedisSlowLogGroup'
+        - DestinationType: cloudwatch-logs
+          LogFormat: json
+          LogType: engine-log
+          DestinationDetails:
+            CloudWatchLogsDetails:
+              LogGroup: !Ref 'RedisEngineLogGroup'
 
   # Redis endpoint stored in SSM so that other services can retrieve the endpoint.
   RedisEndpointAddressParam:

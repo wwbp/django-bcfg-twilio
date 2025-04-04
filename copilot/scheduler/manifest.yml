@@ -4,12 +4,13 @@
 
 # Your service name will be used in naming your resources like log groups, ECS services, etc.
 name: scheduler
-type: Worker Service
+type: Backend Service
 
 # Configuration for your containers and service.
 image:
   # Docker build arguments.
   build: Dockerfile
+  target: production
 
 entrypoint: "celery -A config beat --loglevel=info"
 
@@ -27,34 +28,25 @@ network:
 # storage:
   # readonly_fs: true       # Limit to read-only access to mounted root filesystems.
 
-
-# You can register to topics from other services.
-# The events can be received from an SQS queue via the env var $COPILOT_QUEUE_URI.
-# subscribe:
-#   topics: 
-#     - name: topic-from-another-service
-#       service: another-service
-
-# Optional fields for more advanced use-cases.
-#
-#variables:                    # Pass environment variables as key value pairs.
-#  LOG_LEVEL: info
 variables:                    # Pass environment variables as key value pairs.
  LOG_LEVEL: info
- BCFG_DOMAIN: https://test-2025.joinstarterkit.org
- 
-#secrets:                      # Pass secrets from AWS Systems Manager (SSM) Parameter Store.
-#  GITHUB_TOKEN: GITHUB_TOKEN  # The key is the name of the environment variable, the value is the name of the SSM parameter.
 
 secrets:
   DB_SECRET:
     from_cfn: ${COPILOT_APPLICATION_NAME}-${COPILOT_ENVIRONMENT_NAME}-dbAuroraSecret
   CELERY_BROKER_HOST: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/RedisEndpoint
-  OPENAI_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/OPENAI_API_KEY
-  
-# You can override any of the values defined above by environment.
-#environments:
-#  test:
-#    count: 2               # Number of tasks to run for the "test" environment.
-#    deployment:            # The deployment strategy for the "test" environment.
-#       rolling: 'recreate' # Stops existing tasks before new ones are started for faster deployments.
+
+environments:
+  dev:
+    deployment: # The deployment strategy for the "dev" environment.
+      rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
+    variables:
+      DJANGO_ENV: dev
+  test:
+    deployment: # The deployment strategy for the "test" environment.
+      rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
+    variables:
+      DJANGO_ENV: test
+  prod:
+    variables:
+      DJANGO_ENV: prod
