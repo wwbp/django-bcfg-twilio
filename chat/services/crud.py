@@ -92,7 +92,7 @@ def update_existing_user(user, context: dict, message: str):
         raise
 
 
-def ingest_individual_request(participant_id: str, data: dict):
+def ingest_request(participant_id: str, data: dict):
     """
     Ingests an individual request by either creating a new user record or updating
     an existing one. The operation is wrapped in an atomic transaction for consistency.

@@ -30,7 +30,6 @@ network:
 
 variables:                    # Pass environment variables as key value pairs.
  LOG_LEVEL: info
- BCFG_DOMAIN: https://test-2025.joinstarterkit.org
 
 secrets:
   DB_SECRET:
@@ -46,11 +45,13 @@ environments:
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
       DJANGO_ENV: dev
+      BCFG_DOMAIN: https://dev-2025.joinstarterkit.org
   test:
     deployment: # The deployment strategy for the "test" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
       DJANGO_ENV: test
+      BCFG_DOMAIN: https://test-2025.joinstarterkit.org
   prod:
     count: 2
     variables:

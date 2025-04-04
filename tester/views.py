@@ -89,6 +89,7 @@ def create_test_case(request):
     school_name = data.get("school_name")
     school_mascot = data.get("school_mascot")
     initial_message = data.get("initial_message")
+    message_type = data.get("message_type")
 
     if participant_id and name:
         # Create the test user.
@@ -98,7 +99,8 @@ def create_test_case(request):
             school_name=school_name,
             school_mascot=school_mascot,
             initial_message=initial_message,
-            is_test=True
+            is_test=True,
+            message_type=message_type
         )
         # Insert the initial message as the first assistant message in the transcript.
         ChatTranscript.objects.create(

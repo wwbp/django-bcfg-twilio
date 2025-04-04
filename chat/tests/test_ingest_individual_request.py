@@ -1,6 +1,6 @@
 import pytest
 from chat.models import MessageType, User, ChatTranscript
-from chat.services.crud import ingest_individual_request
+from chat.services.crud import ingest_request
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def test_new_user_creation(base_context):
         "message": "I would like to enroll.",
     }
 
-    ingest_individual_request(participant_id, input_data)
+    ingest_request(participant_id, input_data)
 
     # Assert that the user was created with correct attributes
     user = User.objects.get(id=participant_id)
@@ -76,7 +76,7 @@ def test_existing_user_update_week_number(existing_user, existing_transcript):
         "message": "User message for week 2",
     }
 
-    ingest_individual_request(existing_user.id, input_data)
+    ingest_request(existing_user.id, input_data)
 
     existing_user.refresh_from_db()
     assert existing_user.week_number == 2
@@ -100,7 +100,7 @@ def test_existing_user_update_initial_message(existing_user, existing_transcript
         "message": "Follow up message",
     }
 
-    ingest_individual_request(existing_user.id, input_data)
+    ingest_request(existing_user.id, input_data)
 
     existing_user.refresh_from_db()
     assert existing_user.initial_message == "New greeting"
@@ -125,7 +125,7 @@ def test_existing_user_update_message_type(existing_user, existing_transcript):
         "message": "User check-in message",
     }
 
-    ingest_individual_request(existing_user.id, input_data)
+    ingest_request(existing_user.id, input_data)
 
     existing_user.refresh_from_db()
     assert existing_user.message_type == MessageType.CHECK_IN
@@ -149,7 +149,7 @@ def test_existing_user_no_update(existing_user, existing_transcript):
         "message": "Just another message",
     }
 
-    ingest_individual_request(existing_user.id, input_data)
+    ingest_request(existing_user.id, input_data)
 
     existing_user.refresh_from_db()
     assert existing_user.week_number == 1
