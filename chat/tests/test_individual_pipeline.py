@@ -4,8 +4,10 @@ from unittest.mock import patch
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
+    Control,
     IndividualPipelineRecord,
     MessageType,
+    Prompt,
 )
 
 
