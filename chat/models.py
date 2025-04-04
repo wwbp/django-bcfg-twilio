@@ -3,6 +3,11 @@ from django.db import models
 
 from .services.constant import MODERATION_MESSAGE_DEFAULT
 
+class MessageType(models.TextChoices):
+    INITIAL = "initial", "Initial"
+    REMINDER = "reminder", "Reminder"
+    CHECK_IN = "check-in", "Check-in"
+    SUMMARY = "summary", "Summary"
 
 class User(models.Model):
     id = models.CharField(primary_key=True, max_length=255)
@@ -13,6 +18,7 @@ class User(models.Model):
     initial_message = models.TextField(default='')
     is_test = models.BooleanField(default=False)
     week_number = models.IntegerField(null=True, blank=True)
+    message_type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
 
 
 class Group(models.Model):
@@ -54,6 +60,7 @@ class Prompt(models.Model):
     week = models.IntegerField()
     activity = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
 
 
 class Control(models.Model):
@@ -92,25 +99,31 @@ class StrategyPrompt(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
 class IndividualPipelineRecord(models.Model):
+    class StageStatus(models.TextChoices):
+        INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
+        MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
+        MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
+        PROCESS_PASSED = "PROCESS_PASSED", "Process Passed"
+        PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
+        VALIDATE_PASSED = "VALIDATE_PASSED", "Validate Passed"
+        SEND_PASSED = "SEND_PASSED", "Send Passed"
+        FAILED = "FAILED", "Failed"
+
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     participant_id = models.CharField(max_length=255)
     message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
-    ingested = models.BooleanField(default=False)
-    moderated = models.BooleanField(default=False)
     instruction_prompt = models.TextField(blank=True, null=True)
-    skipped = models.BooleanField(default=False)
-    processed = models.BooleanField(default=False)
-    shortened = models.BooleanField(default=False)
     validated_message = models.TextField(blank=True, null=True)
-    sent = models.BooleanField(default=False)
-    failed = models.BooleanField(default=False)
     error_log = models.TextField(blank=True, null=True)
+    status = models.CharField(
+        max_length=50,
+        choices=StageStatus.choices,
+        default=StageStatus.INGEST_PASSED
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     def __str__(self):
         return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
 

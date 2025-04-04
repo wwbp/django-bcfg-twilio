@@ -32,7 +32,7 @@ def log_exceptions(func):
 
 @log_exceptions
 def _generate_response(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
-    engine = OpenAIEngine(settings.OPENAI_API_KEY, model="gpt-4o-mini")
+    engine = OpenAIEngine(settings.OPENAI_API_KEY, model=settings.OPENAI_MODEL)
     assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
     response = asyncio.run(assistant.chat_round_str(message))
     return response
@@ -49,7 +49,7 @@ def generate_response(history_json: list[dict], instructions: str, message: str)
 def chat_completion(instructions: str) -> str:
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.OPENAI_MODEL,
         messages=[
             {"role": "user", "content": instructions},
         ],
