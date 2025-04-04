@@ -192,7 +192,7 @@ MODERATION_VALUES_FOR_BLOCKED = json.loads(
             "sexual": 0.5,
             "sexual/minors": 0.2,
             "violence": 0.7,
-            "violence/graphic": 0.8,
+            "violence/graphic": 0.8
         }"""
     )
 )
