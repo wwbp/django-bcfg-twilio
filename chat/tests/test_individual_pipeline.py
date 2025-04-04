@@ -6,7 +6,6 @@ from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
     IndividualPipelineRecord,
     MessageType,
-    IndividualPipelineStage,
 )
 
 
@@ -38,13 +37,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_stages": [
-                    IndividualPipelineStage.INGEST_PASSED,
-                    IndividualPipelineStage.MODERATION_PASSED,
-                    IndividualPipelineStage.PROCESS_PASSED,
-                    IndividualPipelineStage.VALIDATE_PASSED,
-                    IndividualPipelineStage.SEND_PASSED,
-                ],
+                "expected_status": "SEND_PASSED",
                 "expected_response": "LLM response",
                 "expected_validated_message": "LLM response",
             },
@@ -61,12 +54,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_stages": [
-                    IndividualPipelineStage.INGEST_PASSED,
-                    IndividualPipelineStage.MODERATION_BLOCKED,
-                    IndividualPipelineStage.VALIDATE_PASSED,
-                    IndividualPipelineStage.SEND_PASSED,
-                ],
+                "expected_status": "SEND_PASSED",
                 "expected_response": "Self-harm safety plan message",
                 "expected_validated_message": "Self-harm safety plan message",
             },
@@ -83,13 +71,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_stages": [
-                    IndividualPipelineStage.INGEST_PASSED,
-                    IndividualPipelineStage.MODERATION_PASSED,
-                    IndividualPipelineStage.PROCESS_PASSED,
-                    IndividualPipelineStage.VALIDATE_CHARACTER_LIMIT_HIT,
-                    IndividualPipelineStage.SEND_PASSED,
-                ],
+                "expected_status": "SEND_PASSED",
                 "expected_response": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
                 "expected_validated_message": "Shortened response",
             },
@@ -106,12 +88,7 @@ def default_context():
                 "is_test_user": True,
             },
             {
-                "expected_stages": [
-                    IndividualPipelineStage.INGEST_PASSED,
-                    IndividualPipelineStage.MODERATION_PASSED,
-                    IndividualPipelineStage.PROCESS_PASSED,
-                    IndividualPipelineStage.VALIDATE_PASSED,
-                ],
+                "expected_status": "VALIDATE_PASSED",
                 "expected_response": "LLM test response",
                 "expected_validated_message": "LLM test response",
             },
@@ -155,9 +132,9 @@ def test_individual_pipeline_parametrized(default_context, description, particip
 
     record = IndividualPipelineRecord.objects.get(participant_id=participant_id)
 
-    # Assert that the stages recorded match exactly the expected list.
-    assert record.stages == expected["expected_stages"], (
-        f"{description}: Expected stages {expected['expected_stages']}, but got {record.stages}"
+    # Assert that the final status recorded matches the expected status.
+    assert record.status == expected["expected_status"], (
+        f"{description}: Expected status {expected['expected_status']}, but got {record.status}"
     )
 
     # Assert the response and validated_message fields.
@@ -171,14 +148,14 @@ def test_individual_pipeline_parametrized(default_context, description, particip
 
     # Assert generate_response call count:
     # Call count should be 0 if moderation returned a blocking value.
-    expected_gen_calls = 0 if IndividualPipelineStage.MODERATION_BLOCKED in expected["expected_stages"] else 1
+    expected_gen_calls = 0 if mocks["moderation_return"] else 1
     assert mock_gen.call_count == expected_gen_calls, (
         f"{description}: generate_response call count expected {expected_gen_calls} but got {mock_gen.call_count}"
     )
 
     # Assert send_message_to_participant call count:
-    # Should be 1 only if SEND_PASSED is in the expected stages.
-    expected_send_calls = 1 if IndividualPipelineStage.SEND_PASSED in expected["expected_stages"] else 0
+    # Should be 1 only if not a test user.
+    expected_send_calls = 1 if not mocks["is_test_user"] else 0
     assert mock_send.call_count == expected_send_calls, (
         f"{description}: send_message_to_participant call count expected {expected_send_calls} "
         f"but got {mock_send.call_count}"

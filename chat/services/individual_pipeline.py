@@ -12,7 +12,7 @@ from .crud import (
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
 from .send import send_message_to_participant
-from ..models import IndividualPipelineRecord, IndividualPipelineStage
+from ..models import IndividualPipelineRecord
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +28,13 @@ def individual_ingest(participant_id: str, data: dict):
     record = IndividualPipelineRecord.objects.create(participant_id=participant_id, message=data.get("message", ""))
     try:
         ingest_request(participant_id, data)
-        record.stages.append(IndividualPipelineStage.INGEST_PASSED)
+        record.status = IndividualPipelineRecord.StageStatus.INGEST_PASSED
         record.save()
         logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
         return record
     except Exception as e:
         record.error_log = str(e)
-        record.stages.append(IndividualPipelineStage.INGEST_FAILED)
+        record.status = IndividualPipelineRecord.StageStatus.INGEST_FAILED
         record.save()
         logger.error(f"Individual ingest pipeline failed for {participant_id}: {e}")
         raise
@@ -50,16 +50,16 @@ def individual_moderation(record: IndividualPipelineRecord):
         if blocked_str:
             moderation_message = get_moderation_message()
             record.response = moderation_message
-            record.stages.append(IndividualPipelineStage.MODERATION_BLOCKED)
+            record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
         else:
-            record.stages.append(IndividualPipelineStage.MODERATION_PASSED)
+            record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
         record.save()
         logger.info(
             f"Individual moderation pipeline complete for participant {record.participant_id}, run_id {record.run_id}"
         )
     except Exception as e:
         logger.error(f"Individual moderation pipeline failed for run_id {record.run_id}: {e}")
-        record.stages.append(IndividualPipelineStage.MODERATION_FAILED)
+        record.status = IndividualPipelineRecord.StageStatus.MODERATION_FAILED
         record.error_log = str(e)
         record.save()
         raise
@@ -76,19 +76,19 @@ def individual_process(record: IndividualPipelineRecord):
 
         # ensure the message is latest
         if record != IndividualPipelineRecord.objects.order_by('-created_at').first():
-            record.stages.append(IndividualPipelineStage.PROCESS_SKIPPED)
+            record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
         else:
             instructions = load_instruction_prompt(participant_id)
             response = generate_response(chat_history, instructions, message)
             record.instruction_prompt = instructions
             record.response = response
-            record.stages.append(IndividualPipelineStage.PROCESS_PASSED)
+            record.status = IndividualPipelineRecord.StageStatus.PROCESS_PASSED
         record.save()
         logger.info(f"Individual process pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
         logger.error(f"Individual process pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
-        record.stages.append(IndividualPipelineStage.PROCESS_FAILED)
+        record.status = IndividualPipelineRecord.StageStatus.PROCESS_FAILED
         record.save()
         raise
 
@@ -101,11 +101,11 @@ def individual_validate(record: IndividualPipelineRecord):
     try:
         if len(response) <= MAX_RESPONSE_CHARACTER_LENGTH:
             record.validated_message = response
-            record.stages.append(IndividualPipelineStage.VALIDATE_PASSED)
+            record.status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
         else:
             processed_response = ensure_within_character_limit(response)
             record.validated_message = processed_response
-            record.stages.append(IndividualPipelineStage.VALIDATE_CHARACTER_LIMIT_HIT)
+            record.status = IndividualPipelineRecord.StageStatus.VALIDATE_CHARACTER_LIMIT_HIT
         record.save()
         logger.info(
             f"Individual validate pipeline complete for participant {record.participant_id}, run_id {record.run_id}"
@@ -113,7 +113,7 @@ def individual_validate(record: IndividualPipelineRecord):
     except Exception as e:
         logger.error(f"Individual validate pipeline failed for run_id {record.run_id}: {e}")
         record.error_log = str(e)
-        record.stages.append(IndividualPipelineStage.VALIDATE_FAILED)
+        record.status = IndividualPipelineRecord.StageStatus.VALIDATE_FAILED
         record.save()
         raise
 
@@ -131,12 +131,12 @@ def individual_send(record: IndividualPipelineRecord):
         if not is_test_user(record.participant_id):
             asyncio.run(send_message_to_participant(participant_id, response))
             # Update the pipeline record for the sending stage
-            record.stages.append(IndividualPipelineStage.SEND_PASSED)
+            record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
         record.save()
         logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
     except Exception as e:
         logger.error(f"Individual send pipeline failed for run_id {record.run_id}: {e}")
-        record.stages.append(IndividualPipelineStage.SEND_FAILED)
+        record.status = IndividualPipelineRecord.StageStatus.SEND_FAILED
         record.error_log = str(e)
         record.save()
         raise
@@ -157,9 +157,11 @@ def individual_pipeline(self, participant_id, data):
         individual_moderation(record)
 
         # Stage 3: Process via LLM call if the message was not blocked.
-        if IndividualPipelineStage.MODERATION_PASSED in record.stages:
+        if record.status == IndividualPipelineRecord.StageStatus.MODERATION_PASSED:
             individual_process(record)
-        if IndividualPipelineStage.PROCESS_SKIPPED in record.stages:
+
+        # Skip this run message not latest
+        if record.status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED:
             return
 
         # Stage 4: Validate the outgoing response.

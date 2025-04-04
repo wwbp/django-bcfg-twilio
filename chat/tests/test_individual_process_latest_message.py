@@ -2,7 +2,7 @@ from unittest.mock import patch
 from datetime import timedelta
 from django.utils import timezone
 
-from chat.models import IndividualPipelineRecord, IndividualPipelineStage
+from chat.models import IndividualPipelineRecord
 from chat.services.individual_pipeline import individual_process
 
 
@@ -25,19 +25,17 @@ def test_individual_process_sequence():
     record2.save(update_fields=["created_at"])
 
     # --- Call individual_process on each record ---
-    # Process the first record: since it's not the latest, skip
-    with (
-        patch("chat.services.individual_pipeline.generate_response", return_value=["LLM response"]) as mock_gen,
-    ):
+    with patch("chat.services.individual_pipeline.generate_response", return_value="LLM response") as mock_gen:
+        # Process the first record: since it's not the latest, it should be skipped.
         individual_process(record1)
         record1.refresh_from_db()
-        assert IndividualPipelineStage.PROCESS_SKIPPED in record1.stages, (
+        assert record1.status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED, (
             "Expected PROCESS_SKIPPED for the first (non-latest) record."
         )
 
-        # Process the second record: since it is the latest, process
+        # Process the second record: since it is the latest, it should be processed.
         individual_process(record2)
         record2.refresh_from_db()
-        assert IndividualPipelineStage.PROCESS_PASSED in record2.stages, (
-            "Expected PROCESS_PASSED for the latest record2."
+        assert record2.status == IndividualPipelineRecord.StageStatus.PROCESS_PASSED, (
+            "Expected PROCESS_PASSED for the latest record."
         )
