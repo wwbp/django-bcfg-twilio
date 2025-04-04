@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline_task
-from chat.models import IndividualPipelineRecord, MessageType
+from chat.models import Control, IndividualPipelineRecord, MessageType, Prompt
 
 
 # Define a fixture for the default context that does not affect the test.
@@ -19,7 +19,6 @@ def default_context():
     }
 
 
-@pytest.mark.django_db
 @pytest.mark.parametrize(
     "description, participant_id, message, mocks, expected",
     [
@@ -114,6 +113,12 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         "message": message,
         "context": default_context,
     }
+    prompt = Prompt.objects.create(
+        week=default_context["week_number"],
+        type=default_context["message_type"],
+        activity="base activity",
+    )
+    control = Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
     with (
         patch(
             "chat.services.individual_pipeline.moderate_message", return_value=mocks["moderation_return"]
