@@ -1,0 +1,21 @@
+# The manifest for the "prod" environment.
+# Read the full specification for the "Environment" type at:
+#  https://aws.github.io/copilot-cli/docs/manifest/environment/
+
+# Your environment name will be used in naming your resources like VPC, cluster, etc.
+name: prod
+type: Environment
+
+# Configure the load balancers in your environment, once created.
+http:
+  public:
+    access_logs: true
+    # This is the URN of a certificate in AWS Certificate Manager (ACM) that includes all domains
+    # that will be used to access the application. If it changes, just updated it here and run
+    # `copilot env deploy`
+    certificates:
+      - arn:aws:acm:us-east-1:336162656437:certificate/34771f1b-e42a-4e00-b725-551b6459e3d8
+
+# Configure observability for your environment resources.
+observability:
+  container_insights: false
