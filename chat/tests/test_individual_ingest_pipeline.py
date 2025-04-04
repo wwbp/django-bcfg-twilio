@@ -17,6 +17,7 @@ def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
             "school_name": "Test School",
             "school_mascot": "Tiger",
             "initial_message": "Welcome!",
+            "message_type": "initial",
             "week_number": 1,
             "name": "John Doe",
         },

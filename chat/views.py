@@ -41,7 +41,7 @@ class IngestGroupView(APIView):
 class PromptForm(forms.ModelForm):
     class Meta:
         model = Prompt
-        fields = ["week", "activity"]
+        fields = ["week", "activity", "type"]
 
 
 class ControlForm(forms.ModelForm):

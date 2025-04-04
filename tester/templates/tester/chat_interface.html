@@ -39,7 +39,8 @@
                     data-name="{{ test.name }}" 
                     data-school_name="{{ test.school_name }}"
                     data-school_mascot="{{ test.school_mascot }}"
-                    data-initial_message="{{ test.initial_message }}">
+                    data-initial_message="{{ test.initial_message }}"
+                    data-message_type="{{ test.message_type }}">
                     {{ test.name }} - {{ test.school_name }}
                 </option>
                 {% endfor %}
@@ -58,6 +59,14 @@
                 <input type="text" id="new_school_mascot"><br><br>
                 <label for="new_initial_message">Initial Message:</label>
                 <input type="text" id="new_initial_message"><br><br>
+                {% comment %} take input for message type only four possible options initial, reminder,check-in, summary   {% endcomment %}
+                <label for="message_type">Message Type:</label>
+                <select id="message_type">
+                    <option value="initial">Initial</option>
+                    <option value="reminder">Reminder</option>
+                    <option value="check-in">Check-in</option>
+                    <option value="summary">Summary</option>
+                </select><br><br>
                 <button type="button" onclick="createTestCase()">Save Test Case</button>
             </div>
         </div>
@@ -72,6 +81,7 @@
                 <p><strong>School Name:</strong> <span id="meta_school_name"></span></p>
                 <p><strong>School Mascot:</strong> <span id="meta_school_mascot"></span></p>
                 <p><strong>Initial Message:</strong> <span id="meta_initial_message"></span></p>
+                <p><strong>Message Type:</strong> <span id="meta_message_type"></span></p>
                 <label for="week_number">Week Number:</label>
                 <input type="text" id="week_number"><br><br>
                 <label for="message">Message:</label><br>
@@ -98,6 +108,7 @@
                 document.getElementById('meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
                 document.getElementById('meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
                 document.getElementById('meta_initial_message').innerText = selectedOption.getAttribute('data-initial_message');
+                document.getElementById('meta_message_type').innerText = selectedOption.getAttribute('data-message_type');
                 // Show metadata section
                 document.getElementById('test_case_metadata').style.display = 'block';
                 
@@ -154,6 +165,7 @@
                     school_name: document.getElementById('meta_school_name').innerText,
                     school_mascot: document.getElementById('meta_school_mascot').innerText,
                     initial_message: document.getElementById('meta_initial_message').innerText,
+                    message_type: document.getElementById('meta_message_type').innerText,
                     week_number: weekNumber
                 },
                 message: message
@@ -197,6 +209,7 @@
             var schoolName = document.getElementById('new_school_name').value;
             var schoolMascot = document.getElementById('new_school_mascot').value;
             var initialMessage = document.getElementById('new_initial_message').value;
+            var messageType = document.getElementById('message_type').value;
 
             fetch("{% url 'tester:create-test-case' %}", {
                 method: "POST",
@@ -209,7 +222,8 @@
                     name: name,
                     school_name: schoolName,
                     school_mascot: schoolMascot,
-                    initial_message: initialMessage
+                    initial_message: initialMessage,
+                    message_type: messageType
                 })
             }).then(response => response.json())
               .then(data => {
