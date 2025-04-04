@@ -294,20 +294,19 @@ INSTRUCTION_PROMPT_TEMPLATE = (
 def load_instruction_prompt(user_id: str):
     try:
         user = User.objects.get(id=user_id)
-        week = user.week_number
-        assistant_name = user.school_mascot if user.school_mascot else "Assistant"
-        message_type = user.message_type
     except User.DoesNotExist:
-        logger.warning(f"User with id {user_id} not found. Using default prompt.")
-        week = None
-        assistant_name = "Assistant"
-        message_type = None
+        raise
+    
+    week = user.week_number
+    message_type = user.message_type
+
+    assistant_name = user.school_mascot if user.school_mascot else "Assistant"
 
     # Load the most recent controls record
     try:
         controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
-        controls = Control.objects.create()
+        raise 
 
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None
@@ -318,7 +317,7 @@ def load_instruction_prompt(user_id: str):
         activity = prompt_obj.activity
     else:
         logger.info(f"No Prompt found for week '{week}' and type '{message_type}'. Falling back to default activity.")
-        activity = controls.default
+        raise ValueError(f"No Prompt found for week '{week}' and type '{message_type}'.")
 
     # Format the final prompt using the template
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
