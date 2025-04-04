@@ -104,6 +104,56 @@ pipelines:
               script:
                 - *deployScriptCommon
                 - ./copilot-bin svc deploy --name scheduler --env=dev
+    staging:
+      - parallel:
+          - <<: *testStep
+          - <<: *lintStep
+          - <<: *securityStep
+      - parallel:
+          - step:
+              <<: *deployStepCommon
+              name: Deploy web to Staging environment
+              deployment: Staging
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name web --env=test
+          - step:
+              <<: *deployStepCommon
+              name: Deploy worker to Staging environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name worker --env=test
+          - step:
+              <<: *deployStepCommon
+              name: Deploy scheduler to Staging environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name scheduler --env=test
+    main:
+      - parallel:
+          - <<: *testStep
+          - <<: *lintStep
+          - <<: *securityStep
+      - parallel:
+          - step:
+              <<: *deployStepCommon
+              name: Deploy web to Production environment
+              deployment: Production
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name web --env=prod
+          - step:
+              <<: *deployStepCommon
+              name: Deploy worker to Production environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name worker --env=prod
+          - step:
+              <<: *deployStepCommon
+              name: Deploy scheduler to Production environment
+              script:
+                - *deployScriptCommon
+                - ./copilot-bin svc deploy --name scheduler --env=prod
 
 definitions:
   services:
