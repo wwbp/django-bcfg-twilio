@@ -177,3 +177,4 @@ CELERY_TASK_DEFAULT_PRIORITY = 0
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 BCFG_DOMAIN = os.environ.get("BCFG_DOMAIN", "")
 BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
