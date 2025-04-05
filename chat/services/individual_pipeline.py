@@ -11,7 +11,7 @@ from .crud import (
     save_assistant_response,
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
-from .send import send_message_to_participant
+from .send import individual_send_moderation, send_message_to_participant
 from ..models import IndividualPipelineRecord
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,8 @@ def individual_moderation(record: IndividualPipelineRecord):
     try:
         blocked_str = moderate_message(message)
         if blocked_str:
-            moderation_message = get_moderation_message()
-            record.response = moderation_message
+            # moderation_message = get_moderation_message()
+            # record.response = moderation_message
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
         else:
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
@@ -156,8 +156,11 @@ def individual_pipeline(self, participant_id, data):
         individual_moderation(record)
 
         # Stage 3: Process via LLM call if the message was not blocked.
-        if record.status == IndividualPipelineRecord.StageStatus.MODERATION_PASSED:
-            individual_process(record)
+        if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
+            asyncio.run(individual_send_moderation(record.participant_id))
+            return
+
+        individual_process(record)
 
         # Skip this run message not latest
         if record.status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED:
