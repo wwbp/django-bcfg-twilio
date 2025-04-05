@@ -48,8 +48,6 @@ def individual_moderation(record: IndividualPipelineRecord):
     try:
         blocked_str = moderate_message(message)
         if blocked_str:
-            # moderation_message = get_moderation_message()
-            # record.response = moderation_message
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
         else:
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
