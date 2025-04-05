@@ -3,7 +3,6 @@ import logging
 from celery import shared_task
 from .moderation import moderate_message
 from .crud import (
-    get_moderation_message,
     is_test_user,
     load_individual_chat_history,
     load_instruction_prompt,
