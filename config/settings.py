@@ -32,7 +32,7 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "admin.apps.ChatAdmin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -193,6 +193,6 @@ MODERATION_VALUES_FOR_BLOCKED = json.loads(
             "sexual/minors": 0.2,
             "violence": 0.7,
             "violence/graphic": 0.8
-        }"""
+        }""",
     )
 )

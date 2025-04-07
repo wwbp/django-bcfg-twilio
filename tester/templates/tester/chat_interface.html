@@ -1,33 +1,13 @@
-{% load static %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Chat Tester Interface</title>
-    <style>
-        /* Minimal CSS for a two-panel layout */
-        .container {
-            display: flex;
-        }
-        .panel {
-            flex: 1;
-            padding: 20px;
-        }
-        .panel:not(:last-child) {
-            border-right: 1px solid #ccc;
-        }
-        /* Simple styles for message tags */
-        .user-tag {
-            font-weight: bold;
-            color: blue;
-        }
-        .assistant-tag {
-            font-weight: bold;
-            color: green;
-        }
-    </style>
-</head>
-<body>
-    <h1>Test Chat Interface</h1>
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">Home</a>
+&rsaquo; <a href="#">Test Chat Interface</a>
+</div>
+{% endblock %}
+
+{% block content %}
     <div class="container">
         <!-- Left panel: Test Case management -->
         <div class="panel">
@@ -45,7 +25,7 @@
                 </option>
                 {% endfor %}
             </select>
-            <button type="button" onclick="showNewTestCaseForm()">Create New Test Case</button>
+            <button class="button" type="button" onclick="showNewTestCaseForm()">Create New Test Case</button>
 
             <div id="new_test_case" style="display:none; margin-top:20px;">
                 <h3>Create New Test Case</h3>
@@ -67,7 +47,7 @@
                     <option value="check-in">Check-in</option>
                     <option value="summary">Summary</option>
                 </select><br><br>
-                <button type="button" onclick="createTestCase()">Save Test Case</button>
+                <button class="button" type="button" onclick="createTestCase()">Save Test Case</button>
             </div>
         </div>
         
@@ -86,14 +66,14 @@
                 <input type="text" id="week_number"><br><br>
                 <label for="message">Message:</label><br>
                 <textarea id="message" rows="3" cols="50"></textarea><br><br>
-                <button type="button" onclick="sendChatMessage()">Send Message</button>
+                <button class="button" type="button" onclick="sendChatMessage()">Send Message</button>
             </div>
             
             <!-- Chat transcript loads for the selected test case -->
             <div id="chat_transcript">
                 <p>Select a test case to load the chat transcript.</p>
             </div>
-            <button type="button" onclick="refreshChat()">Refresh Chat</button>
+            <button class="button" type="button" onclick="refreshChat()">Refresh Chat</button>
         </div>
     </div>
 
@@ -122,7 +102,7 @@
 
         // Fetch chat transcript and display messages based on role.
         function loadChatTranscript(testCaseId) {
-            fetch(`/test/chat_transcript/${testCaseId}/`)
+            fetch("{% url 'admin:tester:chat-transcript' test_case_id='REPLACE_ME' %}".replace("REPLACE_ME", testCaseId))
                 .then(response => response.json())
                 .then(data => {
                     var transcriptDiv = document.getElementById('chat_transcript');
@@ -171,7 +151,7 @@
                 message: message
             };
             // Replace with your actual endpoint to send the message.
-            fetch(`/api/participant/${testCaseId}/incoming`, {
+            fetch("{% url 'chat:ingest-individual' id='REPLACE_ME' %}".replace("REPLACE_ME", testCaseId), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -211,7 +191,7 @@
             var initialMessage = document.getElementById('new_initial_message').value;
             var messageType = document.getElementById('message_type').value;
 
-            fetch("{% url 'tester:create-test-case' %}", {
+            fetch("{% url 'admin:tester:create-test-case' %}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -243,5 +223,29 @@
         // Auto-refresh chat transcript every 1 second.
         setInterval(refreshChat, 1000);
     </script>
-</body>
-</html>
+
+
+    <style>
+        /* Minimal CSS for a two-panel layout */
+        .container {
+            display: flex;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+        }
+        .panel:not(:last-child) {
+            border-right: 1px solid #ccc;
+        }
+        /* Simple styles for message tags */
+        .user-tag {
+            font-weight: bold;
+            color: blue;
+        }
+        .assistant-tag {
+            font-weight: bold;
+            color: green;
+        }
+    </style>
+
+{% endblock %}
