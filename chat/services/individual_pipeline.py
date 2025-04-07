@@ -1,9 +1,7 @@
-import asyncio
 import logging
 from celery import shared_task
 from .moderation import moderate_message
 from .crud import (
-    get_moderation_message,
     is_test_user,
     load_individual_chat_history,
     load_instruction_prompt,
@@ -11,7 +9,7 @@ from .crud import (
     save_assistant_response,
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
-from .send import send_message_to_participant
+from .send import individual_send_moderation, send_message_to_participant
 from ..models import IndividualPipelineRecord
 
 logger = logging.getLogger(__name__)
@@ -48,8 +46,6 @@ def individual_moderation(record: IndividualPipelineRecord):
     try:
         blocked_str = moderate_message(message)
         if blocked_str:
-            moderation_message = get_moderation_message()
-            record.response = moderation_message
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
         else:
             record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
@@ -75,7 +71,7 @@ def individual_process(record: IndividualPipelineRecord):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
-        if record != IndividualPipelineRecord.objects.order_by('-created_at').first():
+        if record != IndividualPipelineRecord.objects.order_by("-created_at").first():
             record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
         else:
             instructions = load_instruction_prompt(participant_id)
@@ -128,7 +124,7 @@ def individual_send(record: IndividualPipelineRecord):
         save_assistant_response(record.participant_id, record.validated_message)
         # Send the message via the external endpoint
         if not is_test_user(record.participant_id):
-            asyncio.run(send_message_to_participant(participant_id, response))
+            send_message_to_participant(participant_id, response)
             # Update the pipeline record for the sending stage
             record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
         record.save()
@@ -156,8 +152,11 @@ def individual_pipeline(self, participant_id, data):
         individual_moderation(record)
 
         # Stage 3: Process via LLM call if the message was not blocked.
-        if record.status == IndividualPipelineRecord.StageStatus.MODERATION_PASSED:
-            individual_process(record)
+        if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
+            individual_send_moderation(record.participant_id)
+            return
+
+        individual_process(record)
 
         # Skip this run message not latest
         if record.status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED:
