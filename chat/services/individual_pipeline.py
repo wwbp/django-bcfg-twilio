@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from celery import shared_task
 from .moderation import moderate_message
@@ -72,7 +71,7 @@ def individual_process(record: IndividualPipelineRecord):
         chat_history, message = load_individual_chat_history(participant_id)
 
         # ensure the message is latest
-        if record != IndividualPipelineRecord.objects.order_by('-created_at').first():
+        if record != IndividualPipelineRecord.objects.order_by("-created_at").first():
             record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
         else:
             instructions = load_instruction_prompt(participant_id)
@@ -125,7 +124,7 @@ def individual_send(record: IndividualPipelineRecord):
         save_assistant_response(record.participant_id, record.validated_message)
         # Send the message via the external endpoint
         if not is_test_user(record.participant_id):
-            asyncio.run(send_message_to_participant(participant_id, response))
+            send_message_to_participant(participant_id, response)
             # Update the pipeline record for the sending stage
             record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
         record.save()
@@ -154,7 +153,7 @@ def individual_pipeline(self, participant_id, data):
 
         # Stage 3: Process via LLM call if the message was not blocked.
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
-            asyncio.run(individual_send_moderation(record.participant_id))
+            individual_send_moderation(record.participant_id)
             return
 
         individual_process(record)
