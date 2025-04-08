@@ -110,4 +110,79 @@ We use BitBucket pipelines for CI. The pipeline is defined in the `bitbucket-pip
 * `staging` - deploys to test
 * `develop` - deploys to dev
 
-The runner is hosted in EC2 on the same AWS account as the application.
+#### Runners
+
+We use self-hosted runners that are hosted in EC2 on the same AWS account as the application.
+
+To create a new runner
+1. Launch a new EC2 instance with a name you choose (eg "Bitbucket Pipeline Runner")
+    1. Use default AWS Linux AMI
+    1. Set size to t2.medium
+    1. Use a new or existing keypair so you can access via SSH for configuration (use existing if you already have the private key)
+    1. Change network settings to choose a public subnet and allow ssh traffic only from your machine
+    1. Launch instance
+1. Now configure it via ssh once launch. You'll need the ssh key from the keypair you used or generated in the launch step. You can grab the connection command from AWS by navigating to the instance > Connect button (top right) > SSH client tab
+    1. In Bitbucket, go to Repositories > your repo > Settings > Repository settings > Runners
+    1. Click "Add runner"
+    1. You'll be given a new command. Keep that for a moment
+    1. Back in the SSH session, run
+        ```bash
+        sudo -s
+        dnf install docker -y
+        systemctl start docker
+        usermod -a -G docker ec2-user
+        systemctl enable docker
+        ```
+    1. Now create a new service to keep the docker container running
+        ```bash
+        cat > /etc/systemd/system/docker-runner.service
+        ```
+    1. Then paste a command into the new service file that looks like the following, but make sure to update the various variables (`REPLACE_WITH_`) that you grab from the command that Bitbucket has presented
+        ```
+        [Unit]
+        Description=Run Docker Container for Bitbucket Pipelines Runner
+        After=docker.service
+        Requires=docker.service
+
+        [Service]
+        Restart=on-failure
+        ExecStartPre=-/usr/bin/docker rm -f runner-76368873-9fa8-5b0e-ba95-f179a2335080
+        ExecStartPre=/bin/sleep 5
+        ExecStart=/usr/bin/docker container run -d \
+            -v /tmp:/tmp \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+            -e ACCOUNT_UUID={REPLACE_WITH_YOUR_ACCOUNT_UUID} \
+            -e REPOSITORY_UUID={REPLACE_WITH_REPOSITORY_UUID} \
+            -e RUNNER_UUID={REPLACE_WITH_RUNNER_UUID} \
+            -e RUNTIME_PREREQUISITES_ENABLED=true \
+            -e OAUTH_CLIENT_ID=REPLACE_WITH_OAUTH_CLIENT_ID \
+            -e OAUTH_CLIENT_SECRET=REPLACE_WITH_OAUTH_CLIENT_SECRET \
+            -e WORKING_DIRECTORY=/tmp \
+            --name runner-REPLACE_WITH_NAME \
+            docker-public.packages.atlassian.com/sox/atlassian/bitbucket-pipelines-runner
+
+        [Install]
+        WantedBy=multi-user.target
+        ```
+    1. Set this service to autostart and then start it
+        ```bash
+        systemctl daemon-reload
+        systemctl enable docker-runner
+        systemctl start docker-runner
+        ```
+    1. Back in Bitbucket, you can click through the rest of the dialog and after a minute you should see the new runner listed as "Online" in the runners page
+1. Setup docker prune to run regularly so that we don't run out of space
+    1. Back in the ssh session, run
+        ```bash
+        sudo -s
+        yum install cronie -y
+        systemctl enable crond.service
+        systemctl start crond.service
+        crontab -e
+        ```
+    1. Add the following line to the crontab file to run docker prune every 6 hours
+        ```
+        0 */6 * * * /usr/bin/docker system prune -f
+        ```
+    1. Save and exit the crontab file
