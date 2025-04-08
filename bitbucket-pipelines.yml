@@ -16,6 +16,7 @@ testStep: &testStep
       - apt-get update && apt-get -y install binutils libproj-dev gdal-bin postgresql-client
       - pip install --upgrade pip pipenv
       - pipenv install --dev --system
+      - python manage.py collectstatic --noinput
       - pytest -n auto
     services:
       - postgres
