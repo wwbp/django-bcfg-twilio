@@ -56,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "csp.middleware.CSPMiddleware",
     "djangosaml2.middleware.SamlSessionMiddleware",
 ]
 
@@ -88,6 +89,9 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
+CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'"]
 
 
 # Database
