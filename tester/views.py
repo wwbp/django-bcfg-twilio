@@ -1,8 +1,6 @@
 # tester/views.py
 from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
 from django.views.decorators.http import require_POST
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 import json
 from django.shortcuts import render, redirect
 from django.views import View
@@ -15,7 +13,7 @@ from tester.models import ChatResponse
 class ChatTestInterface(View):
     def get(self, request):
         # Retrieve stored responses to display on the page.
-        responses = ChatResponse.objects.order_by('-created_at')
+        responses = ChatResponse.objects.order_by("-created_at")
         # responses = [
         #     "Hello, how can I help you?",
         #     "I am a bot, I can help you with your queries.",
@@ -35,8 +33,13 @@ class ChatTestInterface(View):
         message = request.POST.get("message")
 
         # Build the context as required by the chat app's serializer.
-        context_data = {"school_name": school_name, "school_mascot": school_mascot,
-                        "initial_message": initial_message, "week_number": week_number, "name": name}
+        context_data = {
+            "school_name": school_name,
+            "school_mascot": school_mascot,
+            "initial_message": initial_message,
+            "week_number": week_number,
+            "name": name,
+        }
         payload = {
             "context": context_data,
             "message": message,
@@ -44,9 +47,7 @@ class ChatTestInterface(View):
 
         # Construct the URL to call the chat app's ingest endpoint.
         # Note: Make sure the chat app’s URL patterns have a namespace (e.g. app_name = 'chat')
-        url = request.build_absolute_uri(
-            reverse("chat:ingest-individual", args=[participant_id])
-        )
+        url = request.build_absolute_uri(reverse("chat:ingest-individual", args=[participant_id]))
 
         # Make the POST request (synchronously) to the chat app endpoint.
         try:
@@ -61,7 +62,6 @@ class ChatTestInterface(View):
         return redirect("tester:chat-test-interface")
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class ReceiveParticipantResponseView(View):
     def post(self, request, id):
         # Parse the incoming JSON payload
@@ -75,12 +75,11 @@ class ReceiveParticipantResponseView(View):
         ChatResponse.objects.create(
             participant_id=id,
             request_context={},  # You could store extra context if available.
-            bot_response=bot_response
+            bot_response=bot_response,
         )
         return JsonResponse({"message": "Bot response received"}, status=200)
 
 
-@csrf_exempt
 @require_POST
 def create_test_case(request):
     data = json.loads(request.body)
@@ -89,6 +88,7 @@ def create_test_case(request):
     school_name = data.get("school_name")
     school_mascot = data.get("school_mascot")
     initial_message = data.get("initial_message")
+    message_type = data.get("message_type")
 
     if participant_id and name:
         # Create the test user.
@@ -98,27 +98,26 @@ def create_test_case(request):
             school_name=school_name,
             school_mascot=school_mascot,
             initial_message=initial_message,
-            is_test=True
+            is_test=True,
+            message_type=message_type,
         )
         # Insert the initial message as the first assistant message in the transcript.
-        ChatTranscript.objects.create(
-            user=user,
-            role='assistant',
-            content=initial_message
-        )
+        ChatTranscript.objects.create(user=user, role="assistant", content=initial_message)
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
 
 def chat_transcript(request, test_case_id):
     # Query transcript entries for the given test case (assuming test_case_id corresponds to User.id)
-    transcripts = ChatTranscript.objects.filter(
-        user__id=test_case_id).order_by('created_at')
-    transcript = [{
-        "role": t.role,  # 'user' or 'assistant'
-        "content": t.content,
-        "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-    } for t in transcripts]
+    transcripts = ChatTranscript.objects.filter(user__id=test_case_id).order_by("created_at")
+    transcript = [
+        {
+            "role": t.role,  # 'user' or 'assistant'
+            "content": t.content,
+            "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for t in transcripts
+    ]
     return JsonResponse({"transcript": transcript})
 
 
@@ -128,19 +127,19 @@ class GroupChatTestInterface(View):
         groups_data = []
         for group in test_groups:
             # Build a simple string representation for participants as "id:name" pairs.
-            participants_str = ", ".join(
-                [f"{user.id}:{user.name}" for user in group.users.all()])
-            groups_data.append({
-                "id": group.id,
-                "participants": participants_str,
-                "school_name": group.users.first().school_name if group.users.exists() else "",
-                "school_mascot": group.users.first().school_mascot if group.users.exists() else "",
-                "initial_message": group.users.first().initial_message if group.users.exists() else "",
-            })
+            participants_str = ", ".join([f"{user.id}:{user.name}" for user in group.users.all()])
+            groups_data.append(
+                {
+                    "id": group.id,
+                    "participants": participants_str,
+                    "school_name": group.users.first().school_name if group.users.exists() else "",
+                    "school_mascot": group.users.first().school_mascot if group.users.exists() else "",
+                    "initial_message": group.users.first().initial_message if group.users.exists() else "",
+                }
+            )
         return render(request, "tester/group_chat_interface.html", {"test_groups": groups_data})
 
 
-@csrf_exempt
 @require_POST
 def create_group_test_case(request):
     data = json.loads(request.body)
@@ -152,27 +151,26 @@ def create_group_test_case(request):
 
     if group_id and participants_str:
         # Create or get the group.
-        group, created = Group.objects.get_or_create(
-            id=group_id, defaults={'is_test': True})
+        group, created = Group.objects.get_or_create(id=group_id, defaults={"is_test": True})
         if created:
             group.initial_message = initial_message
             group.save()
         # Process participants (expected format: "id1:name1, id2:name2")
-        for pair in participants_str.split(','):
-            if ':' in pair:
-                uid, name = pair.split(':')
+        for pair in participants_str.split(","):
+            if ":" in pair:
+                uid, name = pair.split(":")
                 uid = uid.strip()
                 name = name.strip()
                 # Create or get the ChatUser.
                 user, _ = ChatUser.objects.get_or_create(
                     id=uid,
                     defaults={
-                        'name': name,
-                        'school_name': school_name,
-                        'school_mascot': school_mascot,
-                        'initial_message': initial_message,
-                        'is_test': True
-                    }
+                        "name": name,
+                        "school_name": school_name,
+                        "school_mascot": school_mascot,
+                        "initial_message": initial_message,
+                        "is_test": True,
+                    },
                 )
                 group.users.add(user)
         # Optionally, add an initial message to the group transcript.
@@ -180,8 +178,8 @@ def create_group_test_case(request):
             GroupChatTranscript.objects.create(
                 group=group,
                 sender=None,  # Could be used as a system/assistant message.
-                role='assistant',
-                content=initial_message
+                role="assistant",
+                content=initial_message,
             )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
@@ -189,12 +187,14 @@ def create_group_test_case(request):
 
 def group_chat_transcript(request, group_id):
     # Query group chat transcript entries for the given group.
-    transcripts = GroupChatTranscript.objects.filter(
-        group__id=group_id).order_by('created_at')
-    transcript = [{
-        "role": t.role,  # 'user' or 'assistant'
-        "content": t.content,
-        "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-        "sender": t.sender.name if t.sender else "Assistant"
-    } for t in transcripts]
+    transcripts = GroupChatTranscript.objects.filter(group__id=group_id).order_by("created_at")
+    transcript = [
+        {
+            "role": t.role,  # 'user' or 'assistant'
+            "content": t.content,
+            "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "sender": t.sender.name if t.sender else "Assistant",
+        }
+        for t in transcripts
+    ]
     return JsonResponse({"transcript": transcript})

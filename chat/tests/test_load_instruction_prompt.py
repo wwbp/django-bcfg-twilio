@@ -1,3 +1,4 @@
+import pytest
 from chat.models import MessageType, User, Control, Prompt
 from chat.services.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
@@ -26,8 +27,8 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
 
 def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt():
     """
-    When a user exists and a Prompt for the user's week is available,
-    the function should use the Prompt's activity.
+    When a user exists and a Prompt for the user's seesion is unavailable,
+    the function should raise a ValueError.
     """
     # Create a user with a valid week and a non-empty school mascot.
     user = User.objects.create(id="user1", week_number=3, school_mascot="Hawks", message_type=MessageType.SUMMARY)
@@ -36,14 +37,10 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
     # Create a Prompt for the user's week.
     prompt = Prompt.objects.create(week=3, type=MessageType.INITIAL, activity="Custom Activity for Week 3")
 
-    result = load_instruction_prompt("user1")
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
-        system=control.system,
-        persona=control.persona,
-        assistant_name=user.school_mascot,
-        activity=control.default,
-    )
-    assert result == expected
+    with pytest.raises(ValueError):
+        load_instruction_prompt("user1")
+    
+    
 
 
 def test_load_instruction_prompt_with_existing_user_no_prompt():
@@ -55,15 +52,8 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
     control = Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
     # Do not create a Prompt for week 2.
 
-    result = load_instruction_prompt("user2")
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
-        system=control.system,
-        persona=control.persona,
-        assistant_name=user.school_mascot,
-        activity=control.default,
-    )
-    assert result == expected
-
+    with pytest.raises(ValueError):
+        load_instruction_prompt("user2")
 
 def test_load_instruction_prompt_user_does_not_exist():
     """
@@ -71,16 +61,8 @@ def test_load_instruction_prompt_user_does_not_exist():
     and the Control's default activity.
     """
     control = Control.objects.create(system="System C", persona="Persona C", default="Default Activity C")
-    # No user is created.
-    result = load_instruction_prompt("nonexistent_user")
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
-        system=control.system,
-        persona=control.persona,
-        assistant_name="Assistant",
-        activity=control.default,
-    )
-    assert result == expected
-
+    with pytest.raises(User.DoesNotExist):
+        load_instruction_prompt("non_existent_user")
 
 def test_load_instruction_prompt_with_empty_school_mascot():
     """

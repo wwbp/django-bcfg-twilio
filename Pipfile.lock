@@ -809,7 +809,6 @@
                 "sha256:f0968d5beeafbca2a72c595e8385a1a1f8af58feaebb02b227229b69ca5357fd",
                 "sha256:f32cc56168eac4851109e9b5d327637f15fd662aa30dd79f964b7c39fbadd26e"
             ],
-            "markers": "python_version >= '3.9'",
             "version": "==0.9.0"
         },
         "tqdm": {
