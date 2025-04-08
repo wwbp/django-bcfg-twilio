@@ -11,6 +11,7 @@ from .models import (
     IndividualPipelineRecord,
     GroupPipelineRecord,
 )
+from admin.models import AuthGroupName
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class ReadonlyAdmin(BaseAdmin):
     # base admin class that is read-omly by default
     def has_change_permission(self, request, obj=None):
         if request.user.is_staff and (  # type: ignore
-            "Unlock Restricted Content" in request.user.groups.values_list("name", flat=True)  # type: ignore
+            AuthGroupName.UnlockRestrictedContent.value in request.user.groups.values_list("name", flat=True)  # type: ignore
         ):
             return super().has_change_permission(request, obj)
         else:
