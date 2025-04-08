@@ -17,6 +17,7 @@ asgiref = "*"
 django-celery-results = "*"
 pytest-asyncio = "*"
 psycopg2-binary = "*"
+djangosaml2 = "*"
 
 [dev-packages]
 ruff = "*"

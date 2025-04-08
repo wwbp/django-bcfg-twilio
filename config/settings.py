@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import json
 import os
 from pathlib import Path
+from saml2 import BINDING_HTTP_REDIRECT
+from saml2 import BINDING_HTTP_POST
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,6 +44,7 @@ INSTALLED_APPS = [
     "chat",
     "tester",
     "django_celery_results",
+    "djangosaml2",
 ]
 
 MIDDLEWARE = [
@@ -53,7 +56,18 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "djangosaml2.middleware.SamlSessionMiddleware",
 ]
+
+REQUIRE_SAML_AUTHENTICATION = os.getenv("REQUIRE_SAML_AUTHENTICATION", "False") == "True"
+
+if REQUIRE_SAML_AUTHENTICATION:
+    AUTHENTICATION_BACKENDS = ("djangosaml2.backends.Saml2Backend",)
+else:
+    AUTHENTICATION_BACKENDS = (
+        "django.contrib.auth.backends.ModelBackend",
+        "djangosaml2.backends.Saml2Backend",
+    )
 
 ROOT_URLCONF = "config.urls"
 
@@ -196,3 +210,76 @@ MODERATION_VALUES_FOR_BLOCKED = json.loads(
         }""",
     )
 )
+
+
+# SAML and PennKey Settings
+LOGIN_REDIRECT_URL = "/admin/"
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# SAML_USE_NAME_ID_AS_USERNAME = True
+
+CERT_FILE = os.getenv("CERT_FILE", "/workspace/assets/shibcert.pem")
+KEY_FILE = os.getenv("KEY_FILE", "/workspace/assets/shibkey.pem")
+
+BASE_ADMIN_URI = os.getenv("BASE_ADMIN_URI", "http://localhost:8000/")
+
+SAML_ATTRIBUTE_MAPPING = {
+    "eduPersonPrincipalName": ("username",),
+    "mail": ("email",),
+    "givenName": ("first_name",),
+    "sn": ("last_name",),
+}
+# SAML_USE_NAME_ID_AS_USERNAME = True
+SAML_CREATE_UNKNOWN_USER = False
+
+SAML_CONFIG_DEFAULT = {
+    "xmlsec_binary": "/usr/bin/xmlsec1",
+    "entityid": BASE_ADMIN_URI + "saml2/metadata/",
+    "attribute_map_dir": os.path.join(BASE_DIR, "assets/attribute-maps"),
+    "allow_unknown_attributes": True,
+    "service": {
+        "sp": {
+            "name": "College Starter Kit",
+            "allow_unsolicited": True,
+            "endpoints": {
+                "assertion_consumer_service": [
+                    (BASE_ADMIN_URI + "saml2/acs/", BINDING_HTTP_POST),
+                ],
+                "single_logout_service": [
+                    (BASE_ADMIN_URI + "saml2/ls/", BINDING_HTTP_REDIRECT),
+                    (BASE_ADMIN_URI + "saml2/ls/post/", BINDING_HTTP_POST),
+                ],
+            },
+            "required_attributes": ["eduPersonAffiliation", "eduPersonPrincipalName"],
+            "optional_attributes": ["sn", "givenName", "mail"],
+            "want_response_signed": False,
+            "want_assertions_signed": False,
+        },
+    },
+    "metadata": {
+        # "local": [os.path.join(BASE_DIR, "assets/metadata.xml")],
+    },
+    "debug": 1,
+    "key_file": KEY_FILE,
+    "cert_file": CERT_FILE,
+    "encryption_keypairs": [
+        {
+            "key_file": KEY_FILE,
+            "cert_file": CERT_FILE,
+        }
+    ],
+    "contact_person": [
+        {
+            "given_name": "Jeffrey",
+            "sur_name": "Licht",
+            "company": "Pod Consulting",
+            "email_address": "jllicht@upenn.edu",
+            "contact_type": "technical",
+        },
+    ],
+    "organization": {
+        "name": [("UPenn", "en")],
+        "display_name": [("Upenn", "en")],
+        "url": [("http://www.upenn.edu", "en")],
+    },
+}
+SAML_CONFIG = os.getenv("SAML_CONFIG", SAML_CONFIG_DEFAULT)
