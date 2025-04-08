@@ -14,6 +14,7 @@ http:
   # You can specify a custom health check path. The default is "/".
   healthcheck:
     path: '/api/health/'
+    grace_period: 120s
     healthy_threshold: 2
   target_container: 'nginx'
   alias: '*.wwbp-bcfg-chatbot.org'
