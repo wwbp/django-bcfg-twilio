@@ -35,4 +35,5 @@ urlpatterns += [
     path("api/", include("chat.urls")),
     path("robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain")),
     path(r"saml2/", include("djangosaml2.urls")),
+    path("", RedirectView.as_view(permanent=True, url="/admin", query_string=True)),
 ]
