@@ -177,7 +177,8 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-CSRFToken": "{{ csrf_token }}"
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Authorization": "Bearer {{ api_key }}",
                 },
                 body: JSON.stringify(payload)
             })

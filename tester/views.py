@@ -1,4 +1,5 @@
 # tester/views.py
+from django.conf import settings
 from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
 from django.views.decorators.http import require_POST
 import json
@@ -20,7 +21,11 @@ class ChatTestInterface(View):
         #     "Please provide me with more information.",
         # ]
         test_users = ChatUser.objects.filter(is_test=True)
-        return render(request, "tester/chat_interface.html", {"responses": responses, "test_users": test_users})
+        return render(
+            request,
+            "tester/chat_interface.html",
+            {"responses": responses, "test_users": test_users, "api_key": settings.INBOUND_MESSAGE_API_KEY},
+        )
 
     def post(self, request):
         # Extract data from the submitted form.
@@ -137,7 +142,11 @@ class GroupChatTestInterface(View):
                     "initial_message": group.users.first().initial_message if group.users.exists() else "",
                 }
             )
-        return render(request, "tester/group_chat_interface.html", {"test_groups": groups_data})
+        return render(
+            request,
+            "tester/group_chat_interface.html",
+            {"test_groups": groups_data, "api_key": settings.INBOUND_MESSAGE_API_KEY},
+        )
 
 
 @require_POST
