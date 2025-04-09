@@ -34,19 +34,19 @@ def test_view_group_list(admin_client, group_factory, user_factory):
         assert group.id in response.content.decode("utf-8")
 
 
-# def test_view_group_detail(admin_client, group_factory, user_factory):
-#     group = group_factory()
-#     users = user_factory.create_batch(2)
-#     for user in users:
-#         group.users.add(user)
-#     group.save()
-#     response = admin_client.get(
-#         reverse("admin:chat_group_change", args=(group.id,)),
-#     )
-#     assert response.status_code == 200
-#     assert group.id in response.content.decode("utf-8")
-#     assert users[0].name in response.content.decode("utf-8")
-#     assert users[1].name in response.content.decode("utf-8")
+def test_view_group_detail(admin_client, group_factory, user_factory):
+    group = group_factory()
+    users = user_factory.create_batch(2)
+    for user in users:
+        group.users.add(user)
+    group.save()
+    response = admin_client.get(
+        reverse("admin:chat_group_change", args=(group.id,)),
+    )
+    assert response.status_code == 200
+    assert group.id in response.content.decode("utf-8")
+    assert users[0].name in response.content.decode("utf-8")
+    assert users[1].name in response.content.decode("utf-8")
 
 
 def test_view_transcript_list(admin_client, chat_transcript_factory):

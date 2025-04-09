@@ -31,6 +31,12 @@ class User(models.Model):
     name = models.CharField(max_length=255, default="")
     is_test = models.BooleanField(default=False)
 
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["-created_at"]
+
 
 class IndividualSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
@@ -38,6 +44,12 @@ class IndividualSession(models.Model):
     initial_message = models.TextField()
     week_number = models.IntegerField()
     message_type = models.CharField(max_length=20, choices=MessageType.choices)
+
+    def __str__(self):
+        return f"{self.user} - {self.message_type} ({self.week_number})"
+
+    class Meta:
+        ordering = ["-created_at"]
 
 
 class Group(models.Model):

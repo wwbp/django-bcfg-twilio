@@ -10,6 +10,7 @@ from .models import (
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
+    IndividualSession,
 )
 from admin.models import AuthGroupName
 
@@ -50,6 +51,13 @@ class ReadonlyTabularInline(admin.TabularInline):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+class IndividualSessionsInline(ReadonlyTabularInline):
+    model = IndividualSession
+    fields = ("week_number", "message_type", "initial_message")
+    readonly_fields = fields
+    ordering = ("-created_at",)
 
 
 class UserGroupsInline(ReadonlyTabularInline):
@@ -98,7 +106,7 @@ class UserAdmin(ReadonlyAdmin):
     search_fields = ("name",)
     list_filter = ("is_test", "school_name")
 
-    inlines = [UserGroupsInline, ChatTranscriptInline, GroupChatTranscriptInline]
+    inlines = [UserGroupsInline, ChatTranscriptInline, GroupChatTranscriptInline, IndividualSessionsInline]
 
 
 @admin.register(Group)
@@ -178,3 +186,10 @@ class GroupPipelineRecordAdmin(ReadonlyAdmin):
             return "Failed"
         else:
             return "Pending"
+
+
+@admin.register(IndividualSession)
+class IndividualSessionAdmin(ReadonlyAdmin):
+    list_display = ("user", "week_number", "message_type", "initial_message")
+    search_fields = ("initial_message",)
+    list_filter = ("week_number", "message_type")
