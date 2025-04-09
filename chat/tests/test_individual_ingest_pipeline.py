@@ -1,15 +1,15 @@
 import json
-import pytest
+from django.test import override_settings
 from django.urls import reverse
-from chat.services.individual_pipeline import individual_ingest_pipeline
-from chat.models import IndividualPipelineRecord
 from unittest.mock import patch
 import logging
+
+import pytest
 
 logger = logging.getLogger(__name__)
 
 
-@patch("chat.views.individual_pipeline_task.delay")
+@patch("chat.views.individual_pipeline.delay")
 def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
     # Configure the mock to return True
     mock_individual_pipeline_task_delay.return_value = True
@@ -20,12 +20,20 @@ def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
             "school_name": "Test School",
             "school_mascot": "Tiger",
             "initial_message": "Welcome!",
+            "message_type": "initial",
             "week_number": 1,
             "name": "John Doe",
         },
         "message": "Hello, world!",
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 202
     assert response.json() == {"message": "Data received"}
 
@@ -42,7 +50,14 @@ def test_ingest_individual_invalid_missing_message(client):
             "name": "John Doe",
         }
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'message' field.
@@ -54,7 +69,14 @@ def test_ingest_individual_invalid_missing_context(client):
     url = reverse("chat:ingest-individual", args=["user123"])
     # Missing the required "context" field.
     payload = {"message": "Hello, world!"}
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'context' field.
@@ -74,50 +96,31 @@ def test_ingest_individual_invalid_missing_context_field(client):
         },
         "message": "Hello, world!",
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'school_mascot' field.
     assert "school_mascot" in response_data or "This field is required" in str(response_data)
 
 
-@patch("chat.services.individual_pipeline.ingest_individual_request")
-def test_individual_ingest_pipeline_success(mock_ingest_individual_request):
-    participant_id = "test_user"
-    data = {"message": "hello world"}
+@pytest.mark.parametrize("api_key_is_valid", [True, False])
+def test_individual_ingest_view_auth(client, api_key_is_valid):
+    valid_api_key = "valid-api-key"
 
-    # Call the pipeline function.
-    run_id = individual_ingest_pipeline(participant_id, data)
-
-    # Assert that the patched function was called.
-    mock_ingest_individual_request.assert_called_once_with(participant_id, data)
-
-    # Assert that a new record was created with the expected values.
-    record = IndividualPipelineRecord.objects.get(run_id=run_id)
-    assert record.participant_id == participant_id
-    assert record.ingested is True
-    assert record.message == data["message"]
-    assert record.failed is False
-    assert record.error_log == ""
-
-
-def test_individual_ingest_pipeline_failure(monkeypatch):
-    participant_id = "test_user"
-    data = {"message": "hello world"}
-
-    # Create a fake function that raises an exception to simulate a failure.
-    def fake_ingest_individual_request(pid, data_in):
-        raise Exception("Simulated ingest error")
-
-    monkeypatch.setattr("chat.services.individual_pipeline.ingest_individual_request", fake_ingest_individual_request)
-
-    # Expect the pipeline to raise an exception.
-    with pytest.raises(Exception, match="Simulated ingest error"):
-        individual_ingest_pipeline(participant_id, data)
-
-    # Verify that a record was created with the failure flag and proper error log.
-    record = IndividualPipelineRecord.objects.last()
-    assert record.participant_id == participant_id
-    assert record.failed is True
-    assert record.ingested is False
-    assert "Simulated ingest error" in record.error_log
+    url = reverse("chat:ingest-individual", args=["user123"])
+    with override_settings(INBOUND_MESSAGE_API_KEY=valid_api_key):
+        response = client.post(
+            url,
+            "",
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {valid_api_key if api_key_is_valid else 'invalid-api-key'}"},
+        )
+    # response is 400 if api key is valid as we sent no data
+    assert response.status_code == (400 if api_key_is_valid else 403)
