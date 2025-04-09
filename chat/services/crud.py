@@ -4,7 +4,7 @@ import json
 import logging
 
 from .constant import MODERATION_MESSAGE_DEFAULT
-from ..models import Group, GroupChatTranscript, User, ChatTranscript, Prompt, Control
+from ..models import Group, GroupChatTranscript, IndividualSession, User, ChatTranscript, Prompt, Control
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def is_test_group(group_id: str):
         return False
 
 
-def create_new_user(user, context: dict, message: str):
+def initialize_new_user_model(user, context: dict, message: str):
     """
     Populate a newly created user instance with context data and create the
     initial chat transcripts.
@@ -36,10 +36,15 @@ def create_new_user(user, context: dict, message: str):
         user.school_name = context.get("school_name", "")
         user.school_mascot = context.get("school_mascot", "")
         user.name = context.get("name", "")
-        user.initial_message = context.get("initial_message", "")
-        user.week_number = context.get("week_number")
-        user.message_type = context.get("message_type")
-        user.save()  # Save updated fields
+        user.save()
+
+        # Create an initial session for the user
+        IndividualSession.objects.create(
+            user=user,
+            week_number=context.get("week_number"),
+            message_type=context.get("message_type"),
+            initial_message=context.get("initial_message", ""),
+        )
 
         # Create initial transcripts:
         # 1. Assistant transcript with the initial message.
@@ -52,40 +57,28 @@ def create_new_user(user, context: dict, message: str):
         raise
 
 
-def update_existing_user(user, context: dict, message: str):
+def update_existing_user_model(user, context: dict, message: str):
     """
     Update an existing user record if necessary and add a new user transcript.
     """
-    updated = False
     try:
-        # Check if week number changed
-        new_week = context.get("week_number")
-        if new_week is not None and new_week != user.week_number:
-            logger.info("Week number changed for user %s from %s to %s.", user.id, user.week_number, new_week)
-            user.week_number = new_week
-            updated = True
+        # get latest session for the user
+        # session = user.sessions.order_by("-created_at").first()
+        week_number = context.get("week_number")
+        message_type = context.get("message_type")
+        initial_message = context.get("initial_message")
+        session, created = IndividualSession.objects.get_or_create(
+            user=user, week_number=week_number, message_type=message_type, initial_message=initial_message
+        )
 
-        # Check if initial message changed
-        new_initial_message = context.get("initial_message")
-        if new_initial_message and new_initial_message != user.initial_message:
-            logger.info("Initial message changed for user %s. Updating transcript.", user.id)
-            user.initial_message = new_initial_message
+        # if any of the three week number, initial message or message type changed, create new session
+        if created:
+            logger.info("Creating new session for user %s.", user.id)
             # Create a new assistant transcript for the updated initial message
-            ChatTranscript.objects.create(user=user, role="assistant", content=new_initial_message)
-            updated = True
-
-        # Check if message type changed
-        new_message_type = context.get("message_type")
-        if new_message_type and new_message_type != user.message_type:
-            logger.info("Message type changed for user %s from %s to %s.", user.id, user.message_type, new_message_type)
-            user.message_type = new_message_type
-            updated = True
+            ChatTranscript.objects.create(user=user, role="assistant", content=initial_message)
 
         # Always create a transcript for the new user message
         ChatTranscript.objects.create(user=user, role="user", content=message)
-
-        if updated:
-            user.save()
         return user
     except Exception as e:
         logger.exception("Error updating user %s: %s", user.id, e)
@@ -107,10 +100,10 @@ def ingest_request(participant_id: str, data: dict):
             user, created = User.objects.get_or_create(id=participant_id, defaults={"created_at": timezone.now()})
             if created:
                 logger.info("Participant ID %s not found. Creating a new record.", participant_id)
-                create_new_user(user, context, message)
+                initialize_new_user_model(user, context, message)
             else:
                 logger.info("Participant ID %s exists. Processing update.", participant_id)
-                update_existing_user(user, context, message)
+                update_existing_user_model(user, context, message)
     except Exception as e:
         logger.exception("Error processing request for participant ID %s: %s", participant_id, e)
         raise
@@ -296,17 +289,17 @@ def load_instruction_prompt(user_id: str):
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         raise
-    
-    week = user.week_number
-    message_type = user.message_type
-
+    # get latest session for the user
+    session = user.sessions.order_by("-created_at").first()
+    week = session.week_number
+    message_type = session.message_type
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
 
     # Load the most recent controls record
     try:
         controls = Control.objects.latest("created_at")
     except Control.DoesNotExist:
-        raise 
+        raise
 
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None

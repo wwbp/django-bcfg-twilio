@@ -142,8 +142,8 @@ def individual_send(record: IndividualPipelineRecord):
 # =============================================================================
 
 
-@shared_task(bind=True, max_retries=3)
-def individual_pipeline(self, participant_id, data):
+@shared_task
+def individual_pipeline(participant_id, data):
     try:
         # Stage 1: Ingest the data and create a run record.
         record = individual_ingest(participant_id, data)
@@ -169,4 +169,4 @@ def individual_pipeline(self, participant_id, data):
         individual_send(record)
     except Exception as exc:
         logger.exception(f"Individual pipeline failed for participant {participant_id}: {exc}")
-        raise self.retry(exc=exc, countdown=10) from exc
+        raise

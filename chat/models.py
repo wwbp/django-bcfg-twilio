@@ -29,16 +29,15 @@ class User(models.Model):
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
-    initial_message = models.TextField(default="")
     is_test = models.BooleanField(default=False)
-    week_number = models.IntegerField(null=True, blank=True)
-    message_type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
 
-    def __str__(self):
-        return self.name
 
-    class Meta:
-        ordering = ["-created_at"]
+class IndividualSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+    created_at = models.DateTimeField(auto_now_add=True)
+    initial_message = models.TextField()
+    week_number = models.IntegerField()
+    message_type = models.CharField(max_length=20, choices=MessageType.choices)
 
 
 class Group(models.Model):
