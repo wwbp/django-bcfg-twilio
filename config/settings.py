@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "tester",
     "django_celery_results",
     "djangosaml2",
+    "django_celery_beat",
 ]
 
 MIDDLEWARE = [

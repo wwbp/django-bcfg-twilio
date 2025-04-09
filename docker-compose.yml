@@ -57,7 +57,7 @@ services:
       target: development
     env_file:
       - .env
-    command: celery -A config beat -l info
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
       - redis
       - db
