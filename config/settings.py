@@ -260,7 +260,7 @@ SAML_CONFIG_DEFAULT = {
         },
     },
     "metadata": {
-        # "local": [os.path.join(BASE_DIR, "assets/metadata.xml")],
+        "local": [os.path.join(BASE_DIR, "assets/metadata.xml")],
     },
     "debug": 1,
     "key_file": KEY_FILE,
