@@ -1,4 +1,6 @@
 # tester/views.py
+from django.conf import settings
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from chat.models import ChatTranscript, GroupChatTranscript, User as ChatUser, Group
 from django.views.decorators.http import require_POST
 import json
@@ -10,7 +12,7 @@ import requests
 from tester.models import ChatResponse
 
 
-class ChatTestInterface(View):
+class ChatTestInterface(View, PermissionRequiredMixin):
     def get(self, request):
         # Retrieve stored responses to display on the page.
         responses = ChatResponse.objects.order_by("-created_at")
@@ -20,7 +22,16 @@ class ChatTestInterface(View):
         #     "Please provide me with more information.",
         # ]
         test_users = ChatUser.objects.filter(is_test=True)
-        return render(request, "tester/chat_interface.html", {"responses": responses, "test_users": test_users})
+        return render(
+            request,
+            "tester/chat_interface.html",
+            {
+                "responses": responses,
+                "test_users": test_users,
+                "api_key": settings.INBOUND_MESSAGE_API_KEY,
+                "has_permission": True,
+            },
+        )
 
     def post(self, request):
         # Extract data from the submitted form.
@@ -121,7 +132,7 @@ def chat_transcript(request, test_case_id):
     return JsonResponse({"transcript": transcript})
 
 
-class GroupChatTestInterface(View):
+class GroupChatTestInterface(View, PermissionRequiredMixin):
     def get(self, request):
         test_groups = Group.objects.filter(is_test=True)
         groups_data = []
@@ -137,7 +148,11 @@ class GroupChatTestInterface(View):
                     "initial_message": group.users.first().initial_message if group.users.exists() else "",
                 }
             )
-        return render(request, "tester/group_chat_interface.html", {"test_groups": groups_data})
+        return render(
+            request,
+            "tester/group_chat_interface.html",
+            {"test_groups": groups_data, "api_key": settings.INBOUND_MESSAGE_API_KEY, "has_permission": True},
+        )
 
 
 @require_POST

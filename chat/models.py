@@ -1,5 +1,7 @@
 import uuid
 from django.db import models
+from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
 
 from .services.constant import MODERATION_MESSAGE_DEFAULT
 
@@ -9,6 +11,16 @@ class MessageType(models.TextChoices):
     REMINDER = "reminder", "Reminder"
     CHECK_IN = "check-in", "Check-in"
     SUMMARY = "summary", "Summary"
+
+
+class ModelBase(models.Model):
+    """Base class for all models"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        abstract = True
 
 
 class User(models.Model):
@@ -175,3 +187,18 @@ class GroupPipelineRecord(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class ScheduledTaskAssociation(ModelBase):
+    """Base class used to relate scheduled tasks to their related model objects"""
+
+    task = models.ForeignKey(PeriodicTask, on_delete=models.CASCADE)
+
+    class Meta:
+        abstract = True
+
+
+class GroupScheduledTaskAssociation(ScheduledTaskAssociation):
+    """A scheduled task related to a group"""
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)

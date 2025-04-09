@@ -1,7 +1,10 @@
 import json
+from django.test import override_settings
 from django.urls import reverse
 from unittest.mock import patch
 import logging
+
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,14 @@ def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
         },
         "message": "Hello, world!",
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 202
     assert response.json() == {"message": "Data received"}
 
@@ -40,7 +50,14 @@ def test_ingest_individual_invalid_missing_message(client):
             "name": "John Doe",
         }
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'message' field.
@@ -52,7 +69,14 @@ def test_ingest_individual_invalid_missing_context(client):
     url = reverse("chat:ingest-individual", args=["user123"])
     # Missing the required "context" field.
     payload = {"message": "Hello, world!"}
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'context' field.
@@ -72,8 +96,31 @@ def test_ingest_individual_invalid_missing_context_field(client):
         },
         "message": "Hello, world!",
     }
-    response = client.post(url, json.dumps(payload), content_type="application/json")
+    test_api_key = "test-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):
+        response = client.post(
+            url,
+            json.dumps(payload),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {test_api_key}"},
+        )
     assert response.status_code == 400
     response_data = response.json()
     # Validate that the error indicates the missing 'school_mascot' field.
     assert "school_mascot" in response_data or "This field is required" in str(response_data)
+
+
+@pytest.mark.parametrize("api_key_is_valid", [True, False])
+def test_individual_ingest_view_auth(client, api_key_is_valid):
+    valid_api_key = "valid-api-key"
+
+    url = reverse("chat:ingest-individual", args=["user123"])
+    with override_settings(INBOUND_MESSAGE_API_KEY=valid_api_key):
+        response = client.post(
+            url,
+            "",
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {valid_api_key if api_key_is_valid else 'invalid-api-key'}"},
+        )
+    # response is 400 if api key is valid as we sent no data
+    assert response.status_code == (400 if api_key_is_valid else 403)

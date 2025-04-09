@@ -15,12 +15,25 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, RedirectView
 
-urlpatterns = [
+urlpatterns = []
+
+if settings.REQUIRE_SAML_AUTHENTICATION:
+    urlpatterns += (
+        path(
+            "admin/login/",
+            RedirectView.as_view(permanent=True, url="/saml2/login/", query_string=True),
+        ),
+    )
+
+urlpatterns += [
     path("admin/", admin.site.urls),
     path("api/", include("chat.urls")),
     path("robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain")),
+    path(r"saml2/", include("djangosaml2.urls")),
+    path("", RedirectView.as_view(permanent=True, url="/admin", query_string=True)),
 ]
