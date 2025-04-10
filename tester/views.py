@@ -1,7 +1,7 @@
 # tester/views.py
 from django.conf import settings
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from chat.models import ChatTranscript, GroupChatTranscript, IndividualSession, User as ChatUser, Group
+from chat.models import ChatTranscript, GroupChatTranscript, IndividualSession, TranscriptRole, User as ChatUser, Group
 from django.views.decorators.http import require_POST
 import json
 from django.shortcuts import render, redirect
@@ -104,7 +104,7 @@ def create_test_case(request):
             message_type=message_type,
         )
         # Insert the initial assistant message into the transcript.
-        ChatTranscript.objects.create(user=user, role="assistant", content=initial_message)
+        ChatTranscript.objects.create(user=user, role=TranscriptRole.ASSISTANT, content=initial_message)
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
@@ -178,7 +178,7 @@ def create_group_test_case(request):
             GroupChatTranscript.objects.create(
                 group=group,
                 sender=None,
-                role="assistant",
+                role=TranscriptRole.ASSISTANT,
                 content=initial_message,
             )
         return JsonResponse({"success": True})

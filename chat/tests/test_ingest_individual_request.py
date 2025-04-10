@@ -1,5 +1,5 @@
 import pytest
-from chat.models import IndividualSession, MessageType, User, ChatTranscript
+from chat.models import IndividualSession, MessageType, TranscriptRole, User, ChatTranscript
 from chat.services.crud import ingest_request
 
 
@@ -41,9 +41,9 @@ def test_new_user_creation(base_context):
     # Assert that two transcripts were created
     transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
     assert transcripts.count() == 2
-    assert transcripts[0].role == "assistant"
+    assert transcripts[0].role == TranscriptRole.ASSISTANT
     assert transcripts[0].content == "Hello, world!"
-    assert transcripts[1].role == "user"
+    assert transcripts[1].role == TranscriptRole.USER
     assert transcripts[1].content == "I would like to enroll."
 
 
@@ -68,7 +68,7 @@ def existing_user():
 @pytest.fixture
 def existing_transcript(existing_user):
     user, _ = existing_user
-    return ChatTranscript.objects.create(user=user, role="assistant", content="Initial Hello")
+    return ChatTranscript.objects.create(user=user, role=TranscriptRole.ASSISTANT, content="Initial Hello")
 
 
 def test_existing_user_update_session_context(existing_user, existing_transcript):
@@ -94,10 +94,9 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     assert new_session.initial_message == "Initial Hello From Week 2"
 
     transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
-    assert transcripts.count() == 3 # 2 existing + 1 new assistant
+    assert transcripts.count() == 3  # 2 existing + 1 new assistant
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "User message for week 2"
-
 
 
 def test_existing_user_no_update(existing_user, existing_transcript):

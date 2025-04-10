@@ -13,6 +13,11 @@ class MessageType(models.TextChoices):
     SUMMARY = "summary", "Summary"
 
 
+class TranscriptRole(models.TextChoices):
+    USER = "user", "User"
+    ASSISTANT = "assistant", "Assistant"
+
+
 class ModelBase(models.Model):
     """Base class for all models"""
 
@@ -69,12 +74,8 @@ class Group(models.Model):
 
 
 class ChatTranscript(models.Model):
-    ROLE_CHOICES = (
-        ("user", "User"),
-        ("assistant", "Assistant"),
-    )
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="transcripts")
-    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -83,13 +84,9 @@ class ChatTranscript(models.Model):
 
 
 class GroupChatTranscript(models.Model):
-    ROLE_CHOICES = (
-        ("user", "User"),
-        ("assistant", "Assistant"),
-    )
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
-    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
