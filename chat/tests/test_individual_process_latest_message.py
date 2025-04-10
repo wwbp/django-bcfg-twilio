@@ -23,7 +23,7 @@ def test_individual_process_sequence():
     control = Control.objects.create(system="System", persona="Persona")
     # Record 1: first message (older timestamp)
     record1 = IndividualPipelineRecord.objects.create(
-        participant_id="test_user",
+        user=user,
         message="first message",
     )
     record1.created_at = now - timedelta(seconds=10)
@@ -31,7 +31,7 @@ def test_individual_process_sequence():
 
     # Record 2: second message (latest timestamp)
     record2 = IndividualPipelineRecord.objects.create(
-        participant_id="test_user",
+        user=user,
         message="second message",
     )
     record2.created_at = now

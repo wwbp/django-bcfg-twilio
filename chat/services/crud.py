@@ -19,22 +19,6 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
-def is_test_user(participant_id: str):
-    try:
-        user = User.objects.get(id=participant_id)
-        return user.is_test
-    except User.DoesNotExist:
-        return False
-
-
-def is_test_group(group_id: str):
-    try:
-        group = Group.objects.get(id=group_id)
-        return group.is_test
-    except Group.DoesNotExist:
-        return False
-
-
 def ingest_request(participant_id: str, data: dict):
     """
     Ingests an individual request by either creating a new user record or updating
@@ -70,6 +54,8 @@ def ingest_request(participant_id: str, data: dict):
 
         # in either case, we need to add the user message to the transcript
         ChatTranscript.objects.create(user=user, role=TranscriptRole.USER, content=message)
+
+    return user
 
 
 def validate_ingest_group_request(group_id: str, data: dict):
@@ -143,6 +129,8 @@ def validate_ingest_group_request(group_id: str, data: dict):
 
         if updated:
             group.save()
+
+    return group
 
 
 def sanitize_name(name: str) -> str:

@@ -163,14 +163,14 @@ class SummaryAdmin(BaseAdmin):
 
 @admin.register(IndividualPipelineRecord)
 class IndividualPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("participant_id", "status", "message", "validated_message", "error_log", "updated_at")
+    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
     search_fields = ("message", "validated_message", "error_log")
     list_filter = ("status",)
 
 
 @admin.register(GroupPipelineRecord)
 class GroupPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("group_id", "get_status", "error_log", "updated_at")
+    list_display = ("group", "get_status", "error_log", "updated_at")
     search_fields = ("error_log",)
     list_filter = ("ingested", "processed", "sent", "failed")
 

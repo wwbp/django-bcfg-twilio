@@ -123,7 +123,7 @@ class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IndividualPipelineRecord
 
-    participant_id = factory.Faker("uuid4")
+    user = factory.SubFactory(UserFactory)
     message = factory.Faker("sentence")
     response = factory.Faker("sentence")
     instruction_prompt = factory.Faker("sentence")
@@ -135,7 +135,7 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupPipelineRecord
 
-    group_id = factory.Faker("uuid4")
+    group = factory.SubFactory(GroupFactory)
     ingested = True
 
 

@@ -162,7 +162,7 @@ class IndividualPipelineRecord(models.Model):
         FAILED = "FAILED", "Failed"
 
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    participant_id = models.CharField(max_length=255)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="pipeline_records")
     message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
     instruction_prompt = models.TextField(blank=True, null=True)
@@ -173,7 +173,7 @@ class IndividualPipelineRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
+        return f"IndividualPipelineRecord({self.user}, {self.run_id})"
 
     class Meta:
         ordering = ["-created_at"]
@@ -181,7 +181,7 @@ class IndividualPipelineRecord(models.Model):
 
 class GroupPipelineRecord(models.Model):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    group_id = models.CharField(max_length=255)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="pipeline_records")
     ingested = models.BooleanField(default=False)
     processed = models.BooleanField(default=False)
     sent = models.BooleanField(default=False)
@@ -191,7 +191,7 @@ class GroupPipelineRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"GroupPipelineRecord({self.group_id}, {self.run_id})"
+        return f"GroupPipelineRecord({self.group}, {self.run_id})"
 
     class Meta:
         ordering = ["-created_at"]
