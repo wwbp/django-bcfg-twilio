@@ -7,6 +7,7 @@ from pytest_factoryboy import register
 
 from chat.models import (
     Group,
+    IndividualSession,
     MessageType,
     User,
     ChatTranscript,
@@ -54,6 +55,16 @@ class UserFactory(factory.django.DjangoModelFactory):
     school_mascot = factory.Faker("word")
 
 
+class IndividualSessionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = IndividualSession
+
+    user = factory.SubFactory(UserFactory)
+    initial_message = factory.Faker("sentence")
+    week_number = 1
+    message_type = MessageType.INITIAL
+
+
 class GroupFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Group
@@ -65,7 +76,7 @@ class ChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ChatTranscript
 
-    user = factory.SubFactory(UserFactory)
+    session = factory.SubFactory(IndividualSessionFactory)
     role = factory.Faker("word")
     content = factory.Faker("sentence")
 
@@ -150,3 +161,4 @@ register(SummaryFactory)
 register(StrategyPromptFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
+register(IndividualSessionFactory)

@@ -36,6 +36,10 @@ class User(models.Model):
     name = models.CharField(max_length=255, default="")
     is_test = models.BooleanField(default=False)
 
+    @property
+    def current_session(self) -> "IndividualSession | None":
+        return self.sessions.order_by("-created_at").first()
+
     def __str__(self):
         return self.name
 
@@ -74,7 +78,7 @@ class Group(models.Model):
 
 
 class ChatTranscript(models.Model):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="transcripts")
+    session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

@@ -39,7 +39,7 @@ def test_new_user_creation(base_context):
     assert session.message_type == MessageType.INITIAL
 
     # Assert that two transcripts were created
-    transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
+    transcripts = ChatTranscript.objects.filter(session=session).order_by("id")
     assert transcripts.count() == 2
     assert transcripts[0].role == TranscriptRole.ASSISTANT
     assert transcripts[0].content == "Hello, world!"
@@ -68,7 +68,9 @@ def existing_user():
 @pytest.fixture
 def existing_transcript(existing_user):
     user, _ = existing_user
-    return ChatTranscript.objects.create(user=user, role=TranscriptRole.ASSISTANT, content="Initial Hello")
+    return ChatTranscript.objects.create(
+        session=user.current_session, role=TranscriptRole.ASSISTANT, content="Initial Hello"
+    )
 
 
 def test_existing_user_update_session_context(existing_user, existing_transcript):
@@ -93,7 +95,7 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     assert new_session.week_number == 2
     assert new_session.initial_message == "Initial Hello From Week 2"
 
-    transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
+    transcripts = ChatTranscript.objects.filter(session__user=user).order_by("id")
     assert transcripts.count() == 3  # 2 existing + 1 new assistant
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "User message for week 2"
@@ -119,7 +121,7 @@ def test_existing_user_no_update(existing_user, existing_transcript):
     new_session = user.sessions.order_by("-created_at").first()
     assert new_session == session
 
-    transcripts = ChatTranscript.objects.filter(user=user).order_by("id")
+    transcripts = ChatTranscript.objects.filter(session__user=user).order_by("id")
     assert transcripts.count() == 2
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "Just another message"

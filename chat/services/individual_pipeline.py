@@ -23,9 +23,9 @@ def individual_ingest(participant_id: str, data: dict):
     Stage 1: Validate and store incoming data, then create a new run record.
     """
     user = ingest_request(participant_id, data)
-    record = IndividualPipelineRecord.objects.create(user=user, message=data.get("message", ""))
-    record.status = IndividualPipelineRecord.StageStatus.INGEST_PASSED
-    record.save()
+    record = IndividualPipelineRecord.objects.create(
+        user=user, message=data.get("message", ""), status=IndividualPipelineRecord.StageStatus.INGEST_PASSED
+    )
     logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
     return record
 
@@ -48,21 +48,20 @@ def individual_process(record: IndividualPipelineRecord):
     """
     Stage 3: Process data via an LLM call.
     """
-    participant_id = record.user.id
     # Load chat history and instructions from the database
-    chat_history, message = load_individual_chat_history(participant_id)
+    chat_history, message = load_individual_chat_history(record.user)
 
     # ensure the message is latest
     if record != IndividualPipelineRecord.objects.order_by("-created_at").first():
         record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
     else:
-        instructions = load_instruction_prompt(participant_id)
+        instructions = load_instruction_prompt(record.user)
         response = generate_response(chat_history, instructions, message)
         record.instruction_prompt = instructions
         record.response = response
         record.status = IndividualPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
-    logger.info(f"Individual process pipeline complete for participant {participant_id}, run_id {record.run_id}")
+    logger.info(f"Individual process pipeline complete for participant {record.user.id}, run_id {record.run_id}")
 
 
 def individual_validate(record: IndividualPipelineRecord):
@@ -87,7 +86,7 @@ def individual_send(record: IndividualPipelineRecord):
     participant_id = record.user.id
     response = record.validated_message
     # save the assistant response to the database
-    save_assistant_response(participant_id, record.validated_message)
+    save_assistant_response(record.user, record.validated_message)
     # Send the message via the external endpoint
     if not record.user.is_test:
         send_message_to_participant(participant_id, response)

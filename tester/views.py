@@ -97,20 +97,20 @@ def create_test_case(request):
             is_test=True,
         )
         # Create a new IndividualSession for this user using the provided week number.
-        IndividualSession.objects.create(
+        session = IndividualSession.objects.create(
             user=user,
             initial_message=initial_message,
             week_number=week_number,
             message_type=message_type,
         )
         # Insert the initial assistant message into the transcript.
-        ChatTranscript.objects.create(user=user, role=TranscriptRole.ASSISTANT, content=initial_message)
+        ChatTranscript.objects.create(session=session, role=TranscriptRole.ASSISTANT, content=initial_message)
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
 
 def chat_transcript(request, test_case_id):
-    transcripts = ChatTranscript.objects.filter(user__id=test_case_id).order_by("created_at")
+    transcripts = ChatTranscript.objects.filter(session__user_id=test_case_id).order_by("created_at")
     transcript = [
         {
             "role": t.role,
@@ -134,7 +134,6 @@ class GroupChatTestInterface(View):
                     "participants": participants_str,
                     "school_name": group.users.first().school_name if group.users.exists() else "",
                     "school_mascot": group.users.first().school_mascot if group.users.exists() else "",
-                    "initial_message": group.users.first().initial_message if group.users.exists() else "",
                 }
             )
         return render(
@@ -169,7 +168,6 @@ def create_group_test_case(request):
                         "name": name,
                         "school_name": school_name,
                         "school_mascot": school_mascot,
-                        "initial_message": initial_message,
                         "is_test": True,
                     },
                 )

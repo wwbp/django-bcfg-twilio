@@ -39,7 +39,7 @@ def ingest_request(participant_id: str, data: dict):
                 "name": context.get("name", ""),
             },
         )
-        _, created_session = IndividualSession.objects.get_or_create(
+        session, created_session = IndividualSession.objects.get_or_create(
             user=user,
             week_number=context.get("week_number"),
             message_type=context.get("message_type"),
@@ -49,11 +49,11 @@ def ingest_request(participant_id: str, data: dict):
         if created_session:
             # if we created a new session, we need to add the initial message to it
             ChatTranscript.objects.create(
-                user=user, role=TranscriptRole.ASSISTANT, content=context.get("initial_message")
+                session=session, role=TranscriptRole.ASSISTANT, content=context.get("initial_message")
             )
 
         # in either case, we need to add the user message to the transcript
-        ChatTranscript.objects.create(user=user, role=TranscriptRole.USER, content=message)
+        ChatTranscript.objects.create(session=session, role=TranscriptRole.USER, content=message)
 
     return user
 
@@ -142,15 +142,17 @@ def sanitize_name(name: str) -> str:
     return sanitized if sanitized else "default"
 
 
-def load_individual_chat_history(user_id: str):
-    logger.info(f"Loading chat history for participant: {user_id}")
+def load_individual_chat_history(user: User):
+    logger.info(f"Loading chat history for participant: {user.id}")
 
     # Retrieve all transcripts in chronological order
-    transcripts = ChatTranscript.objects.filter(user_id=user_id).order_by("created_at")
+    transcripts = ChatTranscript.objects.filter(session__user_id=user.id).order_by("created_at")
 
     # Get the most recent user transcript
     latest_user_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role=TranscriptRole.USER).order_by("-created_at").first()
+        ChatTranscript.objects.filter(session__user_id=user.id, role=TranscriptRole.USER)
+        .order_by("-created_at")
+        .first()
     )
 
     # Build chat history, excluding the latest user message
@@ -160,9 +162,9 @@ def load_individual_chat_history(user_id: str):
             continue
 
         if t.role == TranscriptRole.USER:
-            sender_name = t.user.name if t.user.name else TranscriptRole.USER
+            sender_name = t.session.user.name if t.session.user.name else TranscriptRole.USER
         else:  # role is assistant
-            sender_name = t.user.school_mascot if t.user.school_mascot else TranscriptRole.ASSISTANT
+            sender_name = t.session.user.school_mascot if t.session.user.school_mascot else TranscriptRole.ASSISTANT
 
         sender_name = sanitize_name(sender_name)
         history.append(
@@ -201,17 +203,18 @@ def get_latest_assistant_response(user_id: str):
 
     # Retrieve the most recent assistant response for the given user
     latest_assistant_transcript = (
-        ChatTranscript.objects.filter(user_id=user_id, role=TranscriptRole.ASSISTANT).order_by("-created_at").first()
+        ChatTranscript.objects.filter(session__user_id=user_id, role=TranscriptRole.ASSISTANT)
+        .order_by("-created_at")
+        .first()
     )
 
     # Return the content if a transcript exists; otherwise, return None
     return latest_assistant_transcript.content if latest_assistant_transcript else None
 
 
-def save_assistant_response(user_id: str, response):
-    logger.info(f"Saving assistant response for participant: {user_id}")
-    user = User.objects.get(id=user_id)
-    ChatTranscript.objects.create(user=user, role=TranscriptRole.ASSISTANT, content=response)
+def save_assistant_response(user: User, response):
+    logger.info(f"Saving assistant response for participant: {user.id}")
+    ChatTranscript.objects.create(session=user.current_session, role=TranscriptRole.ASSISTANT, content=response)
     logger.info("Assistant Response saved successfully.")
 
 
@@ -237,8 +240,7 @@ INSTRUCTION_PROMPT_TEMPLATE = (
 )
 
 
-def load_instruction_prompt(user_id: str):
-    user = User.objects.get(id=user_id)
+def load_instruction_prompt(user: User):
     # get latest session for the user
     session = user.sessions.order_by("-created_at").first()
     week = session.week_number
