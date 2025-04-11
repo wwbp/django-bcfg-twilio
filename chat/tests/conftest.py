@@ -7,6 +7,7 @@ from pytest_factoryboy import register
 
 from chat.models import (
     Group,
+    IndividualSession,
     MessageType,
     User,
     ChatTranscript,
@@ -54,6 +55,15 @@ class UserFactory(factory.django.DjangoModelFactory):
     school_mascot = factory.Faker("word")
 
 
+class IndividualSessionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = IndividualSession
+
+    user = factory.SubFactory(UserFactory)
+    week_number = 1
+    message_type = MessageType.INITIAL
+
+
 class GroupFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Group
@@ -65,7 +75,7 @@ class ChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ChatTranscript
 
-    user = factory.SubFactory(UserFactory)
+    session = factory.SubFactory(IndividualSessionFactory)
     role = factory.Faker("word")
     content = factory.Faker("sentence")
 
@@ -123,7 +133,7 @@ class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IndividualPipelineRecord
 
-    participant_id = factory.Faker("uuid4")
+    user = factory.SubFactory(UserFactory)
     message = factory.Faker("sentence")
     response = factory.Faker("sentence")
     instruction_prompt = factory.Faker("sentence")
@@ -135,7 +145,7 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupPipelineRecord
 
-    group_id = factory.Faker("uuid4")
+    group = factory.SubFactory(GroupFactory)
     ingested = True
 
 
@@ -150,3 +160,4 @@ register(SummaryFactory)
 register(StrategyPromptFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
+register(IndividualSessionFactory)

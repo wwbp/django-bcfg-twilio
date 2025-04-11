@@ -8,6 +8,7 @@ from chat.models import (
     IndividualPipelineRecord,
     MessageType,
     Prompt,
+    User,
 )
 
 
@@ -112,6 +113,7 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         activity="base activity",
     )
     control = Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
+    user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     with (
         patch(
             "chat.services.individual_pipeline.moderate_message", return_value=mocks["moderation_return"]
@@ -129,11 +131,10 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         patch(
             "chat.services.individual_pipeline.individual_send_moderation", return_value={"status": "ok"}
         ) as mock_send_moderation,
-        patch("chat.services.individual_pipeline.is_test_user", return_value=mocks["is_test_user"]) as mock_is_test,
     ):
         individual_pipeline.run(participant_id, data)
 
-    record = IndividualPipelineRecord.objects.get(participant_id=participant_id)
+    record = IndividualPipelineRecord.objects.get(user=user)
 
     # Assert that the final status recorded matches the expected status.
     assert record.status == expected["expected_status"], (
@@ -171,6 +172,3 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         f"{description}: send_message_to_participant call count expected {expected_send_calls} "
         f"but got {mock_send.call_count}"
     )
-
-    if not mocks["moderation_return"]:
-        mock_is_test.assert_called_once_with(participant_id)

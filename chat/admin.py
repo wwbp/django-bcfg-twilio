@@ -10,13 +10,15 @@ from .models import (
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
+    IndividualSession,
 )
 from admin.models import AuthGroupName
+from simple_history.admin import SimpleHistoryAdmin
 
 log = logging.getLogger(__name__)
 
 
-class BaseAdmin(admin.ModelAdmin):
+class BaseAdmin(SimpleHistoryAdmin):
     # base admin class that logs all actions
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         if obj:
@@ -50,6 +52,13 @@ class ReadonlyTabularInline(admin.TabularInline):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+class IndividualSessionsInline(ReadonlyTabularInline):
+    model = IndividualSession
+    fields = ("week_number", "message_type")
+    readonly_fields = fields
+    ordering = ("-created_at",)
 
 
 class UserGroupsInline(ReadonlyTabularInline):
@@ -98,7 +107,7 @@ class UserAdmin(ReadonlyAdmin):
     search_fields = ("name",)
     list_filter = ("is_test", "school_name")
 
-    inlines = [UserGroupsInline, ChatTranscriptInline, GroupChatTranscriptInline]
+    inlines = [UserGroupsInline, GroupChatTranscriptInline, IndividualSessionsInline]
 
 
 @admin.register(Group)
@@ -116,7 +125,7 @@ class GroupAdmin(ReadonlyAdmin):
 
 @admin.register(ChatTranscript)
 class ChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("user", "role", "content", "created_at")
+    list_display = ("session", "session__user", "role", "content", "created_at")
     search_fields = ("content",)
     list_filter = ("role",)
 
@@ -155,14 +164,14 @@ class SummaryAdmin(BaseAdmin):
 
 @admin.register(IndividualPipelineRecord)
 class IndividualPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("participant_id", "status", "message", "validated_message", "error_log", "updated_at")
+    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
     search_fields = ("message", "validated_message", "error_log")
     list_filter = ("status",)
 
 
 @admin.register(GroupPipelineRecord)
 class GroupPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("group_id", "get_status", "error_log", "updated_at")
+    list_display = ("group", "get_status", "error_log", "updated_at")
     search_fields = ("error_log",)
     list_filter = ("ingested", "processed", "sent", "failed")
 
@@ -178,3 +187,12 @@ class GroupPipelineRecordAdmin(ReadonlyAdmin):
             return "Failed"
         else:
             return "Pending"
+
+
+@admin.register(IndividualSession)
+class IndividualSessionAdmin(ReadonlyAdmin):
+    list_display = ("user", "week_number", "message_type")
+    search_fields = ("message_type", "week_number")
+    list_filter = ("week_number", "message_type")
+
+    inlines = [ChatTranscriptInline]
