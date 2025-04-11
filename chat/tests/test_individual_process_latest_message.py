@@ -2,13 +2,18 @@ from unittest.mock import patch
 from datetime import timedelta
 from django.utils import timezone
 
-from chat.models import Control, IndividualPipelineRecord, MessageType, Prompt, User
+from chat.models import Control, IndividualPipelineRecord, IndividualSession, MessageType, Prompt, User
 from chat.services.individual_pipeline import individual_process
 
 
 def test_individual_process_sequence():
     now = timezone.now()
-    user = User.objects.create(id="test_user", week_number=1, message_type=MessageType.INITIAL)
+    user = User.objects.create(id="test_user")
+    session = IndividualSession.objects.create(
+        user=user,
+        week_number=1,
+        message_type=MessageType.INITIAL,
+    )
     prompt = Prompt.objects.create(
         week=1,
         type=MessageType.INITIAL,
@@ -17,7 +22,7 @@ def test_individual_process_sequence():
     control = Control.objects.create(system="System", persona="Persona")
     # Record 1: first message (older timestamp)
     record1 = IndividualPipelineRecord.objects.create(
-        participant_id="test_user",
+        user=user,
         message="first message",
     )
     record1.created_at = now - timedelta(seconds=10)
@@ -25,7 +30,7 @@ def test_individual_process_sequence():
 
     # Record 2: second message (latest timestamp)
     record2 = IndividualPipelineRecord.objects.create(
-        participant_id="test_user",
+        user=user,
         message="second message",
     )
     record2.created_at = now

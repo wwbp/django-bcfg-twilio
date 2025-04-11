@@ -8,6 +8,7 @@ from chat.models import (
     IndividualPipelineRecord,
     MessageType,
     Prompt,
+    User,
 )
 
 
@@ -33,7 +34,6 @@ def default_context():
             "Test message",
             {
                 "moderation_return": "",
-                "get_moderation_message_return": None,
                 "generate_response_return": "LLM response",
                 "ensure_within_character_limit_return": "LLM response",
                 "is_test_user": False,
@@ -50,15 +50,14 @@ def default_context():
             "Message with self-harm content",
             {
                 "moderation_return": "self-harm",
-                "get_moderation_message_return": "Self-harm safety plan message",
                 "generate_response_return": "LLM ignored",  # Not used
                 "ensure_within_character_limit_return": "Self-harm safety plan message",
                 "is_test_user": False,
             },
             {
-                "expected_status": "SEND_PASSED",
-                "expected_response": "Self-harm safety plan message",
-                "expected_validated_message": "Self-harm safety plan message",
+                "expected_status": "MODERATION_BLOCKED",
+                "expected_response": None,
+                "expected_validated_message": None,
             },
         ),
         (
@@ -67,7 +66,6 @@ def default_context():
             "Message requiring long response shortening",
             {
                 "moderation_return": "",
-                "get_moderation_message_return": None,
                 "generate_response_return": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
                 "ensure_within_character_limit_return": "Shortened response",
                 "is_test_user": False,
@@ -84,7 +82,6 @@ def default_context():
             "Test message for test user",
             {
                 "moderation_return": "",
-                "get_moderation_message_return": None,
                 "generate_response_return": "LLM test response",
                 "ensure_within_character_limit_return": "LLM test response",
                 "is_test_user": True,
@@ -101,7 +98,7 @@ def test_individual_pipeline_parametrized(default_context, description, particip
     """
     Test the individual_pipeline task by simulating:
       - Message ingestion.
-      - Moderation (with potential self-harm checks).
+      - Moderation.
       - Prompt assembly, response generation, and response shortening if needed.
       - Sending the final response (or skipping for test users).
     """
@@ -116,14 +113,11 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         activity="base activity",
     )
     control = Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
+    user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     with (
         patch(
             "chat.services.individual_pipeline.moderate_message", return_value=mocks["moderation_return"]
         ) as mock_mod,
-        patch(
-            "chat.services.individual_pipeline.get_moderation_message",
-            return_value=mocks["get_moderation_message_return"] or "",
-        ) as mock_get_mod,
         patch(
             "chat.services.individual_pipeline.generate_response", return_value=mocks["generate_response_return"]
         ) as mock_gen,
@@ -134,11 +128,13 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         patch(
             "chat.services.individual_pipeline.send_message_to_participant", return_value={"status": "ok"}
         ) as mock_send,
-        patch("chat.services.individual_pipeline.is_test_user", return_value=mocks["is_test_user"]) as mock_is_test,
+        patch(
+            "chat.services.individual_pipeline.individual_send_moderation", return_value={"status": "ok"}
+        ) as mock_send_moderation,
     ):
         individual_pipeline.run(participant_id, data)
 
-    record = IndividualPipelineRecord.objects.get(participant_id=participant_id)
+    record = IndividualPipelineRecord.objects.get(user=user)
 
     # Assert that the final status recorded matches the expected status.
     assert record.status == expected["expected_status"], (
@@ -161,12 +157,18 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         f"{description}: generate_response call count expected {expected_gen_calls} but got {mock_gen.call_count}"
     )
 
+    # Asser moderation message send
+    # Call count should be 0 if moderation returned a blocking value.
+    expected_send_moderation_calls = 1 if mocks["moderation_return"] else 0
+    assert mock_send_moderation.call_count == expected_send_moderation_calls, (
+        f"{description}: individual_send_moderation call count expected {expected_send_moderation_calls} "
+        f"but got {mock_send_moderation.call_count}"
+    )
+
     # Assert send_message_to_participant call count:
-    # Should be 1 only if not a test user.
-    expected_send_calls = 1 if not mocks["is_test_user"] else 0
+    # Should be 1 if not a test user or message moderated.
+    expected_send_calls = 1 if not (mocks["is_test_user"] or mocks["moderation_return"]) else 0
     assert mock_send.call_count == expected_send_calls, (
         f"{description}: send_message_to_participant call count expected {expected_send_calls} "
         f"but got {mock_send.call_count}"
     )
-
-    mock_is_test.assert_called_once_with(participant_id)

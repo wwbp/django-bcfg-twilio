@@ -14,6 +14,7 @@ http:
   # You can specify a custom health check path. The default is "/".
   healthcheck:
     path: '/api/health/'
+    grace_period: 120s
     healthy_threshold: 2
   target_container: 'nginx'
   alias: '*.wwbp-bcfg-chatbot.org'
@@ -43,7 +44,9 @@ network:
   # readonly_fs: true       # Limit to read-only access to mounted root filesystems.
 
 variables:                    # Pass environment variables as key value pairs.
- LOG_LEVEL: info
+  LOG_LEVEL: info
+  CERT_FILE: /app/assets/shibcert.pem
+  KEY_FILE: /app/assets/shibkey.pem
 
 secrets:
   DB_SECRET:
@@ -51,6 +54,7 @@ secrets:
   CELERY_BROKER_HOST: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/RedisEndpoint
   OPENAI_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/OPENAI_API_KEY
   BCFG_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/BCFG_API_KEY
+  INBOUND_MESSAGE_API_KEY: /copilot/${COPILOT_APPLICATION_NAME}/${COPILOT_ENVIRONMENT_NAME}/secrets/INBOUND_MESSAGE_API_KEY
 
 environments:
   dev:
@@ -59,17 +63,23 @@ environments:
     variables:
       DJANGO_ENV: dev
       BCFG_DOMAIN: https://dev-2025.joinstarterkit.org
+      REQUIRE_SAML_AUTHENTICATION: False
+      BASE_ADMIN_URI: https://dev.wwbp-bcfg-chatbot.org/
   test:
     deployment: # The deployment strategy for the "test" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
       DJANGO_ENV: test
       BCFG_DOMAIN: https://test-2025.joinstarterkit.org
+      REQUIRE_SAML_AUTHENTICATION: False
+      BASE_ADMIN_URI: https://test.wwbp-bcfg-chatbot.org/
   prod:
     count: 2
     variables:
       DJANGO_ENV: prod
       BCFG_DOMAIN: https://2025.joinstarterkit.org
+      REQUIRE_SAML_AUTHENTICATION: False
+      BASE_ADMIN_URI: https://app.wwbp-bcfg-chatbot.org/
 
 sidecars:
   nginx:

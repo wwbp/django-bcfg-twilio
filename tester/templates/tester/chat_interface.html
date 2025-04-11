@@ -1,65 +1,54 @@
-{% load static %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Chat Tester Interface</title>
-    <style>
-        /* Minimal CSS for a two-panel layout */
-        .container {
-            display: flex;
-        }
-        .panel {
-            flex: 1;
-            padding: 20px;
-        }
-        .panel:not(:last-child) {
-            border-right: 1px solid #ccc;
-        }
-        /* Simple styles for message tags */
-        .user-tag {
-            font-weight: bold;
-            color: blue;
-        }
-        .assistant-tag {
-            font-weight: bold;
-            color: green;
-        }
-    </style>
-</head>
-<body>
-    <h1>Test Chat Interface</h1>
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="#">Test Chat Interface</a>
+</div>
+{% endblock %}
+
+{% block content %}
     <div class="container">
         <!-- Left panel: Test Case management -->
         <div class="panel">
             <h2>Test Cases</h2>
             <select id="test_case_select" onchange="loadTestCaseChat()">
                 <option value="">-- Select Test Case --</option>
-                {% for test in test_users %}
-                <option value="{{ test.id }}" 
-                    data-name="{{ test.name }}" 
-                    data-school_name="{{ test.school_name }}"
-                    data-school_mascot="{{ test.school_mascot }}"
-                    data-initial_message="{{ test.initial_message }}"
-                    data-message_type="{{ test.message_type }}">
-                    {{ test.name }} - {{ test.school_name }}
+                {% for user in test_users %}
+                <option value="{{ user.id }}" 
+                    data-name="{{ user.name }}" 
+                    data-school_name="{{ user.school_name }}"
+                    data-school_mascot="{{ user.school_mascot }}"
+                    data-week_number="{{ user.current_session.week_number }}"
+                    data-initial_message="{{ user.current_session.initial_message }}"
+                    data-message_type="{{ user.current_session.message_type }}">
+                    {{ user.name }} - {{ user.school_name }}
                 </option>
                 {% endfor %}
             </select>
-            <button type="button" onclick="showNewTestCaseForm()">Create New Test Case</button>
+            <button class="button" type="button" onclick="showNewTestCaseForm()">Create New Test Case</button>
 
             <div id="new_test_case" style="display:none; margin-top:20px;">
                 <h3>Create New Test Case</h3>
                 <label for="new_participant_id">Participant ID:</label>
                 <input type="text" id="new_participant_id"><br><br>
+                
                 <label for="new_name">Name:</label>
                 <input type="text" id="new_name"><br><br>
+                
                 <label for="new_school_name">School Name:</label>
                 <input type="text" id="new_school_name"><br><br>
+                
                 <label for="new_school_mascot">School Mascot:</label>
                 <input type="text" id="new_school_mascot"><br><br>
+                
                 <label for="new_initial_message">Initial Message:</label>
                 <input type="text" id="new_initial_message"><br><br>
-                {% comment %} take input for message type only four possible options initial, reminder,check-in, summary   {% endcomment %}
+                
+                <label for="new_week_number">Week Number:</label>
+                <input type="text" id="new_week_number"><br><br>
+                
+                {% comment %} message type options: initial, reminder, check-in, summary {% endcomment %}
                 <label for="message_type">Message Type:</label>
                 <select id="message_type">
                     <option value="initial">Initial</option>
@@ -67,33 +56,35 @@
                     <option value="check-in">Check-in</option>
                     <option value="summary">Summary</option>
                 </select><br><br>
-                <button type="button" onclick="createTestCase()">Save Test Case</button>
+                
+                <button class="button" type="button" onclick="createTestCase()">Save Test Case</button>
             </div>
         </div>
         
         <!-- Right panel: Chat interface -->
         <div class="panel">
             <h2>Chat Interface</h2>
-            <!-- Metadata and week number input appear only after a test case is selected -->
+            <!-- Metadata and session fields appear only after a test case is selected -->
             <div id="test_case_metadata" style="display:none; border-bottom:1px solid #ccc; margin-bottom:10px; padding-bottom:10px;">
                 <p><strong>Participant ID:</strong> <span id="meta_participant_id"></span></p>
                 <p><strong>Name:</strong> <span id="meta_name"></span></p>
                 <p><strong>School Name:</strong> <span id="meta_school_name"></span></p>
                 <p><strong>School Mascot:</strong> <span id="meta_school_mascot"></span></p>
-                <p><strong>Initial Message:</strong> <span id="meta_initial_message"></span></p>
-                <p><strong>Message Type:</strong> <span id="meta_message_type"></span></p>
-                <label for="week_number">Week Number:</label>
-                <input type="text" id="week_number"><br><br>
+                
+                <p><strong>Week Number:</strong> <span id="meta_week_number"></span></p>
+                <p><strong>Initial Message:</strong> <span id="meta_initial_message_display"></span></p>
+                <p><strong>Message Type:</strong> <span id="meta_message_type_display"></span></p>
+                
                 <label for="message">Message:</label><br>
                 <textarea id="message" rows="3" cols="50"></textarea><br><br>
-                <button type="button" onclick="sendChatMessage()">Send Message</button>
+                <button class="button" type="button" onclick="sendChatMessage()">Send Message</button>
             </div>
             
             <!-- Chat transcript loads for the selected test case -->
             <div id="chat_transcript">
                 <p>Select a test case to load the chat transcript.</p>
             </div>
-            <button type="button" onclick="refreshChat()">Refresh Chat</button>
+            <button class="button" type="button" onclick="refreshChat()">Refresh Chat</button>
         </div>
     </div>
 
@@ -101,18 +92,17 @@
         function loadTestCaseChat() {
             var select = document.getElementById('test_case_select');
             var selectedOption = select.options[select.selectedIndex];
-            if(selectedOption.value) {
-                // Populate metadata fields
+            if (selectedOption.value) {
+                // Populate non-editable metadata fields.
                 document.getElementById('meta_participant_id').innerText = selectedOption.value;
                 document.getElementById('meta_name').innerText = selectedOption.getAttribute('data-name');
                 document.getElementById('meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
                 document.getElementById('meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
-                document.getElementById('meta_initial_message').innerText = selectedOption.getAttribute('data-initial_message');
-                document.getElementById('meta_message_type').innerText = selectedOption.getAttribute('data-message_type');
-                // Show metadata section
-                document.getElementById('test_case_metadata').style.display = 'block';
+                document.getElementById('meta_week_number').innerText = selectedOption.getAttribute('data-week_number');
+                document.getElementById('meta_initial_message_display').innerText = selectedOption.getAttribute('data-initial_message');
+                document.getElementById('meta_message_type_display').innerText = selectedOption.getAttribute('data-message_type');
                 
-                // Load chat transcript for the selected test case
+                document.getElementById('test_case_metadata').style.display = 'block';
                 loadChatTranscript(selectedOption.value);
             } else {
                 document.getElementById('test_case_metadata').style.display = 'none';
@@ -120,19 +110,19 @@
             }
         }
 
-        // Fetch chat transcript and display messages based on role.
+        // Fetch chat transcript and display messages.
         function loadChatTranscript(testCaseId) {
-            fetch(`/test/chat_transcript/${testCaseId}/`)
+            fetch("{% url 'admin:tester:chat-transcript' test_case_id='REPLACE_ME' %}".replace("REPLACE_ME", testCaseId))
                 .then(response => response.json())
                 .then(data => {
                     var transcriptDiv = document.getElementById('chat_transcript');
                     transcriptDiv.innerHTML = '';
-                    if(data.transcript && data.transcript.length > 0) {
+                    if (data.transcript && data.transcript.length > 0) {
                         data.transcript.forEach(function(message) {
                             var p = document.createElement('p');
-                            if(message.role === 'user'){
+                            if (message.role === 'user') {
                                 p.innerHTML = `<span class="user-tag">User:</span> ${message.content} <small>${message.created_at}</small>`;
-                            } else if(message.role === 'assistant'){
+                            } else if (message.role === 'assistant') {
                                 p.innerHTML = `<span class="assistant-tag">Assistant:</span> ${message.content} <small>${message.created_at}</small>`;
                             } else {
                                 p.innerHTML = `<strong>${message.role}:</strong> ${message.content} <small>${message.created_at}</small>`;
@@ -148,10 +138,12 @@
                 });
         }
 
-        // Send a new chat message with context and message.
+        // Send a new chat message along with complete context.
         function sendChatMessage() {
             var testCaseId = document.getElementById('meta_participant_id').innerText;
-            var weekNumber = document.getElementById('week_number').value;
+            var weekNumber = document.getElementById('meta_week_number').innerText;
+            var initialMessage = document.getElementById('meta_initial_message_display').innerText;
+            var messageType = document.getElementById('meta_message_type_display').innerText;
             var message = document.getElementById('message').value;
             if (!message) {
                 alert("Please enter a message.");
@@ -164,24 +156,23 @@
                     name: document.getElementById('meta_name').innerText,
                     school_name: document.getElementById('meta_school_name').innerText,
                     school_mascot: document.getElementById('meta_school_mascot').innerText,
-                    initial_message: document.getElementById('meta_initial_message').innerText,
-                    message_type: document.getElementById('meta_message_type').innerText,
-                    week_number: weekNumber
+                    week_number: weekNumber,
+                    initial_message: initialMessage,
+                    message_type: messageType
                 },
                 message: message
             };
-            // Replace with your actual endpoint to send the message.
-            fetch(`/api/participant/${testCaseId}/incoming`, {
+            fetch("{% url 'chat:ingest-individual' id='REPLACE_ME' %}".replace("REPLACE_ME", testCaseId), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-CSRFToken": "{{ csrf_token }}"
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Authorization": "Bearer {{ api_key }}",
                 },
                 body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
-                // Do not show a success popup.
                 document.getElementById('message').value = "";
                 loadChatTranscript(testCaseId);
             })
@@ -193,7 +184,7 @@
 
         function refreshChat() {
             var testCaseId = document.getElementById('meta_participant_id').innerText;
-            if(testCaseId) {
+            if (testCaseId) {
                 loadChatTranscript(testCaseId);
             }
         }
@@ -209,9 +200,10 @@
             var schoolName = document.getElementById('new_school_name').value;
             var schoolMascot = document.getElementById('new_school_mascot').value;
             var initialMessage = document.getElementById('new_initial_message').value;
+            var weekNumber = document.getElementById('new_week_number').value;
             var messageType = document.getElementById('message_type').value;
 
-            fetch("{% url 'tester:create-test-case' %}", {
+            fetch("{% url 'admin:tester:create-test-case' %}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -223,12 +215,12 @@
                     school_name: schoolName,
                     school_mascot: schoolMascot,
                     initial_message: initialMessage,
+                    week_number: weekNumber,
                     message_type: messageType
                 })
             }).then(response => response.json())
               .then(data => {
-                  if(data.success) {
-                      // No success popup; simply reload.
+                  if (data.success) {
                       location.reload();
                   } else {
                       alert("Error creating test case.");
@@ -243,5 +235,26 @@
         // Auto-refresh chat transcript every 1 second.
         setInterval(refreshChat, 1000);
     </script>
-</body>
-</html>
+
+    <style>
+        .container {
+            display: flex;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+        }
+        .panel:not(:last-child) {
+            border-right: 1px solid #ccc;
+        }
+        .user-tag {
+            font-weight: bold;
+            color: blue;
+        }
+        .assistant-tag {
+            font-weight: bold;
+            color: green;
+        }
+    </style>
+
+{% endblock %}

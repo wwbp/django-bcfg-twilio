@@ -105,4 +105,4 @@ async def send_multiple_responses(group_id: str, responses: list[str]):
     logger.info(f"Sending strategy responses for group ID: {group_id}")
     # TODO: add priority ordering if needed
     for response in responses:
-        await send_message_to_participant_group(group_id, response)
+        send_message_to_participant_group(group_id, response)

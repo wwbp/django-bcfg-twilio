@@ -1,33 +1,13 @@
-{% load static %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Group Chat Tester Interface</title>
-    <style>
-        /* Minimal CSS for a two-panel layout */
-        .container {
-            display: flex;
-        }
-        .panel {
-            flex: 1;
-            padding: 20px;
-        }
-        .panel:not(:last-child) {
-            border-right: 1px solid #ccc;
-        }
-        /* Simple styles for message tags */
-        .user-tag {
-            font-weight: bold;
-            color: blue;
-        }
-        .assistant-tag {
-            font-weight: bold;
-            color: green;
-        }
-    </style>
-</head>
-<body>
-    <h1>Group Chat Test Interface</h1>
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">Home</a>
+&rsaquo; <a href="#">Test Group Chat Interface</a>
+</div>
+{% endblock %}
+
+{% block content %}
     <div class="container">
         <!-- Left panel: Test Group management -->
         <div class="panel">
@@ -44,7 +24,7 @@
                 </option>
                 {% endfor %}
             </select>
-            <button type="button" onclick="showNewGroupTestCaseForm()">Create New Test Group</button>
+            <button class="button" type="button" onclick="showNewGroupTestCaseForm()">Create New Test Group</button>
 
             <div id="new_group_test_case" style="display:none; margin-top:20px;">
                 <h3>Create New Test Group</h3>
@@ -58,7 +38,7 @@
                 <input type="text" id="new_school_mascot"><br><br>
                 <label for="new_initial_message">Initial Message:</label>
                 <input type="text" id="new_initial_message"><br><br>
-                <button type="button" onclick="createGroupTestCase()">Save Test Group</button>
+                <button class="button" type="button" onclick="createGroupTestCase()">Save Test Group</button>
             </div>
         </div>
         
@@ -82,14 +62,14 @@
                     <option value="">-- Select Sender --</option>
                 </select>
                 <br><br>
-                <button type="button" onclick="sendGroupChatMessage()">Send Message</button>
+                <button class="button" type="button" onclick="sendGroupChatMessage()">Send Message</button>
             </div>
             
             <!-- Chat transcript loads for the selected test group -->
             <div id="group_chat_transcript">
                 <p>Select a test group to load the chat transcript.</p>
             </div>
-            <button type="button" onclick="refreshGroupChat()">Refresh Chat</button>
+            <button class="button" type="button" onclick="refreshGroupChat()">Refresh Chat</button>
         </div>
     </div>
 
@@ -133,7 +113,7 @@
 
         // Fetch group chat transcript and display messages based on role.
         function loadGroupChatTranscript(groupId) {
-            fetch(`/test/group_chat_transcript/${groupId}/`)
+            fetch("{% url 'admin:tester:group-chat-transcript' group_id='REPLACE_ME' %}".replace("REPLACE_ME", groupId))
                 .then(response => response.json())
                 .then(data => {
                     var transcriptDiv = document.getElementById('group_chat_transcript');
@@ -193,11 +173,12 @@
                 message: message
             };
             // Send to the group chat ingestion endpoint.
-            fetch(`/api/participantgroup/${groupId}/incoming`, {
+            fetch("{% url 'chat:ingest-group' id='REPLACE_ME' %}".replace("REPLACE_ME", groupId), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-CSRFToken": "{{ csrf_token }}"
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Authorization": "Bearer {{ api_key }}",
                 },
                 body: JSON.stringify(payload)
             })
@@ -232,7 +213,7 @@
             var schoolMascot = document.getElementById('new_school_mascot').value;
             var initialMessage = document.getElementById('new_initial_message').value;
 
-            fetch("{% url 'tester:create-group-test-case' %}", {
+            fetch("{% url 'admin:tester:create-group-test-case' %}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -263,5 +244,27 @@
         // Auto-refresh group chat transcript every 1 second.
         setInterval(refreshGroupChat, 1000);
     </script>
-</body>
-</html>
+
+    <style>
+        /* Minimal CSS for a two-panel layout */
+        .container {
+            display: flex;
+        }
+        .panel {
+            flex: 1;
+            padding: 20px;
+        }
+        .panel:not(:last-child) {
+            border-right: 1px solid #ccc;
+        }
+        /* Simple styles for message tags */
+        .user-tag {
+            font-weight: bold;
+            color: blue;
+        }
+        .assistant-tag {
+            font-weight: bold;
+            color: green;
+        }
+    </style>
+{% endblock %}

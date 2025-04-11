@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from celery import shared_task
-from .crud import is_test_group, validate_ingest_group_request, save_chat_round_group
+from .crud import validate_ingest_group_request, save_chat_round_group
 from .arbitrar import process_arbitrar_layer, send_multiple_responses
 from ..models import GroupPipelineRecord
 
@@ -19,11 +19,11 @@ def group_ingest_pipeline(group_id: str, data: dict):
     """
     try:
         # Validate and update the database with group info.
-        validate_ingest_group_request(group_id, data)
+        group = validate_ingest_group_request(group_id, data)
 
         # Create a new pipeline record for the group.
         record = GroupPipelineRecord.objects.create(
-            group_id=group_id, ingested=True, processed=False, sent=False, failed=False, error_log=""
+            group=group, ingested=True, processed=False, sent=False, failed=False, error_log=""
         )
         logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
         return record.run_id
@@ -40,7 +40,7 @@ def group_process_pipeline(run_id):
     """
     try:
         record = GroupPipelineRecord.objects.get(run_id=run_id)
-        group_id = record.group_id
+        group_id = record.group.id
 
         # Evaluate strategies (using your arbitrar layer) to generate responses.
         strategy_responses = process_arbitrar_layer(group_id)
@@ -69,7 +69,7 @@ def group_send_pipeline(run_id, responses):
     """
     try:
         record = GroupPipelineRecord.objects.get(run_id=run_id)
-        group_id = record.group_id
+        group_id = record.group.id
 
         # Send each generated response to the group asynchronously.
         asyncio.run(send_multiple_responses(group_id, responses))
@@ -109,7 +109,7 @@ def group_pipeline_process_task(self, run_id):
         responses = group_process_pipeline(run_id)
         # After processing, trigger sending stage.
         record = GroupPipelineRecord.objects.get(run_id=run_id)
-        if not is_test_group(record.group_id):
+        if not record.group.is_test:
             group_pipeline_send_task.delay(run_id, responses)
     except Exception as exc:
         logger.error(f"Group pipeline processing failed for run_id {run_id}: {exc}")
