@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django_celery_results",
     "djangosaml2",
     "django_celery_beat",
+    "simple_history",
 ]
 
 MIDDLEWARE = [
@@ -59,6 +60,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "csp.middleware.CSPMiddleware",
     "djangosaml2.middleware.SamlSessionMiddleware",
+    "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
 REQUIRE_SAML_AUTHENTICATION = os.getenv("REQUIRE_SAML_AUTHENTICATION", "False") == "True"

@@ -20,7 +20,7 @@ pytest-asyncio = "*"
 psycopg2-binary = "*"
 djangosaml2 = "*"
 django-csp = "<4.0" # https://github.com/IdentityPython/djangosaml2/issues/415
-
+django-simple-history = "*"
 
 [dev-packages]
 ruff = "*"

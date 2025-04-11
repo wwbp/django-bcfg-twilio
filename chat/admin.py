@@ -13,11 +13,12 @@ from .models import (
     IndividualSession,
 )
 from admin.models import AuthGroupName
+from simple_history.admin import SimpleHistoryAdmin
 
 log = logging.getLogger(__name__)
 
 
-class BaseAdmin(admin.ModelAdmin):
+class BaseAdmin(SimpleHistoryAdmin):
     # base admin class that logs all actions
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         if obj:

@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
+from simple_history.models import HistoricalRecords
 
 from .services.constant import MODERATION_MESSAGE_DEFAULT
 
@@ -19,18 +20,27 @@ class TranscriptRole(models.TextChoices):
 
 
 class ModelBase(models.Model):
-    """Base class for all models"""
+    history = HistoricalRecords(inherit=True, excluded_fields=["created_at"])
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # created_at is duplicated in the HistoricalModel, but is useful for sorting. We don't
+    # want to depend on the HistoricalModel for anything besides an audit log.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
         abstract = True
 
 
-class User(models.Model):
+class ModelBaseWithUuidId(ModelBase):
+    """Base class for all models"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    class Meta:
+        abstract = True
+
+
+class User(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
@@ -47,9 +57,8 @@ class User(models.Model):
         ordering = ["-created_at"]
 
 
-class IndividualSession(models.Model):
+class IndividualSession(ModelBase):
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
-    created_at = models.DateTimeField(auto_now_add=True)
     week_number = models.IntegerField()
     message_type = models.CharField(max_length=20, choices=MessageType.choices)
 
@@ -64,10 +73,9 @@ class IndividualSession(models.Model):
         ordering = ["-created_at"]
 
 
-class Group(models.Model):
+class Group(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
     users = models.ManyToManyField(User, related_name="groups")
-    created_at = models.DateTimeField(auto_now_add=True)
     is_test = models.BooleanField(default=False)
     week_number = models.IntegerField(null=True, blank=True)
     initial_message = models.TextField(default="")
@@ -80,31 +88,28 @@ class Group(models.Model):
         ordering = ["-created_at"]
 
 
-class ChatTranscript(models.Model):
+class ChatTranscript(ModelBase):
     session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
 
 
-class GroupChatTranscript(models.Model):
+class GroupChatTranscript(ModelBase):
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
     role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
 
 
-class Prompt(models.Model):
+class Prompt(ModelBase):
     week = models.IntegerField()
     activity = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
     type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
 
     class Meta:
@@ -112,19 +117,18 @@ class Prompt(models.Model):
         ordering = ["week", "type", "-created_at"]
 
 
-class Control(models.Model):
+class Control(ModelBase):
     persona = models.TextField()
     system = models.TextField()
     default = models.TextField()
     moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name_plural = "Control Prompts"
         ordering = ["-created_at"]
 
 
-class Summary(models.Model):
+class Summary(ModelBase):
     TYPE_CHOICES = [
         ("influencer", "Influencer"),
         ("song", "Song"),
@@ -136,7 +140,6 @@ class Summary(models.Model):
     school = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     summary = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -144,20 +147,19 @@ class Summary(models.Model):
         ordering = ["-updated_at"]
 
 
-class StrategyPrompt(models.Model):
+class StrategyPrompt(ModelBase):
     name = models.CharField(max_length=255)
     what_prompt = models.TextField(help_text="Prompt used to generate a response", default="")
     when_prompt = models.TextField(help_text="Conditions or triggers for using this strategy", default="")
     who_prompt = models.TextField(help_text="Criteria for selecting the response's addressee", default="")
     is_active = models.BooleanField(default=True, help_text="Soft delete flag")
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["is_active", "name"]
 
 
-class IndividualPipelineRecord(models.Model):
+class IndividualPipelineRecord(ModelBase):
     class StageStatus(models.TextChoices):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
@@ -176,7 +178,6 @@ class IndividualPipelineRecord(models.Model):
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -186,7 +187,7 @@ class IndividualPipelineRecord(models.Model):
         ordering = ["-created_at"]
 
 
-class GroupPipelineRecord(models.Model):
+class GroupPipelineRecord(ModelBase):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="pipeline_records")
     ingested = models.BooleanField(default=False)
@@ -194,7 +195,6 @@ class GroupPipelineRecord(models.Model):
     sent = models.BooleanField(default=False)
     failed = models.BooleanField(default=False)
     error_log = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -204,7 +204,7 @@ class GroupPipelineRecord(models.Model):
         ordering = ["-created_at"]
 
 
-class ScheduledTaskAssociation(ModelBase):
+class ScheduledTaskAssociation(ModelBaseWithUuidId):
     """Base class used to relate scheduled tasks to their related model objects"""
 
     task = models.ForeignKey(PeriodicTask, on_delete=models.CASCADE)
