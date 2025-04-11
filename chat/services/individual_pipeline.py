@@ -113,7 +113,8 @@ def individual_pipeline(participant_id: str, data: dict):
 
         # Stage 3: Process via LLM call if the message was not blocked.
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
-            individual_send_moderation(record.user.id)
+            if not record.user.is_test:
+                individual_send_moderation(record.user.id)
             return
 
         individual_process(record)

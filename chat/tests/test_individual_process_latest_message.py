@@ -11,7 +11,6 @@ def test_individual_process_sequence():
     user = User.objects.create(id="test_user")
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Test message",
         week_number=1,
         message_type=MessageType.INITIAL,
     )

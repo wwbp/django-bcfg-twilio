@@ -12,7 +12,6 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
     user = User.objects.create(school_mascot="Hawks")
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Test message",
         week_number=3,
         message_type=MessageType.INITIAL,
     )
@@ -40,7 +39,6 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
     user = User.objects.create(school_mascot="Hawks")
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Test message",
         week_number=3,
         message_type=MessageType.SUMMARY,
     )
@@ -61,7 +59,6 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
     user = User.objects.create(school_mascot="Lions")
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Test message",
         week_number=2,
         message_type=MessageType.INITIAL,
     )
@@ -80,7 +77,6 @@ def test_load_instruction_prompt_with_empty_school_mascot():
     user = User.objects.create(school_mascot="")
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Test message",
         week_number=1,
         message_type=MessageType.INITIAL,
     )

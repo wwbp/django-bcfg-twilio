@@ -14,15 +14,15 @@
             <h2>Test Cases</h2>
             <select id="test_case_select" onchange="loadTestCaseChat()">
                 <option value="">-- Select Test Case --</option>
-                {% for test in test_users %}
-                <option value="{{ test.id }}" 
-                    data-name="{{ test.name }}" 
-                    data-school_name="{{ test.school_name }}"
-                    data-school_mascot="{{ test.school_mascot }}"
-                    data-week_number="{{ test.latest_session.week_number }}"
-                    data-initial_message="{{ test.latest_session.initial_message }}"
-                    data-message_type="{{ test.latest_session.message_type }}">
-                    {{ test.name }} - {{ test.school_name }}
+                {% for user in test_users %}
+                <option value="{{ user.id }}" 
+                    data-name="{{ user.name }}" 
+                    data-school_name="{{ user.school_name }}"
+                    data-school_mascot="{{ user.school_mascot }}"
+                    data-week_number="{{ user.current_session.week_number }}"
+                    data-initial_message="{{ user.current_session.initial_message }}"
+                    data-message_type="{{ user.current_session.message_type }}">
+                    {{ user.name }} - {{ user.school_name }}
                 </option>
                 {% endfor %}
             </select>
@@ -71,19 +71,9 @@
                 <p><strong>School Name:</strong> <span id="meta_school_name"></span></p>
                 <p><strong>School Mascot:</strong> <span id="meta_school_mascot"></span></p>
                 
-                <label for="week_number">Week Number:</label>
-                <input type="text" id="week_number"><br><br>
-                
-                <label for="meta_initial_message"><strong>Initial Message:</strong></label>
-                <input type="text" id="meta_initial_message"><br><br>
-                
-                <label for="meta_message_type"><strong>Message Type:</strong></label>
-                <select id="meta_message_type">
-                    <option value="initial">Initial</option>
-                    <option value="reminder">Reminder</option>
-                    <option value="check-in">Check-in</option>
-                    <option value="summary">Summary</option>
-                </select><br><br>
+                <p><strong>Week Number:</strong> <span id="meta_week_number"></span></p>
+                <p><strong>Initial Message:</strong> <span id="meta_initial_message_display"></span></p>
+                <p><strong>Message Type:</strong> <span id="meta_message_type_display"></span></p>
                 
                 <label for="message">Message:</label><br>
                 <textarea id="message" rows="3" cols="50"></textarea><br><br>
@@ -108,11 +98,9 @@
                 document.getElementById('meta_name').innerText = selectedOption.getAttribute('data-name');
                 document.getElementById('meta_school_name').innerText = selectedOption.getAttribute('data-school_name');
                 document.getElementById('meta_school_mascot').innerText = selectedOption.getAttribute('data-school_mascot');
-                
-                // Populate editable session fields.
-                document.getElementById('week_number').value = selectedOption.getAttribute('data-week_number');
-                document.getElementById('meta_initial_message').value = selectedOption.getAttribute('data-initial_message');
-                document.getElementById('meta_message_type').value = selectedOption.getAttribute('data-message_type');
+                document.getElementById('meta_week_number').innerText = selectedOption.getAttribute('data-week_number');
+                document.getElementById('meta_initial_message_display').innerText = selectedOption.getAttribute('data-initial_message');
+                document.getElementById('meta_message_type_display').innerText = selectedOption.getAttribute('data-message_type');
                 
                 document.getElementById('test_case_metadata').style.display = 'block';
                 loadChatTranscript(selectedOption.value);
@@ -153,9 +141,9 @@
         // Send a new chat message along with complete context.
         function sendChatMessage() {
             var testCaseId = document.getElementById('meta_participant_id').innerText;
-            var weekNumber = document.getElementById('week_number').value;
-            var initialMessage = document.getElementById('meta_initial_message').value;
-            var messageType = document.getElementById('meta_message_type').value;
+            var weekNumber = document.getElementById('meta_week_number').innerText;
+            var initialMessage = document.getElementById('meta_initial_message_display').innerText;
+            var messageType = document.getElementById('meta_message_type_display').innerText;
             var message = document.getElementById('message').value;
             if (!message) {
                 alert("Please enter a message.");

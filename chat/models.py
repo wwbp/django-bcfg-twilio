@@ -50,9 +50,12 @@ class User(models.Model):
 class IndividualSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
     created_at = models.DateTimeField(auto_now_add=True)
-    initial_message = models.TextField()
     week_number = models.IntegerField()
     message_type = models.CharField(max_length=20, choices=MessageType.choices)
+
+    @property
+    def initial_message(self) -> str:
+        return self.transcripts.order_by("-created_at").first().content
 
     def __str__(self):
         return f"{self.user} - {self.message_type} ({self.week_number})"

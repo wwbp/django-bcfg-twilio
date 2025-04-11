@@ -34,7 +34,6 @@ def test_new_user_creation(base_context):
     assert user.school_name == "Test High"
     assert user.school_mascot == "Tigers"
     assert user.name == "Alice"
-    assert session.initial_message == "Hello, world!"
     assert session.week_number == 1
     assert session.message_type == MessageType.INITIAL
 
@@ -57,7 +56,6 @@ def existing_user():
     )
     session = IndividualSession.objects.create(
         user=user,
-        initial_message="Initial Hello",
         week_number=1,
         message_type=MessageType.SUMMARY,
     )
@@ -93,7 +91,6 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     new_session = user.sessions.order_by("-created_at").first()
     assert new_session != session
     assert new_session.week_number == 2
-    assert new_session.initial_message == "Initial Hello From Week 2"
 
     transcripts = ChatTranscript.objects.filter(session__user=user).order_by("id")
     assert transcripts.count() == 3  # 2 existing + 1 new assistant

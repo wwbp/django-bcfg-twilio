@@ -43,7 +43,6 @@ def ingest_request(participant_id: str, data: dict):
             user=user,
             week_number=context.get("week_number"),
             message_type=context.get("message_type"),
-            initial_message=context.get("initial_message"),
         )
 
         if created_session:

@@ -55,7 +55,7 @@ class ReadonlyTabularInline(admin.TabularInline):
 
 class IndividualSessionsInline(ReadonlyTabularInline):
     model = IndividualSession
-    fields = ("week_number", "message_type", "initial_message")
+    fields = ("week_number", "message_type")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -190,8 +190,8 @@ class GroupPipelineRecordAdmin(ReadonlyAdmin):
 
 @admin.register(IndividualSession)
 class IndividualSessionAdmin(ReadonlyAdmin):
-    list_display = ("user", "week_number", "message_type", "initial_message")
-    search_fields = ("initial_message",)
+    list_display = ("user", "week_number", "message_type")
+    search_fields = ("message_type", "week_number")
     list_filter = ("week_number", "message_type")
 
     inlines = [ChatTranscriptInline]

@@ -60,7 +60,6 @@ class IndividualSessionFactory(factory.django.DjangoModelFactory):
         model = IndividualSession
 
     user = factory.SubFactory(UserFactory)
-    initial_message = factory.Faker("sentence")
     week_number = 1
     message_type = MessageType.INITIAL
 

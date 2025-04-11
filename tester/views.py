@@ -17,6 +17,8 @@ class ChatTestInterface(View, PermissionRequiredMixin):
         # Retrieve stored responses to display on the page.
         responses = ChatResponse.objects.order_by("-created_at")
         test_users = ChatUser.objects.filter(is_test=True)
+                    
+
         return render(
             request,
             "tester/chat_interface.html",
@@ -99,7 +101,6 @@ def create_test_case(request):
         # Create a new IndividualSession for this user using the provided week number.
         session = IndividualSession.objects.create(
             user=user,
-            initial_message=initial_message,
             week_number=week_number,
             message_type=message_type,
         )
