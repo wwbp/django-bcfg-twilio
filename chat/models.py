@@ -89,9 +89,17 @@ class Group(ModelBase):
 
 
 class ChatTranscript(ModelBase):
+    class ModerationStatus(models.TextChoices):
+        NotEvaluated = "not_evaluated"
+        Flagged = "flagged"
+        NotFlagged = "not_flagged"
+
     session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     role = models.CharField(max_length=255, choices=TranscriptRole.choices)
     content = models.TextField()
+    moderation_status = models.CharField(
+        max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NotEvaluated
+    )
 
     class Meta:
         ordering = ["-created_at"]

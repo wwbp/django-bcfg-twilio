@@ -4,10 +4,12 @@ from unittest.mock import patch
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
+    ChatTranscript,
     Control,
     IndividualPipelineRecord,
     MessageType,
     Prompt,
+    TranscriptRole,
     User,
 )
 
@@ -39,7 +41,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_status": "SEND_PASSED",
+                "expected_status": IndividualPipelineRecord.StageStatus.SEND_PASSED,
                 "expected_response": "LLM response",
                 "expected_validated_message": "LLM response",
             },
@@ -55,7 +57,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_status": "MODERATION_BLOCKED",
+                "expected_status": IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED,
                 "expected_response": None,
                 "expected_validated_message": None,
             },
@@ -71,7 +73,7 @@ def default_context():
                 "is_test_user": False,
             },
             {
-                "expected_status": "SEND_PASSED",
+                "expected_status": IndividualPipelineRecord.StageStatus.SEND_PASSED,
                 "expected_response": "L" * (MAX_RESPONSE_CHARACTER_LENGTH + 1),
                 "expected_validated_message": "Shortened response",
             },
@@ -87,7 +89,7 @@ def default_context():
                 "is_test_user": True,
             },
             {
-                "expected_status": "VALIDATE_PASSED",
+                "expected_status": IndividualPipelineRecord.StageStatus.VALIDATE_PASSED,
                 "expected_response": "LLM test response",
                 "expected_validated_message": "LLM test response",
             },
@@ -172,3 +174,13 @@ def test_individual_pipeline_parametrized(default_context, description, particip
         f"{description}: send_message_to_participant call count expected {expected_send_calls} "
         f"but got {mock_send.call_count}"
     )
+
+    user_chat_transcript = (
+        record.user.current_session.transcripts.filter(role=TranscriptRole.USER).order_by("-created_at").first()
+    )
+    if expected["expected_status"] == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
+        assert user_chat_transcript.moderation_status == ChatTranscript.ModerationStatus.Flagged
+        assert record.user.current_session.transcripts.count() == 2  # initial and user, no assistant
+    else:
+        assert user_chat_transcript.moderation_status == ChatTranscript.ModerationStatus.NotFlagged
+        assert record.user.current_session.transcripts.count() == 3  # initial, user, assistant response

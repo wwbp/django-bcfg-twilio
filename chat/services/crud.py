@@ -52,9 +52,9 @@ def ingest_request(participant_id: str, data: dict):
             )
 
         # in either case, we need to add the user message to the transcript
-        ChatTranscript.objects.create(session=session, role=TranscriptRole.USER, content=message)
+        user_chat_transcript = ChatTranscript.objects.create(session=session, role=TranscriptRole.USER, content=message)
 
-    return user
+    return user, session, user_chat_transcript
 
 
 def validate_ingest_group_request(group_id: str, data: dict):
@@ -211,9 +211,9 @@ def get_latest_assistant_response(user_id: str):
     return latest_assistant_transcript.content if latest_assistant_transcript else None
 
 
-def save_assistant_response(user: User, response):
+def save_assistant_response(user: User, response: str, session: IndividualSession):
     logger.info(f"Saving assistant response for participant: {user.id}")
-    ChatTranscript.objects.create(session=user.current_session, role=TranscriptRole.ASSISTANT, content=response)
+    ChatTranscript.objects.create(session=session, role=TranscriptRole.ASSISTANT, content=response)
     logger.info("Assistant Response saved successfully.")
 
 

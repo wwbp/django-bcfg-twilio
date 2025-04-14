@@ -9,7 +9,7 @@ from .crud import (
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
 from .send import individual_send_moderation, send_message_to_participant
-from ..models import IndividualPipelineRecord
+from ..models import ChatTranscript, IndividualPipelineRecord, IndividualSession
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +22,28 @@ def individual_ingest(participant_id: str, data: dict):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
-    user = ingest_request(participant_id, data)
+    user, session, user_chat_transcript = ingest_request(participant_id, data)
     record = IndividualPipelineRecord.objects.create(
         user=user, message=data.get("message", ""), status=IndividualPipelineRecord.StageStatus.INGEST_PASSED
     )
     logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
-    return record
+    return record, session, user_chat_transcript
 
 
-def individual_moderation(record: IndividualPipelineRecord):
+def individual_moderation(record: IndividualPipelineRecord, user_chat_transcript: ChatTranscript):
     """
     Stage 2: Moderate the incoming message before processing.
     """
     message = record.message
     blocked_str = moderate_message(message)
     if blocked_str:
+        user_chat_transcript.moderation_status = ChatTranscript.ModerationStatus.Flagged
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
     else:
+        user_chat_transcript.moderation_status = ChatTranscript.ModerationStatus.NotFlagged
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
     record.save()
+    user_chat_transcript.save()
     logger.info(f"Individual moderation pipeline complete for participant {record.user.id}, run_id {record.run_id}")
 
 
@@ -79,14 +82,14 @@ def individual_validate(record: IndividualPipelineRecord):
     logger.info(f"Individual validate pipeline complete for participant {record.user.id}, run_id {record.run_id}")
 
 
-def individual_send(record: IndividualPipelineRecord):
+def individual_send(record: IndividualPipelineRecord, session: IndividualSession):
     """
     Stage 5: Retrieve the most recent response and send it to the participant.
     """
     participant_id = record.user.id
     response = record.validated_message
     # save the assistant response to the database
-    save_assistant_response(record.user, record.validated_message)
+    save_assistant_response(record.user, record.validated_message, session)
     # Send the message via the external endpoint
     if not record.user.is_test:
         send_message_to_participant(participant_id, response)
@@ -106,10 +109,10 @@ def individual_pipeline(participant_id: str, data: dict):
     record: IndividualPipelineRecord | None = None
     try:
         # Stage 1: Ingest the data and create a run record.
-        record = individual_ingest(participant_id, data)
+        record, session, user_chat_transcript = individual_ingest(participant_id, data)
 
         # Stage 2: Moderate the incoming message.
-        individual_moderation(record)
+        individual_moderation(record, user_chat_transcript)
 
         # Stage 3: Process via LLM call if the message was not blocked.
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
@@ -127,7 +130,7 @@ def individual_pipeline(participant_id: str, data: dict):
         individual_validate(record)
 
         # Stage 5: Send the response if the participant is not a test user.
-        individual_send(record)
+        individual_send(record, session)
     except Exception as exc:
         if record:
             record.status = IndividualPipelineRecord.StageStatus.FAILED

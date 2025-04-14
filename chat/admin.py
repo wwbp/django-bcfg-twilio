@@ -89,7 +89,7 @@ class GroupUsersInline(ReadonlyTabularInline):
 
 class ChatTranscriptInline(ReadonlyTabularInline):
     model = ChatTranscript
-    fields = ("role", "content", "created_at")
+    fields = ("role", "content", "moderation_status", "created_at")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -125,7 +125,7 @@ class GroupAdmin(ReadonlyAdmin):
 
 @admin.register(ChatTranscript)
 class ChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("session", "session__user", "role", "content", "created_at")
+    list_display = ("session", "session__user", "role", "content", "moderation_status", "created_at")
     search_fields = ("content",)
     list_filter = ("role",)
 
