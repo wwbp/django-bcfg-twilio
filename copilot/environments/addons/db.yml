@@ -36,7 +36,7 @@ Mappings:
       "DBMaxCapacity": 8   # AllowedValues: from 0.5 through 128
   mydbclusterSnapshotsMap:
     dev:
-      ARN: ''
+      ARN: 'arn:aws:rds:us-east-1:336162656437:cluster-snapshot:awsbackup:job-686dff77-0412-f4e5-255c-ff9ab419f83b'
     test:
       ARN: ''
     prod:
