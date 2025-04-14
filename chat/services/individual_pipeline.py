@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+def _newer_user_messages_exist(record: IndividualPipelineRecord):
+    newer_message_exists = record != IndividualPipelineRecord.objects.order_by("-created_at").first()
+    if newer_message_exists:
+        record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
+        record.save()
+    return newer_message_exists
+
+
 def individual_ingest(participant_id: str, data: dict):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
@@ -54,15 +62,11 @@ def individual_process(record: IndividualPipelineRecord):
     # Load chat history and instructions from the database
     chat_history, message = load_individual_chat_history(record.user)
 
-    # ensure the message is latest
-    if record != IndividualPipelineRecord.objects.order_by("-created_at").first():
-        record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
-    else:
-        instructions = load_instruction_prompt(record.user)
-        response = generate_response(chat_history, instructions, message)
-        record.instruction_prompt = instructions
-        record.response = response
-        record.status = IndividualPipelineRecord.StageStatus.PROCESS_PASSED
+    instructions = load_instruction_prompt(record.user)
+    response = generate_response(chat_history, instructions, message)
+    record.instruction_prompt = instructions
+    record.response = response
+    record.status = IndividualPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
     logger.info(f"Individual process pipeline complete for participant {record.user.id}, run_id {record.run_id}")
 
@@ -82,7 +86,7 @@ def individual_validate(record: IndividualPipelineRecord):
     logger.info(f"Individual validate pipeline complete for participant {record.user.id}, run_id {record.run_id}")
 
 
-def individual_send(record: IndividualPipelineRecord, session: IndividualSession):
+def individual_save_and_send(record: IndividualPipelineRecord, session: IndividualSession):
     """
     Stage 5: Retrieve the most recent response and send it to the participant.
     """
@@ -112,25 +116,28 @@ def individual_pipeline(participant_id: str, data: dict):
         record, session, user_chat_transcript = individual_ingest(participant_id, data)
 
         # Stage 2: Moderate the incoming message.
+        # note that we moderate even if we got newer message since this message
         individual_moderation(record, user_chat_transcript)
-
-        # Stage 3: Process via LLM call if the message was not blocked.
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
+            # if blocked, we tell BCFG and stop here
             if not record.user.is_test:
                 individual_send_moderation(record.user.id)
             return
 
+        # Stage 3: Process via LLM called.
+        if _newer_user_messages_exist(record):
+            return
         individual_process(record)
 
-        # Skip this run message not latest
-        if record.status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED:
-            return
-
         # Stage 4: Validate the outgoing response.
+        if _newer_user_messages_exist(record):
+            return
         individual_validate(record)
 
         # Stage 5: Send the response if the participant is not a test user.
-        individual_send(record, session)
+        if _newer_user_messages_exist(record):
+            return
+        individual_save_and_send(record, session)
     except Exception as exc:
         if record:
             record.status = IndividualPipelineRecord.StageStatus.FAILED

@@ -1,4 +1,5 @@
 import sys
+from unittest.mock import MagicMock, patch
 from django.test import override_settings
 import factory.random
 import pytest
@@ -44,6 +45,55 @@ def overwrite_secrets():
         BCFG_API_KEY="fake-bcfg-api-key",
     ):
         yield
+
+
+class IndividualPipelineMocks:
+    def __init__(
+        self,
+        mock_moderate_message: MagicMock,
+        mock_generate_response: MagicMock,
+        mock_ensure_within_character_limit: MagicMock,
+        mock_send_message_to_participant: MagicMock,
+        mock_individual_send_moderation: MagicMock,
+    ):
+        self.mock_moderate_message = mock_moderate_message
+        self.mock_generate_response = mock_generate_response
+        self.mock_ensure_within_character_limit = mock_ensure_within_character_limit
+        self.mock_send_message_to_participant = mock_send_message_to_participant
+        self.mock_individual_send_moderation = mock_individual_send_moderation
+
+
+@pytest.fixture
+def mock_all_individual_external_calls():
+    # default mocks to make entire pipeline run but return values or
+    # general mocking behavior can be overriden via returned object
+
+    # Note that these mocks don't actually extend all the way to the external interfaces
+    # and could be taken further to mock only http requests (or libraries) but for now
+    # other unit tests capture that coverage
+    with (
+        patch("chat.services.individual_pipeline.moderate_message", return_value="") as mock_moderate_message,
+        patch(
+            "chat.services.individual_pipeline.generate_response", return_value="Some LLM response"
+        ) as mock_generate_response,
+        patch(
+            "chat.services.individual_pipeline.ensure_within_character_limit",
+            return_value="Some shortened LLM response",
+        ) as mock_ensure_within_character_limit,
+        patch(
+            "chat.services.individual_pipeline.send_message_to_participant", return_value={"status": "ok"}
+        ) as mock_send_message_to_participant,
+        patch(
+            "chat.services.individual_pipeline.individual_send_moderation", return_value={"status": "ok"}
+        ) as mock_individual_send_moderation,
+    ):
+        yield IndividualPipelineMocks(
+            mock_moderate_message=mock_moderate_message,
+            mock_generate_response=mock_generate_response,
+            mock_ensure_within_character_limit=mock_ensure_within_character_limit,
+            mock_send_message_to_participant=mock_send_message_to_participant,
+            mock_individual_send_moderation=mock_individual_send_moderation,
+        )
 
 
 class UserFactory(factory.django.DjangoModelFactory):
