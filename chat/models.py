@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
+from simple_history.models import HistoricalRecords
 
 from .services.constant import MODERATION_MESSAGE_DEFAULT
 
@@ -14,40 +15,32 @@ class MessageType(models.TextChoices):
 
 
 class ModelBase(models.Model):
-    """Base class for all models"""
+    history = HistoricalRecords(inherit=True, excluded_fields=["created_at"])
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # created_at is duplicated in the HistoricalModel, but is useful for sorting. We don't
+    # want to depend on the HistoricalModel for anything besides an audit log.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
         abstract = True
 
 
-class User(models.Model):
-    id = models.CharField(primary_key=True, max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
-    school_name = models.CharField(max_length=255, default="")
-    school_mascot = models.CharField(max_length=255, default="")
-    name = models.CharField(max_length=255, default="")
-    initial_message = models.TextField(default="")
-    is_test = models.BooleanField(default=False)
-    week_number = models.IntegerField(null=True, blank=True)
-    message_type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
+class ModelBaseWithUuidId(ModelBase):
+    """Base class for all models"""
 
-    def __str__(self):
-        return self.name
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     class Meta:
-        ordering = ["-created_at"]
+        abstract = True
 
 
-class Group(models.Model):
+class Group(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
-    users = models.ManyToManyField(User, related_name="groups")
-    created_at = models.DateTimeField(auto_now_add=True)
     is_test = models.BooleanField(default=False)
-    week_number = models.IntegerField(null=True, blank=True)
-    initial_message = models.TextField(default="")
+
+    @property
+    def current_session(self) -> "IndividualSession | None":
+        return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
         member_count = self.users.count()
@@ -57,59 +50,120 @@ class Group(models.Model):
         ordering = ["-created_at"]
 
 
-class ChatTranscript(models.Model):
-    ROLE_CHOICES = (
-        ("user", "User"),
-        ("assistant", "Assistant"),
-    )
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="transcripts")
-    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
-    content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+class User(ModelBase):
+    id = models.CharField(primary_key=True, max_length=255)
+    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="users", null=True, blank=True)
+    school_name = models.CharField(max_length=255, default="")
+    school_mascot = models.CharField(max_length=255, default="")
+    name = models.CharField(max_length=255, default="")
+    is_test = models.BooleanField(default=False)
+
+    @property
+    def current_session(self) -> "IndividualSession | None":
+        return self.sessions.order_by("-created_at").first()
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         ordering = ["-created_at"]
 
 
-class GroupChatTranscript(models.Model):
-    ROLE_CHOICES = (
-        ("user", "User"),
-        ("assistant", "Assistant"),
+class BaseSession(ModelBase):
+    week_number = models.IntegerField()
+    message_type = models.CharField(max_length=20, choices=MessageType.choices)
+
+    @property
+    def initial_message(self) -> str:
+        return self.transcripts.order_by("created_at").first().content
+
+    class Meta:
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualSession(BaseSession):
+    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+
+    def __str__(self):
+        return f"{self.user} - {self.message_type} (wk {self.week_number})"
+
+
+class GroupSession(BaseSession):
+    class StrategyPhase(models.TextChoices):
+        BEFORE_AUDIENCE = "before_audience"
+        AFTER_AUDIENCE = "after_audience"
+        AFTER_REMINDER = "after_reminder"
+        AFTER_FOLLOWUP = "after_followup"
+        AFTER_SUMMARY = "after_summary"
+
+    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    current_strategy_phase = models.CharField(
+        max_length=20, choices=StrategyPhase.choices, default=StrategyPhase.BEFORE_AUDIENCE
     )
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="transcripts")
+
+    def __str__(self):
+        return f"{self.group} - {self.message_type} (wk {self.week_number})"
+
+
+class BaseChatTranscript(ModelBase):
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    class ModerationStatus(models.TextChoices):
+        NOT_EVALUATED = "not_evaluated"
+        FLAGGED = "flagged"
+        NOT_FLAGGED = "not_flagged"
+
+    role = models.CharField(max_length=255, choices=Role.choices)
+    content = models.TextField()
+    moderation_status = models.CharField(
+        max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
+    )
+
+    class Meta:
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualChatTranscript(BaseChatTranscript):
+    session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
+
+
+class GroupChatTranscript(BaseChatTranscript):
+    session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
-    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
-    content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
 
 
-class Prompt(models.Model):
+class Prompt(ModelBase):
+    is_for_group = models.BooleanField(default=False)
     week = models.IntegerField()
     activity = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
     type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
+
+    def clean(self):
+        super().clean()
+        if self.is_for_group and self.type == MessageType.CHECK_IN:
+            raise ValueError(f"Group prompts cannot be of type {MessageType.CHECK_IN}")
 
     class Meta:
         verbose_name_plural = "Weekly Prompts"
         ordering = ["week", "type", "-created_at"]
 
 
-class Control(models.Model):
+class Control(ModelBase):
     persona = models.TextField()
     system = models.TextField()
     default = models.TextField()
     moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name_plural = "Control Prompts"
         ordering = ["-created_at"]
 
 
-class Summary(models.Model):
+class Summary(ModelBase):
     TYPE_CHOICES = [
         ("influencer", "Influencer"),
         ("song", "Song"),
@@ -121,7 +175,6 @@ class Summary(models.Model):
     school = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     summary = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -129,20 +182,33 @@ class Summary(models.Model):
         ordering = ["-updated_at"]
 
 
-class StrategyPrompt(models.Model):
+class StrategyPrompt(ModelBase):
     name = models.CharField(max_length=255)
     what_prompt = models.TextField(help_text="Prompt used to generate a response", default="")
     when_prompt = models.TextField(help_text="Conditions or triggers for using this strategy", default="")
     who_prompt = models.TextField(help_text="Criteria for selecting the response's addressee", default="")
     is_active = models.BooleanField(default=True, help_text="Soft delete flag")
-    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["is_active", "name"]
 
 
-class IndividualPipelineRecord(models.Model):
+class BasePipelineRecord(ModelBase):
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    message = models.TextField(blank=True, null=True)
+    response = models.TextField(blank=True, null=True)
+    instruction_prompt = models.TextField(blank=True, null=True)
+    validated_message = models.TextField(blank=True, null=True)
+    error_log = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualPipelineRecord(BasePipelineRecord):
     class StageStatus(models.TextChoices):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
@@ -153,43 +219,30 @@ class IndividualPipelineRecord(models.Model):
         SEND_PASSED = "SEND_PASSED", "Send Passed"
         FAILED = "FAILED", "Failed"
 
-    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    participant_id = models.CharField(max_length=255)
-    message = models.TextField(blank=True, null=True)
-    response = models.TextField(blank=True, null=True)
-    instruction_prompt = models.TextField(blank=True, null=True)
-    validated_message = models.TextField(blank=True, null=True)
-    error_log = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"IndividualPipelineRecord({self.participant_id}, {self.run_id})"
-
-    class Meta:
-        ordering = ["-created_at"]
+        return f"IndividualPipelineRecord({self.user}, {self.run_id})"
 
 
-class GroupPipelineRecord(models.Model):
-    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    group_id = models.CharField(max_length=255)
-    ingested = models.BooleanField(default=False)
-    processed = models.BooleanField(default=False)
-    sent = models.BooleanField(default=False)
-    failed = models.BooleanField(default=False)
-    error_log = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+class GroupPipelineRecord(BasePipelineRecord):
+    class StageStatus(models.TextChoices):
+        INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
+        MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
+        MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
+        PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
+        FAILED = "FAILED", "Failed"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
+    status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
 
     def __str__(self):
-        return f"GroupPipelineRecord({self.group_id}, {self.run_id})"
-
-    class Meta:
-        ordering = ["-created_at"]
+        return f"GroupPipelineRecord({self.user}, {self.run_id})"
 
 
-class ScheduledTaskAssociation(ModelBase):
+class ScheduledTaskAssociation(ModelBaseWithUuidId):
     """Base class used to relate scheduled tasks to their related model objects"""
 
     task = models.ForeignKey(PeriodicTask, on_delete=models.CASCADE)

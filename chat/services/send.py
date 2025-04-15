@@ -4,6 +4,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+
 def send_message_to_participant(participant_id: str, message: str):
     """
     Sends a message to a single participant via the BCFG endpoint.
@@ -16,22 +17,10 @@ def send_message_to_participant(participant_id: str, message: str):
     url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
     payload = {"message": message}
     headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPStatusError as exc:
-        logger.error(
-            f"HTTP error sending message to participant {participant_id}: "
-            f"{exc.response.status_code} - {exc.response.text}"
-        )
-        raise
-    except httpx.RequestError as exc:
-        logger.error(
-            f"Request error sending message to participant {participant_id}: {exc}"
-        )
-        raise
+    with httpx.Client() as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
 
 
 def send_message_to_participant_group(group_id: str, message: str):
@@ -44,25 +33,13 @@ def send_message_to_participant_group(group_id: str, message: str):
     url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
     payload = {"message": message}
     headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPStatusError as exc:
-        logger.error(
-            f"HTTP error sending message to participant group {group_id}: "
-            f"{exc.response.status_code} - {exc.response.text}"
-        )
-        raise
-    except httpx.RequestError as exc:
-        logger.error(
-            f"Request error sending message to participant group {group_id}: {exc}"
-        )
-        raise
+    with httpx.Client() as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
 
 
-def individual_send_moderation(participant_id):
+def send_moderation_message(participant_id):
     """
     Sends a moderation message to a single participant via the BCFG endpoint.
 
@@ -71,19 +48,7 @@ def individual_send_moderation(participant_id):
     """
     url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
     headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, headers=headers)
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPStatusError as exc:
-        logger.error(
-            f"HTTP error sending moderation message to participant {participant_id}: "
-            f"{exc.response.status_code} - {exc.response.text}"
-        )
-        raise
-    except httpx.RequestError as exc:
-        logger.error(
-            f"Request error sending moderation message to participant {participant_id}: {exc}"
-        )
-        raise
+    with httpx.Client() as client:
+        response = client.post(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
