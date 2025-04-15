@@ -1,12 +1,28 @@
 import copy
+import json
 import logging
 from unittest.mock import patch
 from uuid import uuid4
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 import pytest
 
-from chat.models import BaseChatTranscript, Control, Group, GroupPipelineRecord, GroupSession, MessageType, Prompt, User
+from chat.models import (
+    BaseChatTranscript,
+    Control,
+    Group,
+    GroupChatTranscript,
+    GroupPipelineRecord,
+    GroupScheduledTaskAssociation,
+    GroupSession,
+    MessageType,
+    Prompt,
+    User,
+)
+from chat.serializers import GroupIncomingMessageSerializer
+from config import celery
+from chat.services.group_pipeline import _ingest
 
 _INITIAL_MESSAGE = "Some initial message"
 _FIRST_USER_MESSAGE = "some message from user"
@@ -130,7 +146,21 @@ def test_group_pipeline(_inbound_call, _mocks, celery_task_always_eager, client,
         )
         assert matching_payload_participant["name"] == user.name
 
-    # now send a second message, group and session exist and are reused
+    # assert expected task is created, will execute in 1 to 5 minutes from now, and then force execute it now
+    if not moderated:
+        assert GroupScheduledTaskAssociation.objects.count() == 1
+        assert GroupScheduledTaskAssociation.objects.first().group == record.group
+        task = GroupScheduledTaskAssociation.objects.first().task
+        scheduled_time = task.clocked.clocked_time
+        assert scheduled_time > timezone.now() + timezone.timedelta(seconds=59)
+        assert scheduled_time < timezone.now() + timezone.timedelta(seconds=300)
+        task_function = celery.app.tasks[task.task]
+        args = json.loads(task.args)
+        kwargs = json.loads(task.kwargs)
+        task_function.apply_async(args=args, kwargs=kwargs)
+        assert "Group response pipeline complete for group" in caplog.text
+
+    # Finally, send a second message, group and session exist and are reused
     second_message_data = copy.deepcopy(data)
     second_message_data["message"] = "some other message from user"
     response = client.post(
@@ -233,6 +263,7 @@ def test_group_pipeline_sender_not_in_participant_list(_inbound_call, _mocks, ce
     assert f"Group pipeline failed for group {group_id}" in caplog.text
     assert f"Sender ID {new_sender_id} not found in the list of participants" in caplog.text
     assert GroupPipelineRecord.objects.count() == 0
+    assert GroupScheduledTaskAssociation.objects.count() == 0
 
 
 @override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
@@ -252,6 +283,7 @@ def test_group_pipeline_invalid_message_type(_inbound_call, _mocks, celery_task_
     assert f"Group pipeline failed for group {group_id}" in caplog.text
     assert "Group session cannot be of type" in caplog.text
     assert GroupPipelineRecord.objects.count() == 0
+    assert GroupScheduledTaskAssociation.objects.count() == 0
 
 
 @override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
@@ -305,3 +337,77 @@ def test_group_pipeline_throws_exception_after_ingest(_inbound_call, _mocks, cel
     assert record.error_log == "Some error"
     assert "Group pipeline failed for group" in caplog.text
     assert "Some error" in caplog.text
+    assert GroupScheduledTaskAssociation.objects.count() == 0
+
+
+@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
+def test_group_pipeline_clears_existing_scheduled_message(_inbound_call, _mocks, client, celery_task_always_eager):
+    group_id, _, data, _, _, _ = _inbound_call
+    url = reverse("chat:ingest-group", args=[group_id])
+
+    # send message, first task scheduled
+    response = client.post(
+        url,
+        data,
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
+    )
+    assert response.status_code == 202
+    record = GroupPipelineRecord.objects.get()
+    task_association = GroupScheduledTaskAssociation.objects.get()
+    assert json.loads(task_association.task.kwargs)["run_id"] == str(record.run_id)
+
+    # send another message, second task scheduled, first task deleted
+    response = client.post(
+        url,
+        data,
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
+    )
+    assert response.status_code == 202
+    records = list(GroupPipelineRecord.objects.order_by("created_at").all())
+    assert len(records) == 2
+    assert records[0].id == record.id
+    new_record = records[1]
+    task_association = GroupScheduledTaskAssociation.objects.get()
+    assert json.loads(task_association.task.kwargs)["run_id"] == str(new_record.run_id)
+
+
+@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
+def test_group_pipeline_new_message_during_ingrestion(_inbound_call, _mocks, client, celery_task_always_eager):
+    group_id, sender_id, data, second_sender_id, _, _ = _inbound_call
+    mock_moderate_message, _ = _mocks
+    url = reverse("chat:ingest-group", args=[group_id])
+    second_payload = copy.deepcopy(data)
+    second_payload["message"] = "some message from user during first moderation"
+    second_payload["sender_id"] = second_sender_id
+
+    def mock_moderate_message_side_effect(*args, **kwargs):
+        # mock another message is ingested here
+        serializer = GroupIncomingMessageSerializer(data=second_payload)
+        serializer.is_valid(raise_exception=True)
+        _ingest(group_id, serializer.validated_data)
+        return ""
+
+    mock_moderate_message.side_effect = mock_moderate_message_side_effect
+
+    response = client.post(
+        url,
+        data,
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
+    )
+    assert response.status_code == 202
+
+    records = list(GroupPipelineRecord.objects.order_by("created_at").all())
+    assert len(records) == 2
+    assert all(record.group.id == str(group_id) for record in records)
+    assert records[0].status == GroupPipelineRecord.StageStatus.PROCESS_SKIPPED
+    assert records[1].status == GroupPipelineRecord.StageStatus.INGEST_PASSED
+    assert records[0].user.id == sender_id
+    assert records[1].user.id == second_sender_id
+    transcripts = list(GroupChatTranscript.objects.order_by("created_at").all())
+    assert len(transcripts) == 3
+    assert transcripts[0].content == _INITIAL_MESSAGE
+    assert transcripts[1].content == _FIRST_USER_MESSAGE
+    assert transcripts[2].content == "some message from user during first moderation"

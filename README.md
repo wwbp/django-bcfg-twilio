@@ -148,7 +148,7 @@ To create a new runner
 
         [Service]
         Restart=on-failure
-        ExecStartPre=-/usr/bin/docker rm -f runner-76368873-9fa8-5b0e-ba95-f179a2335080
+        ExecStartPre=-/usr/bin/docker rm -f runner-REPLACE_WITH_NAME
         ExecStartPre=/bin/sleep 5
         ExecStart=/usr/bin/docker container run -d \
             -v /tmp:/tmp \

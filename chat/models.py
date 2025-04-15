@@ -90,7 +90,17 @@ class IndividualSession(BaseSession):
 
 
 class GroupSession(BaseSession):
+    class StrategyPhase(models.TextChoices):
+        BEFORE_AUDIENCE = "before_audience"
+        AFTER_AUDIENCE = "after_audience"
+        AFTER_REMINDER = "after_reminder"
+        AFTER_FOLLOWUP = "after_followup"
+        AFTER_SUMMARY = "after_summary"
+
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    current_strategy_phase = models.CharField(
+        max_length=20, choices=StrategyPhase.choices, default=StrategyPhase.BEFORE_AUDIENCE
+    )
 
     def __str__(self):
         return f"{self.group} - {self.message_type} (wk {self.week_number})"
@@ -221,7 +231,7 @@ class GroupPipelineRecord(BasePipelineRecord):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
         MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
-        # TODO add more steps as we flush out functionality
+        PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
         FAILED = "FAILED", "Failed"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")

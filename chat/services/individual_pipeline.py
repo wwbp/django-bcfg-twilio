@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 def _newer_user_messages_exist(record: IndividualPipelineRecord):
-    newer_message_exists = record != IndividualPipelineRecord.objects.order_by("-created_at").first()
+    latest_record_for_user = IndividualPipelineRecord.objects.filter(user=record.user).order_by("-created_at").first()
+    newer_message_exists = record != latest_record_for_user
     if newer_message_exists:
         record.status = IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
         record.save()
