@@ -50,6 +50,12 @@ def ingest_request(participant_id: str, data: dict):
             IndividualChatTranscript.objects.create(
                 session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
             )
+        else:
+            if session.initial_message != context.get("initial_message"):
+                logger.error(
+                    f"Got new initial_message for existing individual session {session}. "
+                    f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+                )
 
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
@@ -57,89 +63,6 @@ def ingest_request(participant_id: str, data: dict):
         )
 
     return user, session, user_chat_transcript
-
-
-def validate_ingest_group_request(group_id: str, data: dict):
-    logger.info(f"Checking database for group ID: {group_id}")
-    group, created = Group.objects.get_or_create(id=group_id)
-    context = data.get("context", {})
-    message = data.get("message", "")
-    sender_id = data.get("sender_id")
-
-    if created:
-        logger.info(f"Group ID {group_id} not found. Creating a new record.")
-        group.initial_message = context.get("initial_message", "")
-        group.week_number = context.get("week_number")
-        group.save()
-
-        # Create the initial assistant transcript entry (sender remains null)
-        GroupChatTranscript.objects.create(
-            group=group, role=BaseChatTranscript.Role.ASSISTANT, content=group.initial_message
-        )
-
-        # Create and add participants to the group
-        for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(id=participant["id"])
-            if user_created:
-                user.name = participant.get("name", "")
-                user.school_name = context.get("school_name", "")
-                user.school_mascot = context.get("school_mascot", "")
-                user.save()
-            group.users.add(user)
-
-        # Now add the incoming user message transcript entry with sender info.
-        # assume a sender_id is provided in data.
-        sender = None
-        if sender_id:
-            sender, _ = User.objects.get_or_create(id=sender_id)
-
-        GroupChatTranscript.objects.create(
-            group=group, role=BaseChatTranscript.Role.USER, content=message, sender=sender
-        )
-    else:
-        logger.info(f"Group ID {group_id} exists.")
-        updated = False
-
-        # Check if week_number has changed and update if needed.
-        new_week = context.get("week_number")
-        if new_week is not None and new_week != group.week_number:
-            logger.info(f"Week number changed for group {group_id} from {group.week_number} to {new_week}.")
-            group.week_number = new_week
-            updated = True
-
-        # Check if the initial message has changed and update transcript accordingly.
-        new_initial_message = context.get("initial_message")
-        if new_initial_message and new_initial_message != group.initial_message:
-            logger.info(f"Initial message changed for group {group_id}. Updating transcript.")
-            group.initial_message = new_initial_message
-            GroupChatTranscript.objects.create(
-                group=group, role=BaseChatTranscript.Role.ASSISTANT, content=new_initial_message
-            )
-            updated = True
-
-        # Update or add new participants before saving the user message transcript.
-        for participant in context.get("participants", []):
-            user, user_created = User.objects.get_or_create(id=participant["id"])
-            if user_created:
-                user.name = participant.get("name", "")
-                user.school_name = context.get("school_name", "")
-                user.school_mascot = context.get("school_mascot", "")
-                user.save()
-            group.users.add(user)
-
-        # Now add the incoming user message transcript with the sender field.
-        sender_id = data.get("sender_id")
-        sender = None
-        if sender_id:
-            sender, _ = User.objects.get_or_create(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role=BaseChatTranscript.Role.USER, content=message, sender=sender
-        )
-
-        if updated:
-            group.save()
-
-    return group
 
 
 def sanitize_name(name: str) -> str:
@@ -177,7 +100,7 @@ def load_individual_chat_history(user: User):
                 t.session.user.school_mascot if t.session.user.school_mascot else BaseChatTranscript.Role.ASSISTANT
             )
 
-        sender_name = sanitize_name(sender_name)
+        sender_name = sanitize_name(sender_name)  # type: ignore[arg-type]
         history.append(
             {
                 "role": t.role,

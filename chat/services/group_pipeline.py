@@ -2,9 +2,11 @@
 import logging
 from celery import shared_task
 
-# from .crud import validate_ingest_group_request, save_chat_round_group
+from chat.services.group_crud import ingest_request
+
+# from .individual_crud import save_chat_round_group
 # from .arbitrar import process_arbitrar_layer, send_multiple_responses
-from ..models import GroupPipelineRecord
+from ..models import GroupChatTranscript, GroupPipelineRecord, GroupSession
 
 logger = logging.getLogger(__name__)
 
@@ -13,26 +15,19 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-# TODO clean up legacy code as we go
-# def ingest_pipeline(group_id: str, data: dict):
-#     """
-#     Stage 1: Validate and store incoming group data, then create a new group run record.
-#     """
-#     try:
-#         # Validate and update the database with group info.
-#         group = validate_ingest_group_request(group_id, data)
-
-#         # Create a new pipeline record for the group.
-#         record = GroupPipelineRecord.objects.create(
-#             group=group, ingested=True, processed=False, sent=False, failed=False, error_log=""
-#         )
-#         logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
-#         return record.run_id
-#     except Exception as e:
-#         logger.error(f"Group ingest pipeline failed for group {group_id}: {e}")
-#         record = GroupPipelineRecord.objects.create(group_id=group_id, failed=True, error_log=str(e))
-#         record.save()
-#         raise
+def _ingest(group_id: str, data: dict) -> tuple[GroupPipelineRecord, GroupSession, GroupChatTranscript]:
+    """
+    Stage 1: Validate and store incoming data, then create a new run record.
+    """
+    group, session, user_chat_transcript = ingest_request(group_id, data)
+    record = GroupPipelineRecord.objects.create(
+        user=user_chat_transcript.sender,
+        group=group,
+        message=data.get("message", ""),
+        status=GroupPipelineRecord.StageStatus.INGEST_PASSED,
+    )
+    logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
+    return record, session, user_chat_transcript
 
 
 # def group_process_pipeline(run_id):
@@ -135,14 +130,8 @@ logger = logging.getLogger(__name__)
 def group_pipeline(group_id: str, data: dict):
     record: GroupPipelineRecord | None = None
     try:
-        # TODO
-        # 1. Ingest and create/get both user and group.
-        #    Includes validation
-        #    * manage soft delete of changed participants
-        #    * confirm user didn't switch groups
-        #    * confirm message type is not check-in
-        # 2. Start wait and check logic per phase, including add field to keep track of phases
-        pass
+        record, session, user_chat_transcript = _ingest(group_id, data)
+        # TODO Start wait and check logic per phase, including add field to keep track of phases
     except Exception as exc:
         if record:
             record.status = GroupPipelineRecord.StageStatus.FAILED

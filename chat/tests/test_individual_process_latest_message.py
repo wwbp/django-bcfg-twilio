@@ -36,8 +36,8 @@ def inbound_call_and_mocks(mock_all_individual_external_calls) -> tuple[UUID, di
     }
 
     Prompt.objects.create(
-        week=inbound_payload["context"]["week_number"],
-        type=inbound_payload["context"]["message_type"],
+        week=inbound_payload["context"]["week_number"],  # type: ignore[index]
+        type=inbound_payload["context"]["message_type"],  # type: ignore[index]
         activity="base activity",
     )
     Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")

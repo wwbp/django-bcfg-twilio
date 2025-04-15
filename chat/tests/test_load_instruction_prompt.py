@@ -1,6 +1,6 @@
 import pytest
 from chat.models import MessageType, User, Control, Prompt, IndividualSession
-from chat.services.crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
+from chat.services.individual_crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
 
 def test_load_instruction_prompt_with_existing_user_and_prompt():

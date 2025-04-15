@@ -1,7 +1,7 @@
 import logging
 from celery import shared_task
 from .moderation import moderate_message
-from .crud import (
+from .individual_crud import (
     load_individual_chat_history,
     load_instruction_prompt,
     ingest_request,
@@ -114,6 +114,7 @@ def individual_pipeline(participant_id: str, data: dict):
     try:
         # Stage 1: Ingest the data and create a run record.
         record, session, user_chat_transcript = individual_ingest(participant_id, data)
+        assert record  # to appease the typechecker
 
         # Stage 2: Moderate the incoming message.
         # note that we moderate even if we got newer message since this message

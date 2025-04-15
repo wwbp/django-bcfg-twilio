@@ -37,7 +37,6 @@ class ModelBaseWithUuidId(ModelBase):
 class Group(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
     is_test = models.BooleanField(default=False)
-    week_number = models.IntegerField(null=True, blank=True)
 
     @property
     def current_session(self) -> "IndividualSession | None":
@@ -76,7 +75,7 @@ class BaseSession(ModelBase):
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("-created_at").first().content
+        return self.transcripts.order_by("created_at").first().content
 
     class Meta:
         abstract = True
