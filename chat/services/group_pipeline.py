@@ -2,13 +2,14 @@
 import logging
 from celery import shared_task
 
+from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
 from chat.services.group_crud import ingest_request
 from chat.services.moderation import moderate_message
 from chat.services.send import send_moderation_message
 
 # from .individual_crud import save_chat_round_group
 # from .arbitrar import process_arbitrar_layer, send_multiple_responses
-from ..models import GroupChatTranscript, GroupPipelineRecord, GroupSession
+from ..models import GroupChatTranscript, GroupPipelineRecord
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +18,21 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _ingest(group_id: str, data: dict) -> tuple[GroupPipelineRecord, GroupSession, GroupChatTranscript]:
+def _ingest(
+    group_id: str, group_incoming_message: GroupIncomingMessage
+) -> tuple[GroupPipelineRecord, GroupChatTranscript]:
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
-    group, session, user_chat_transcript = ingest_request(group_id, data)
+    group, user_chat_transcript = ingest_request(group_id, group_incoming_message)
     record = GroupPipelineRecord.objects.create(
         user=user_chat_transcript.sender,
         group=group,
-        message=data.get("message", ""),
+        message=group_incoming_message.message,
         status=GroupPipelineRecord.StageStatus.INGEST_PASSED,
     )
     logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
-    return record, session, user_chat_transcript
+    return record, user_chat_transcript
 
 
 def _moderate(record: GroupPipelineRecord, user_chat_transcript: GroupChatTranscript):
@@ -149,10 +152,15 @@ def _moderate(record: GroupPipelineRecord, user_chat_transcript: GroupChatTransc
 
 
 @shared_task
-def group_pipeline(group_id: str, data: dict):
+def handle_inbound_group_message(group_id: str, data: dict):
+    # we reuse serializer used in inbound http endpoint, which already validated data
+    serializer = GroupIncomingMessageSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    group_incoming_message: GroupIncomingMessage = serializer.validated_data
+
     record: GroupPipelineRecord | None = None
     try:
-        record, session, user_chat_transcript = _ingest(group_id, data)
+        record, user_chat_transcript = _ingest(group_id, group_incoming_message)
         _moderate(record, user_chat_transcript)
         if record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED:
             # if blocked, we tell BCFG and stop here
@@ -167,3 +175,14 @@ def group_pipeline(group_id: str, data: dict):
             record.save()
         logger.exception(f"Group pipeline failed for group {group_id}")
         raise
+
+
+@shared_task
+def respond_to_group(record: GroupPipelineRecord, session: str, user_chat_transcript: GroupChatTranscript):
+    """
+    Stage 3: Send the response to the group.
+    """
+    # TODO Implement sending logic here
+    logger.info(
+        f"Group response pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
+    )

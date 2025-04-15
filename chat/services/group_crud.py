@@ -1,5 +1,7 @@
 import logging
 
+from chat.serializers import GroupIncomingMessage
+
 from ..models import (
     BaseChatTranscript,
     Group,
@@ -38,28 +40,29 @@ def _get_or_create_session(group: Group, week_number: int, message_type: str, in
     return session
 
 
-def _remove_deleted_group_participants(group: Group, data: dict):
+def _remove_deleted_group_participants(group: Group, group_incoming_message: GroupIncomingMessage):
     existing_group_users: list[User] = list(group.users.all())
-    inbound_participants = data.get("context", {}).get("participants", [])
+    inbound_participants = group_incoming_message.context.participants
     for user in existing_group_users:
-        matching_inbound_participant = next((ip for ip in inbound_participants if ip["id"] == user.id), None)
+        matching_inbound_participant = next((ip for ip in inbound_participants if ip.id == user.id), None)
         if not matching_inbound_participant:
             # this is a valid use case if a participant leaves the study
             logger.info(f"Removing user {user.id} from group {group.id}.")
             group.users.remove(user)
 
 
-def _validate_create_and_update_group_participants(group: Group, data: dict, sender_id: str, group_just_created: bool):
-    context: dict = data.get("context", {})
-    inbound_participants_payload = context.get("participants", [])
+def _validate_create_and_update_group_participants(
+    group: Group, group_incoming_message: GroupIncomingMessage, sender_id: str, group_just_created: bool
+):
+    inbound_participants_payload = group_incoming_message.context.participants
     found_sender = False
 
     for participant in inbound_participants_payload:
-        if participant["id"] == sender_id:
+        if participant.id == sender_id:
             found_sender = True
 
         # if user exists, update attributes. Group membership shouldn't change but we handle just in case
-        existing_users = list(User.objects.filter(id=participant["id"]).all())
+        existing_users = list(User.objects.filter(id=participant.id).all())
         if existing_users:
             existing_user = existing_users[0]
             changed = False
@@ -71,13 +74,13 @@ def _validate_create_and_update_group_participants(group: Group, data: dict, sen
                 existing_user.group = group
                 changed = True
             if (
-                existing_user.school_name != context.get("school_name", "")
-                or existing_user.school_mascot != context.get("school_mascot", "")
-                or existing_user.name != participant["name"]
+                existing_user.school_name != group_incoming_message.context.school_name
+                or existing_user.school_mascot != group_incoming_message.context.school_mascot
+                or existing_user.name != participant.name
             ):
-                existing_user.school_name = context.get("school_name", "")
-                existing_user.school_mascot = context.get("school_mascot", "")
-                existing_user.name = participant["name"]
+                existing_user.school_name = group_incoming_message.context.school_name
+                existing_user.school_mascot = group_incoming_message.context.school_mascot
+                existing_user.name = participant.name
                 changed = True
             if changed:
                 existing_user.save()
@@ -86,12 +89,12 @@ def _validate_create_and_update_group_participants(group: Group, data: dict, sen
         else:
             if not group_just_created:
                 # we should not need to add new users to existing groups. We will do it, but we report it
-                logger.error(f"Existing group does not yet have user {participant['id']}. Creating new user.")
+                logger.error(f"Existing group does not yet have user {participant.id}. Creating new user.")
             User.objects.create(
-                id=participant["id"],
-                name=participant["name"],
-                school_name=context.get("school_name", ""),
-                school_mascot=context.get("school_mascot", ""),
+                id=participant.id,
+                name=participant.name,
+                school_name=group_incoming_message.context.school_name,
+                school_mascot=group_incoming_message.context.school_mascot,
                 group=group,
             )
 
@@ -101,31 +104,30 @@ def _validate_create_and_update_group_participants(group: Group, data: dict, sen
         raise ValueError(f"Sender ID {sender_id} not found in the list of participants: {inbound_participants_payload}")
 
 
-def ingest_request(group_id: str, data: dict):
+def ingest_request(group_id: str, group_incoming_message: GroupIncomingMessage):
     """
     Ingests a group request by either creating a new user record or updating
     an existing one. The operation is wrapped in an atomic transaction for consistency.
     """
     logger.info("Processing request for group ID: %s", group_id)
-    context: dict = data.get("context", {})
-    message: str = data.get("message", "")
-    sender_id: str = data.get("sender_id", "")
 
     with transaction.atomic():
         group, group_created = Group.objects.get_or_create(
             id=group_id,
         )
-        _remove_deleted_group_participants(group, data)
-        _validate_create_and_update_group_participants(group, data, sender_id, group_just_created=group_created)
-        sender = User.objects.get(id=sender_id)
+        _remove_deleted_group_participants(group, group_incoming_message)
+        _validate_create_and_update_group_participants(
+            group, group_incoming_message, group_incoming_message.sender_id, group_just_created=group_created
+        )
+        sender = User.objects.get(id=group_incoming_message.sender_id)
         session = _get_or_create_session(
             group,
-            week_number=context.get("week_number"),  # type: ignore[arg-type]
-            message_type=context.get("message_type"),  # type: ignore[arg-type]
-            initial_message=context.get("initial_message"),  # type: ignore[arg-type]
+            week_number=group_incoming_message.context.week_number,
+            message_type=group_incoming_message.context.message_type,
+            initial_message=group_incoming_message.context.initial_message,
         )
         user_chat_transcript = GroupChatTranscript.objects.create(
-            session=session, role=BaseChatTranscript.Role.USER, content=message, sender=sender
+            session=session, role=BaseChatTranscript.Role.USER, content=group_incoming_message.message, sender=sender
         )
 
-    return group, session, user_chat_transcript
+    return group, user_chat_transcript
