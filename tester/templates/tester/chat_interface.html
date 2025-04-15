@@ -219,17 +219,18 @@
                     message_type: messageType
                 })
             }).then(response => response.json())
-              .then(data => {
-                  if (data.success) {
-                      location.reload();
-                  } else {
-                      alert("Error creating test case.");
-                  }
-              })
-              .catch(error => {
-                  alert("Error creating test case.");
-                  console.error('Error creating test case:', error);
-              });
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    // Display error from the response
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch(error => {
+                alert("Error creating test case.");
+                console.error('Error creating test case:', error);
+            });
         }
         
         // Auto-refresh chat transcript every 1 second.

@@ -1,6 +1,7 @@
 # tester/views.py
 from django.conf import settings
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import IntegrityError, transaction
 from chat.models import (
     BaseChatTranscript,
     GroupSession,
@@ -25,6 +26,7 @@ class ChatTestInterface(View, PermissionRequiredMixin):
         # Retrieve stored responses to display on the page.
         responses = ChatResponse.objects.order_by("-created_at")
         test_users = ChatUser.objects.filter(is_test=True)
+                    
 
         return render(
             request,
@@ -97,15 +99,21 @@ def create_test_case(request):
     message_type = data.get("message_type")
 
     if participant_id and name:
-        # Create the test user without session-specific fields.
-        user = ChatUser.objects.create(
-            id=participant_id,
-            name=name,
-            school_name=school_name,
-            school_mascot=school_mascot,
-            is_test=True,
-        )
-        # Create a new IndividualSession for this user using the provided week number.
+        try:
+            with transaction.atomic():
+                user = ChatUser.objects.create(
+                    id=participant_id,
+                    name=name,
+                    school_name=school_name,
+                    school_mascot=school_mascot,
+                    is_test=True,
+                )
+        except IntegrityError:
+            # Notify the user if the participant id already exists.
+            return JsonResponse(
+                {"success": False, "error": "Participant ID already exists. Please use a unique ID."}, status=400
+            )
+
         session = IndividualSession.objects.create(
             user=user,
             week_number=week_number,
