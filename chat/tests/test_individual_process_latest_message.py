@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from chat.models import ChatTranscript, Control, IndividualPipelineRecord, MessageType, Prompt
+from chat.models import IndividualChatTranscript, Control, IndividualPipelineRecord, MessageType, Prompt
 from chat.services.individual_pipeline import individual_ingest, individual_pipeline
 from chat.tests.conftest import IndividualPipelineMocks
 
@@ -59,7 +59,7 @@ def test_individual_process_does_not_skip_if_one_message(inbound_call_and_mocks)
     assert len(records) == 1
     assert records[0].user.id == str(participant_id)
     assert records[0].status == IndividualPipelineRecord.StageStatus.SEND_PASSED
-    transcripts = list(ChatTranscript.objects.order_by("created_at").all())
+    transcripts = list(IndividualChatTranscript.objects.order_by("created_at").all())
     assert len(transcripts) == 3
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
@@ -85,7 +85,7 @@ def test_individual_process_skips_if_message_arrives_during_moderation(inbound_c
     assert all(record.user.id == str(participant_id) for record in records)
     assert records[0].status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
     assert records[1].status == IndividualPipelineRecord.StageStatus.INGEST_PASSED
-    transcripts = list(ChatTranscript.objects.order_by("created_at").all())
+    transcripts = list(IndividualChatTranscript.objects.order_by("created_at").all())
     assert len(transcripts) == 3
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
@@ -112,7 +112,7 @@ def test_individual_process_skips_if_message_arrives_during_generate(inbound_cal
     assert all(record.user.id == str(participant_id) for record in records)
     assert records[0].status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
     assert records[1].status == IndividualPipelineRecord.StageStatus.INGEST_PASSED
-    transcripts = list(ChatTranscript.objects.order_by("created_at").all())
+    transcripts = list(IndividualChatTranscript.objects.order_by("created_at").all())
     assert len(transcripts) == 3
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
@@ -141,7 +141,7 @@ def test_individual_process_skips_if_message_arrives_during_validate(inbound_cal
     assert all(record.user.id == str(participant_id) for record in records)
     assert records[0].status == IndividualPipelineRecord.StageStatus.PROCESS_SKIPPED
     assert records[1].status == IndividualPipelineRecord.StageStatus.INGEST_PASSED
-    transcripts = list(ChatTranscript.objects.order_by("created_at").all())
+    transcripts = list(IndividualChatTranscript.objects.order_by("created_at").all())
     assert len(transcripts) == 3
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE

@@ -9,7 +9,7 @@ from .crud import (
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
 from .send import individual_send_moderation, send_message_to_participant
-from ..models import ChatTranscript, IndividualPipelineRecord, IndividualSession
+from ..models import IndividualChatTranscript, IndividualPipelineRecord, IndividualSession
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +38,17 @@ def individual_ingest(participant_id: str, data: dict):
     return record, session, user_chat_transcript
 
 
-def individual_moderation(record: IndividualPipelineRecord, user_chat_transcript: ChatTranscript):
+def individual_moderation(record: IndividualPipelineRecord, user_chat_transcript: IndividualChatTranscript):
     """
     Stage 2: Moderate the incoming message before processing.
     """
     message = record.message
     blocked_str = moderate_message(message)
     if blocked_str:
-        user_chat_transcript.moderation_status = ChatTranscript.ModerationStatus.Flagged
+        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.Flagged
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
     else:
-        user_chat_transcript.moderation_status = ChatTranscript.ModerationStatus.NotFlagged
+        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.NotFlagged
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
     record.save()
     user_chat_transcript.save()

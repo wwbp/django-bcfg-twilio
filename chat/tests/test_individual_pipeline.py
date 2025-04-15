@@ -5,12 +5,12 @@ import pytest
 from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
-    ChatTranscript,
+    BaseChatTranscript,
+    IndividualChatTranscript,
     Control,
     IndividualPipelineRecord,
     MessageType,
     Prompt,
-    TranscriptRole,
     User,
 )
 
@@ -169,13 +169,15 @@ def test_individual_pipeline_parametrized(
     )
 
     user_chat_transcript = (
-        record.user.current_session.transcripts.filter(role=TranscriptRole.USER).order_by("-created_at").first()
+        record.user.current_session.transcripts.filter(role=BaseChatTranscript.Role.USER)
+        .order_by("-created_at")
+        .first()
     )
     if expected["expected_status"] == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
-        assert user_chat_transcript.moderation_status == ChatTranscript.ModerationStatus.Flagged
+        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.Flagged
         assert record.user.current_session.transcripts.count() == 2  # initial and user, no assistant
     else:
-        assert user_chat_transcript.moderation_status == ChatTranscript.ModerationStatus.NotFlagged
+        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.NotFlagged
         assert record.user.current_session.transcripts.count() == 3  # initial, user, assistant response
 
 

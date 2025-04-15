@@ -8,10 +8,11 @@ from pytest_factoryboy import register
 
 from chat.models import (
     Group,
+    GroupSession,
     IndividualSession,
     MessageType,
     User,
-    ChatTranscript,
+    IndividualChatTranscript,
     GroupChatTranscript,
     Prompt,
     Control,
@@ -45,6 +46,13 @@ def overwrite_secrets():
         BCFG_API_KEY="fake-bcfg-api-key",
     ):
         yield
+
+
+@pytest.fixture
+def celery_task_always_eager(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    yield
+    settings.CELERY_TASK_ALWAYS_EAGER = False
 
 
 class IndividualPipelineMocks:
@@ -121,9 +129,18 @@ class GroupFactory(factory.django.DjangoModelFactory):
     id = factory.Faker("uuid4")
 
 
+class GroupSessionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GroupSession
+
+    group = factory.SubFactory(GroupFactory)
+    week_number = 1
+    message_type = MessageType.INITIAL
+
+
 class ChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = ChatTranscript
+        model = IndividualChatTranscript
 
     session = factory.SubFactory(IndividualSessionFactory)
     role = factory.Faker("word")
@@ -134,7 +151,7 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupChatTranscript
 
-    group = factory.SubFactory(GroupFactory)
+    session = factory.SubFactory(GroupSessionFactory)
     sender = factory.SubFactory(UserFactory)
     role = factory.Faker("word")
     content = factory.Faker("sentence")
@@ -188,15 +205,20 @@ class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
     response = factory.Faker("sentence")
     instruction_prompt = factory.Faker("sentence")
     validated_message = factory.Faker("sentence")
-    status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
+    status = IndividualPipelineRecord.StageStatus.INGEST_PASSED
 
 
 class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupPipelineRecord
 
+    user = factory.SubFactory(UserFactory)
     group = factory.SubFactory(GroupFactory)
-    ingested = True
+    message = factory.Faker("sentence")
+    response = factory.Faker("sentence")
+    instruction_prompt = factory.Faker("sentence")
+    validated_message = factory.Faker("sentence")
+    status = GroupPipelineRecord.StageStatus.INGEST_PASSED
 
 
 # register factories as fixtures
