@@ -35,7 +35,8 @@
 				"ms-vscode.makefile-tools",
 				"GitHub.copilot-chat",
 				"ms-python.vscode-pylance",
-				"Boto3typed.boto3-ide"
+				"Boto3typed.boto3-ide",
+				"ms-python.mypy-type-checker"
 			]
 		}
 	},

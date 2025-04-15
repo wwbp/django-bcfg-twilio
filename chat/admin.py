@@ -1,9 +1,10 @@
 import logging
 from django.contrib import admin
 from .models import (
+    GroupSession,
     User,
     Group,
-    ChatTranscript,
+    IndividualChatTranscript,
     GroupChatTranscript,
     Prompt,
     Control,
@@ -61,53 +62,41 @@ class IndividualSessionsInline(ReadonlyTabularInline):
     ordering = ("-created_at",)
 
 
-class UserGroupsInline(ReadonlyTabularInline):
-    model = Group.users.through
-    fields = ("group", "get_group_is_test")
+class GroupSessionsInline(ReadonlyTabularInline):
+    model = GroupSession
+    fields = ("week_number", "message_type")
     readonly_fields = fields
-    ordering = ("group__created_at",)
-
-    def get_group_is_test(self, obj):
-        return obj.user.is_test
+    ordering = ("-created_at",)
 
 
-class GroupUsersInline(ReadonlyTabularInline):
-    model = User.groups.through
-    fields = ("user", "get_user_school_name", "get_user_school_mascot", "get_user_is_test")
+class UsersInline(ReadonlyTabularInline):
+    model = User
+    fields = ("name", "school_name", "school_mascot", "is_test")
     readonly_fields = fields
-    ordering = ("user__created_at",)
-
-    def get_user_school_name(self, obj):
-        return obj.user.school_name
-
-    def get_user_school_mascot(self, obj):
-        return obj.user.school_mascot
-
-    def get_user_is_test(self, obj):
-        return obj.user.is_test
+    ordering = ("created_at",)
 
 
-class ChatTranscriptInline(ReadonlyTabularInline):
-    model = ChatTranscript
-    fields = ("role", "content", "created_at")
+class IndividualChatTranscriptInline(ReadonlyTabularInline):
+    model = IndividualChatTranscript
+    fields = ("role", "content", "moderation_status", "created_at")
     readonly_fields = fields
     ordering = ("-created_at",)
 
 
 class GroupChatTranscriptInline(ReadonlyTabularInline):
     model = GroupChatTranscript
-    fields = ("group", "sender", "role", "content", "created_at")
+    fields = ("sender", "role", "content", "moderation_status", "created_at")
     readonly_fields = fields
     ordering = ("-created_at",)
 
 
 @admin.register(User)
 class UserAdmin(ReadonlyAdmin):
-    list_display = ("name", "school_name", "school_mascot", "is_test")
+    list_display = ("name", "school_name", "school_mascot", "is_test", "group")
     search_fields = ("name",)
     list_filter = ("is_test", "school_name")
 
-    inlines = [UserGroupsInline, GroupChatTranscriptInline, IndividualSessionsInline]
+    inlines = [IndividualSessionsInline]
 
 
 @admin.register(Group)
@@ -120,19 +109,19 @@ class GroupAdmin(ReadonlyAdmin):
     def get_user_count(self, obj):
         return obj.users.count()
 
-    inlines = [GroupUsersInline, GroupChatTranscriptInline]
+    inlines = [UsersInline, GroupSessionsInline]
 
 
-@admin.register(ChatTranscript)
-class ChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("session", "session__user", "role", "content", "created_at")
+@admin.register(IndividualChatTranscript)
+class IndividualChatTranscriptAdmin(ReadonlyAdmin):
+    list_display = ("session", "session__user", "role", "content", "moderation_status", "created_at")
     search_fields = ("content",)
     list_filter = ("role",)
 
 
 @admin.register(GroupChatTranscript)
 class GroupChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("group", "sender", "role", "content", "created_at")
+    list_display = ("session", "session__group", "sender", "role", "content", "moderation_status", "created_at")
     search_fields = ("content",)
     list_filter = ("role",)
 
@@ -171,28 +160,22 @@ class IndividualPipelineRecordAdmin(ReadonlyAdmin):
 
 @admin.register(GroupPipelineRecord)
 class GroupPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("group", "get_status", "error_log", "updated_at")
-    search_fields = ("error_log",)
-    list_filter = ("ingested", "processed", "sent", "failed")
-
-    @admin.display(description="Status")
-    def get_status(self, obj):
-        if obj.ingested:
-            return "Ingested"
-        elif obj.processed:
-            return "Processed"
-        elif obj.sent:
-            return "Sent"
-        elif obj.failed:
-            return "Failed"
-        else:
-            return "Pending"
+    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
+    search_fields = ("message", "validated_message", "error_log")
+    list_filter = ("status",)
 
 
 @admin.register(IndividualSession)
 class IndividualSessionAdmin(ReadonlyAdmin):
     list_display = ("user", "week_number", "message_type")
-    search_fields = ("message_type", "week_number")
     list_filter = ("week_number", "message_type")
 
-    inlines = [ChatTranscriptInline]
+    inlines = [IndividualChatTranscriptInline]
+
+
+@admin.register(GroupSession)
+class GroupSessionAdmin(ReadonlyAdmin):
+    list_display = ("group", "week_number", "message_type")
+    list_filter = ("week_number", "message_type")
+
+    inlines = [GroupChatTranscriptInline]

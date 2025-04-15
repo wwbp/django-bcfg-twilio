@@ -14,11 +14,6 @@ class MessageType(models.TextChoices):
     SUMMARY = "summary", "Summary"
 
 
-class TranscriptRole(models.TextChoices):
-    USER = "user", "User"
-    ASSISTANT = "assistant", "Assistant"
-
-
 class ModelBase(models.Model):
     history = HistoricalRecords(inherit=True, excluded_fields=["created_at"])
 
@@ -39,8 +34,25 @@ class ModelBaseWithUuidId(ModelBase):
         abstract = True
 
 
+class Group(ModelBase):
+    id = models.CharField(primary_key=True, max_length=255)
+    is_test = models.BooleanField(default=False)
+
+    @property
+    def current_session(self) -> "IndividualSession | None":
+        return self.sessions.order_by("-created_at").first()
+
+    def __str__(self):
+        member_count = self.users.count()
+        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class User(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
+    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="users", null=True, blank=True)
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
@@ -57,60 +69,83 @@ class User(ModelBase):
         ordering = ["-created_at"]
 
 
-class IndividualSession(ModelBase):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+class BaseSession(ModelBase):
     week_number = models.IntegerField()
     message_type = models.CharField(max_length=20, choices=MessageType.choices)
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("-created_at").first().content
-
-    def __str__(self):
-        return f"{self.user} - {self.message_type} ({self.week_number})"
+        return self.transcripts.order_by("created_at").first().content
 
     class Meta:
+        abstract = True
         ordering = ["-created_at"]
 
 
-class Group(ModelBase):
-    id = models.CharField(primary_key=True, max_length=255)
-    users = models.ManyToManyField(User, related_name="groups")
-    is_test = models.BooleanField(default=False)
-    week_number = models.IntegerField(null=True, blank=True)
-    initial_message = models.TextField(default="")
+class IndividualSession(BaseSession):
+    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
 
     def __str__(self):
-        member_count = self.users.count()
-        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+        return f"{self.user} - {self.message_type} (wk {self.week_number})"
+
+
+class GroupSession(BaseSession):
+    class StrategyPhase(models.TextChoices):
+        BEFORE_AUDIENCE = "before_audience"
+        AFTER_AUDIENCE = "after_audience"
+        AFTER_REMINDER = "after_reminder"
+        AFTER_FOLLOWUP = "after_followup"
+        AFTER_SUMMARY = "after_summary"
+
+    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    current_strategy_phase = models.CharField(
+        max_length=20, choices=StrategyPhase.choices, default=StrategyPhase.BEFORE_AUDIENCE
+    )
+
+    def __str__(self):
+        return f"{self.group} - {self.message_type} (wk {self.week_number})"
+
+
+class BaseChatTranscript(ModelBase):
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    class ModerationStatus(models.TextChoices):
+        NOT_EVALUATED = "not_evaluated"
+        FLAGGED = "flagged"
+        NOT_FLAGGED = "not_flagged"
+
+    role = models.CharField(max_length=255, choices=Role.choices)
+    content = models.TextField()
+    moderation_status = models.CharField(
+        max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
+    )
 
     class Meta:
+        abstract = True
         ordering = ["-created_at"]
 
 
-class ChatTranscript(ModelBase):
+class IndividualChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
-    role = models.CharField(max_length=255, choices=TranscriptRole.choices)
-    content = models.TextField()
-
-    class Meta:
-        ordering = ["-created_at"]
 
 
-class GroupChatTranscript(ModelBase):
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="transcripts")
+class GroupChatTranscript(BaseChatTranscript):
+    session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
-    role = models.CharField(max_length=255, choices=TranscriptRole.choices)
-    content = models.TextField()
-
-    class Meta:
-        ordering = ["-created_at"]
 
 
 class Prompt(ModelBase):
+    is_for_group = models.BooleanField(default=False)
     week = models.IntegerField()
     activity = models.TextField()
     type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
+
+    def clean(self):
+        super().clean()
+        if self.is_for_group and self.type == MessageType.CHECK_IN:
+            raise ValueError(f"Group prompts cannot be of type {MessageType.CHECK_IN}")
 
     class Meta:
         verbose_name_plural = "Weekly Prompts"
@@ -159,7 +194,21 @@ class StrategyPrompt(ModelBase):
         ordering = ["is_active", "name"]
 
 
-class IndividualPipelineRecord(ModelBase):
+class BasePipelineRecord(ModelBase):
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    message = models.TextField(blank=True, null=True)
+    response = models.TextField(blank=True, null=True)
+    instruction_prompt = models.TextField(blank=True, null=True)
+    validated_message = models.TextField(blank=True, null=True)
+    error_log = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualPipelineRecord(BasePipelineRecord):
     class StageStatus(models.TextChoices):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
@@ -170,38 +219,27 @@ class IndividualPipelineRecord(ModelBase):
         SEND_PASSED = "SEND_PASSED", "Send Passed"
         FAILED = "FAILED", "Failed"
 
-    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="pipeline_records")
-    message = models.TextField(blank=True, null=True)
-    response = models.TextField(blank=True, null=True)
-    instruction_prompt = models.TextField(blank=True, null=True)
-    validated_message = models.TextField(blank=True, null=True)
-    error_log = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"IndividualPipelineRecord({self.user}, {self.run_id})"
 
-    class Meta:
-        ordering = ["-created_at"]
 
+class GroupPipelineRecord(BasePipelineRecord):
+    class StageStatus(models.TextChoices):
+        INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
+        MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
+        MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
+        PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
+        FAILED = "FAILED", "Failed"
 
-class GroupPipelineRecord(ModelBase):
-    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="pipeline_records")
-    ingested = models.BooleanField(default=False)
-    processed = models.BooleanField(default=False)
-    sent = models.BooleanField(default=False)
-    failed = models.BooleanField(default=False)
-    error_log = models.TextField(blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
+    status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
 
     def __str__(self):
-        return f"GroupPipelineRecord({self.group}, {self.run_id})"
-
-    class Meta:
-        ordering = ["-created_at"]
+        return f"GroupPipelineRecord({self.user}, {self.run_id})"
 
 
 class ScheduledTaskAssociation(ModelBaseWithUuidId):

@@ -1,6 +1,6 @@
 import pytest
-from chat.models import IndividualSession, MessageType, TranscriptRole, User, ChatTranscript
-from chat.services.crud import ingest_request
+from chat.models import BaseChatTranscript, IndividualSession, MessageType, User, IndividualChatTranscript
+from chat.services.individual_crud import ingest_request
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def base_context():
 def test_new_user_creation(base_context):
     """
     When a user is not found, a new record should be created using context data,
-    and two ChatTranscript records should be generated.
+    and two IndividualChatTranscript records should be generated.
     """
     participant_id = "new_user_1"
     input_data = {
@@ -38,11 +38,11 @@ def test_new_user_creation(base_context):
     assert session.message_type == MessageType.INITIAL
 
     # Assert that two transcripts were created
-    transcripts = ChatTranscript.objects.filter(session=session).order_by("id")
+    transcripts = IndividualChatTranscript.objects.filter(session=session).order_by("id")
     assert transcripts.count() == 2
-    assert transcripts[0].role == TranscriptRole.ASSISTANT
+    assert transcripts[0].role == BaseChatTranscript.Role.ASSISTANT
     assert transcripts[0].content == "Hello, world!"
-    assert transcripts[1].role == TranscriptRole.USER
+    assert transcripts[1].role == BaseChatTranscript.Role.USER
     assert transcripts[1].content == "I would like to enroll."
 
 
@@ -66,8 +66,8 @@ def existing_user():
 @pytest.fixture
 def existing_transcript(existing_user):
     user, _ = existing_user
-    return ChatTranscript.objects.create(
-        session=user.current_session, role=TranscriptRole.ASSISTANT, content="Initial Hello"
+    return IndividualChatTranscript.objects.create(
+        session=user.current_session, role=BaseChatTranscript.Role.ASSISTANT, content="Initial Hello"
     )
 
 
@@ -92,7 +92,7 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     assert new_session != session
     assert new_session.week_number == 2
 
-    transcripts = ChatTranscript.objects.filter(session__user=user).order_by("id")
+    transcripts = IndividualChatTranscript.objects.filter(session__user=user).order_by("id")
     assert transcripts.count() == 3  # 2 existing + 1 new assistant
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "User message for week 2"
@@ -118,7 +118,7 @@ def test_existing_user_no_update(existing_user, existing_transcript):
     new_session = user.sessions.order_by("-created_at").first()
     assert new_session == session
 
-    transcripts = ChatTranscript.objects.filter(session__user=user).order_by("id")
+    transcripts = IndividualChatTranscript.objects.filter(session__user=user).order_by("id")
     assert transcripts.count() == 2
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "Just another message"

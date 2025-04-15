@@ -1,7 +1,16 @@
 # tester/views.py
 from django.conf import settings
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from chat.models import ChatTranscript, GroupChatTranscript, IndividualSession, TranscriptRole, User as ChatUser, Group
+from django.db import IntegrityError, transaction
+from chat.models import (
+    BaseChatTranscript,
+    GroupSession,
+    IndividualChatTranscript,
+    GroupChatTranscript,
+    IndividualSession,
+    User as ChatUser,
+    Group,
+)
 from django.views.decorators.http import require_POST
 import json
 from django.shortcuts import render, redirect
@@ -90,28 +99,36 @@ def create_test_case(request):
     message_type = data.get("message_type")
 
     if participant_id and name:
-        # Create the test user without session-specific fields.
-        user = ChatUser.objects.create(
-            id=participant_id,
-            name=name,
-            school_name=school_name,
-            school_mascot=school_mascot,
-            is_test=True,
-        )
-        # Create a new IndividualSession for this user using the provided week number.
+        try:
+            with transaction.atomic():
+                user = ChatUser.objects.create(
+                    id=participant_id,
+                    name=name,
+                    school_name=school_name,
+                    school_mascot=school_mascot,
+                    is_test=True,
+                )
+        except IntegrityError:
+            # Notify the user if the participant id already exists.
+            return JsonResponse(
+                {"success": False, "error": "Participant ID already exists. Please use a unique ID."}, status=400
+            )
+
         session = IndividualSession.objects.create(
             user=user,
             week_number=week_number,
             message_type=message_type,
         )
         # Insert the initial assistant message into the transcript.
-        ChatTranscript.objects.create(session=session, role=TranscriptRole.ASSISTANT, content=initial_message)
+        IndividualChatTranscript.objects.create(
+            session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message
+        )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
 
 def chat_transcript(request, test_case_id):
-    transcripts = ChatTranscript.objects.filter(session__user_id=test_case_id).order_by("created_at")
+    transcripts = IndividualChatTranscript.objects.filter(session__user_id=test_case_id).order_by("created_at")
     transcript = [
         {
             "role": t.role,
@@ -126,12 +143,12 @@ def chat_transcript(request, test_case_id):
 class GroupChatTestInterface(View):
     def get(self, request):
         test_groups = Group.objects.filter(is_test=True)
-        groups_data = []
+        test_groups_data = []
         for group in test_groups:
             participants_str = ", ".join([f"{user.id}:{user.name}" for user in group.users.all()])
-            groups_data.append(
+            test_groups_data.append(
                 {
-                    "id": group.id,
+                    "group": group,
                     "participants": participants_str,
                     "school_name": group.users.first().school_name if group.users.exists() else "",
                     "school_mascot": group.users.first().school_mascot if group.users.exists() else "",
@@ -140,7 +157,7 @@ class GroupChatTestInterface(View):
         return render(
             request,
             "tester/group_chat_interface.html",
-            {"test_groups": groups_data, "api_key": settings.INBOUND_MESSAGE_API_KEY, "has_permission": True},
+            {"test_groups_data": test_groups_data, "api_key": settings.INBOUND_MESSAGE_API_KEY, "has_permission": True},
         )
 
 
@@ -152,12 +169,11 @@ def create_group_test_case(request):
     school_name = data.get("school_name")
     school_mascot = data.get("school_mascot")
     initial_message = data.get("initial_message")
+    week_number = data.get("week_number")
+    message_type = data.get("message_type")
 
     if group_id and participants_str:
-        group, created = Group.objects.get_or_create(id=group_id, defaults={"is_test": True})
-        if created:
-            group.initial_message = initial_message
-            group.save()
+        group = Group.objects.create(id=group_id, is_test=True)
         for pair in participants_str.split(","):
             if ":" in pair:
                 uid, name = pair.split(":")
@@ -173,11 +189,16 @@ def create_group_test_case(request):
                     },
                 )
                 group.users.add(user)
-        if initial_message:
-            GroupChatTranscript.objects.create(
+
+            session = GroupSession.objects.create(
                 group=group,
+                week_number=week_number,
+                message_type=message_type,
+            )
+            GroupChatTranscript.objects.create(
+                session=session,
                 sender=None,
-                role=TranscriptRole.ASSISTANT,
+                role=BaseChatTranscript.Role.ASSISTANT,
                 content=initial_message,
             )
         return JsonResponse({"success": True})
@@ -185,7 +206,8 @@ def create_group_test_case(request):
 
 
 def group_chat_transcript(request, group_id):
-    transcripts = GroupChatTranscript.objects.filter(group__id=group_id).order_by("created_at")
+    group = Group.objects.get(id=group_id)
+    transcripts = GroupChatTranscript.objects.filter(session=group.current_session).order_by("created_at")
     transcript = [
         {
             "role": t.role,

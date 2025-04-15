@@ -39,7 +39,7 @@ def send_message_to_participant_group(group_id: str, message: str):
         return response.json()
 
 
-def individual_send_moderation(participant_id):
+def send_moderation_message(participant_id):
     """
     Sends a moderation message to a single participant via the BCFG endpoint.
 

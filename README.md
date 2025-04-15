@@ -112,6 +112,8 @@ We use BitBucket pipelines for CI. The pipeline is defined in the `bitbucket-pip
 
 #### Runners
 
+##### New Runner
+
 We use self-hosted runners that are hosted in EC2 on the same AWS account as the application.
 
 To create a new runner
@@ -146,7 +148,7 @@ To create a new runner
 
         [Service]
         Restart=on-failure
-        ExecStartPre=-/usr/bin/docker rm -f runner-76368873-9fa8-5b0e-ba95-f179a2335080
+        ExecStartPre=-/usr/bin/docker rm -f runner-REPLACE_WITH_NAME
         ExecStartPre=/bin/sleep 5
         ExecStart=/usr/bin/docker container run -d \
             -v /tmp:/tmp \
@@ -186,3 +188,14 @@ To create a new runner
         0 */6 * * * /usr/bin/docker system prune -f
         ```
     1. Save and exit the crontab file
+
+##### Fix: docker: command not found
+
+See https://support.atlassian.com/bitbucket-cloud/kb/docker-command-not-found-error-while-running-docker-commands-in-self-hosted-runner/
+
+Quickest fix:
+1. SSH into the instance (see steps above)
+1. Run `ls -l /tmp` and identify the runner ID by the single folder whose name is simply a GUID
+1. Confirm that the docker subdirectory is empty `ls -l /tmp/{RUNNER_ID}/docker`
+1. Remove the docker subdirectory `sudo rm -rf /tmp/{RUNNER_ID}/docker`
+1. Restart the instance from the AWS console
