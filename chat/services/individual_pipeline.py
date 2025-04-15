@@ -8,7 +8,7 @@ from .individual_crud import (
     save_assistant_response,
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
-from .send import individual_send_moderation, send_message_to_participant
+from .send import send_moderation_message, send_message_to_participant
 from ..models import IndividualChatTranscript, IndividualPipelineRecord, IndividualSession
 
 logger = logging.getLogger(__name__)
@@ -45,10 +45,10 @@ def individual_moderation(record: IndividualPipelineRecord, user_chat_transcript
     message = record.message
     blocked_str = moderate_message(message)
     if blocked_str:
-        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.Flagged
+        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.FLAGGED
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
     else:
-        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.NotFlagged
+        user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.NOT_FLAGGED
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_PASSED
     record.save()
     user_chat_transcript.save()
@@ -122,7 +122,7 @@ def individual_pipeline(participant_id: str, data: dict):
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
             # if blocked, we tell BCFG and stop here
             if not record.user.is_test:
-                individual_send_moderation(record.user.id)
+                send_moderation_message(record.user.id)
             return
 
         # Stage 3: Process via LLM called.

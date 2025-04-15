@@ -154,10 +154,10 @@ def test_individual_pipeline_parametrized(
     # Call count should be 1 if moderation returned a blocking value.
     expected_send_moderation_calls = 1 if mocks["moderation_return"] else 0
     assert (
-        mock_all_individual_external_calls.mock_individual_send_moderation.call_count == expected_send_moderation_calls
+        mock_all_individual_external_calls.mock_send_moderation_message.call_count == expected_send_moderation_calls
     ), (
-        f"{description}: individual_send_moderation call count expected {expected_send_moderation_calls} "
-        f"but got {mock_all_individual_external_calls.mock_individual_send_moderation.call_count}"
+        f"{description}: send_moderation_message call count expected {expected_send_moderation_calls} "
+        f"but got {mock_all_individual_external_calls.mock_send_moderation_message.call_count}"
     )
 
     # Assert send_message_to_participant call count:
@@ -174,10 +174,10 @@ def test_individual_pipeline_parametrized(
         .first()
     )
     if expected["expected_status"] == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
-        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.Flagged
+        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.FLAGGED
         assert record.user.current_session.transcripts.count() == 2  # initial and user, no assistant
     else:
-        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.NotFlagged
+        assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.NOT_FLAGGED
         assert record.user.current_session.transcripts.count() == 3  # initial, user, assistant response
 
 

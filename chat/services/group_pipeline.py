@@ -3,6 +3,8 @@ import logging
 from celery import shared_task
 
 from chat.services.group_crud import ingest_request
+from chat.services.moderation import moderate_message
+from chat.services.send import send_moderation_message
 
 # from .individual_crud import save_chat_round_group
 # from .arbitrar import process_arbitrar_layer, send_multiple_responses
@@ -28,6 +30,26 @@ def _ingest(group_id: str, data: dict) -> tuple[GroupPipelineRecord, GroupSessio
     )
     logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
     return record, session, user_chat_transcript
+
+
+def _moderate(record: GroupPipelineRecord, user_chat_transcript: GroupChatTranscript):
+    """
+    Stage 2: Moderate the incoming message before processing.
+    """
+    message = record.message
+    blocked_str = moderate_message(message)
+    if blocked_str:
+        user_chat_transcript.moderation_status = GroupChatTranscript.ModerationStatus.FLAGGED
+        record.status = GroupPipelineRecord.StageStatus.MODERATION_BLOCKED
+    else:
+        user_chat_transcript.moderation_status = GroupChatTranscript.ModerationStatus.NOT_FLAGGED
+        record.status = GroupPipelineRecord.StageStatus.MODERATION_PASSED
+    record.save()
+    user_chat_transcript.save()
+    logger.info(
+        f"Group moderation pipeline complete for group {record.group.id}, "
+        f"sender {record.user.id}, run_id {record.run_id}"
+    )
 
 
 # def group_process_pipeline(run_id):
@@ -131,6 +153,12 @@ def group_pipeline(group_id: str, data: dict):
     record: GroupPipelineRecord | None = None
     try:
         record, session, user_chat_transcript = _ingest(group_id, data)
+        _moderate(record, user_chat_transcript)
+        if record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED:
+            # if blocked, we tell BCFG and stop here
+            if not record.group.is_test and not record.user.is_test:
+                send_moderation_message(record.user.id)
+            return
         # TODO Start wait and check logic per phase, including add field to keep track of phases
     except Exception as exc:
         if record:

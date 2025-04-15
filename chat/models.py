@@ -102,14 +102,14 @@ class BaseChatTranscript(ModelBase):
         ASSISTANT = "assistant", "Assistant"
 
     class ModerationStatus(models.TextChoices):
-        NotEvaluated = "not_evaluated"
-        Flagged = "flagged"
-        NotFlagged = "not_flagged"
+        NOT_EVALUATED = "not_evaluated"
+        FLAGGED = "flagged"
+        NOT_FLAGGED = "not_flagged"
 
     role = models.CharField(max_length=255, choices=Role.choices)
     content = models.TextField()
     moderation_status = models.CharField(
-        max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NotEvaluated
+        max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
     )
 
     class Meta:
