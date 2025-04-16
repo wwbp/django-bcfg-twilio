@@ -90,7 +90,9 @@ def load_individual_chat_history(user: User):
     # Build chat history, excluding the latest user message
     history = []
     for t in transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if (
+            latest_user_transcript and t.id == latest_user_transcript.id
+        ) or t.moderation_status == BaseChatTranscript.ModerationStatus.FLAGGED:
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
