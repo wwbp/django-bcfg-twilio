@@ -172,7 +172,7 @@ def test_group_pipeline_handle_inbound_message(
         assert len(transcripts) == 3
         assert transcripts[2].role == BaseChatTranscript.Role.ASSISTANT
         assert transcripts[2].content == "Some LLM response"
-        assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE
+        assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
 
     # Finally, send a second message, group and session exist and are reused
     second_message_data = copy.deepcopy(data)
@@ -384,7 +384,7 @@ def test_group_pipeline_handle_inbound_message_clears_existing_scheduled_message
     assert json.loads(task_association.task.kwargs)["run_id"] == str(new_record.run_id)
 
 
-def test_group_pipeline_handle_inbound_message_new_message_during_ingrestion(
+def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
     _inbound_call, _mocks, message_client, celery_task_always_eager
 ):
     group_id, sender_id, data, second_sender_id, _, _ = _inbound_call

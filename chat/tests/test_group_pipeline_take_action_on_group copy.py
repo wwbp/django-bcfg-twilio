@@ -48,7 +48,7 @@ def test_group_pipeline_take_action_on_group(
         group_chat_transcript_factory(
             session=session,
             moderation_status=BaseChatTranscript.ModerationStatus.NOT_FLAGGED,
-            assistant_strategy_phase=GroupStrategyPhase.AFTER_REMINDER,
+            assistant_strategy_phase=GroupStrategyPhase.REMINDER,
             role=BaseChatTranscript.Role.ASSISTANT,
             content="Reminder message",
         )
@@ -56,7 +56,7 @@ def test_group_pipeline_take_action_on_group(
         group_chat_transcript_factory(
             session=session,
             moderation_status=BaseChatTranscript.ModerationStatus.NOT_FLAGGED,
-            assistant_strategy_phase=GroupStrategyPhase.AFTER_SUMMARY,
+            assistant_strategy_phase=GroupStrategyPhase.SUMMARY,
             role=BaseChatTranscript.Role.ASSISTANT,
             content="Summary message",
         )
@@ -85,6 +85,7 @@ def test_group_pipeline_take_action_on_group(
 
     session.refresh_from_db()
     group_pipeline_record.refresh_from_db()
+    most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
 
     # assert that correct message and scheduling actions were taken
     match current_strategy_phase:
@@ -107,25 +108,27 @@ def test_group_pipeline_take_action_on_group(
                 assert group_pipeline_record.status == GroupPipelineRecord.StageStatus.SEND_PASSED
                 assert mock_send_message_to_participant.call_count == 1
 
-    # assert that we moved to the correct phase
+    # assert that we moved to the correct phase and sent the correct message (if one was sent)
     if current_strategy_phase == GroupStrategyPhase.BEFORE_AUDIENCE:
         assert session.current_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE
+        assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
     elif current_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE:
         if reminder_message_sent:
             assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
+            assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.FOLLOWUP
         elif all_participants_responded:
             assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
+            assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.FOLLOWUP
         else:
             assert session.current_strategy_phase == GroupStrategyPhase.AFTER_REMINDER
+            assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.REMINDER
     elif current_strategy_phase == GroupStrategyPhase.AFTER_REMINDER:
         assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
+        assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.FOLLOWUP
     elif current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP:
-        if not at_least_three_participants_responded:
-            assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
-        elif summary_message_sent:
-            assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
-        else:
-            assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY
+        assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY
+        if mock_send_message_to_participant.call_count == 1:
+            assert most_recent_chat_transcript.assistant_strategy_phase == GroupStrategyPhase.SUMMARY
 
 
 def test_group_pipeline_take_action_on_group_throws_exception_if_after_summary_phase(

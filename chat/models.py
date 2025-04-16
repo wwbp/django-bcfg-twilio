@@ -15,10 +15,19 @@ class MessageType(models.TextChoices):
 
 
 class GroupStrategyPhase(models.TextChoices):
+    # At any point when we're executing the group pipeline, we are in one of these phases
+    # When in a SCHEDULED_ACTION state, we are only in a "before" or "after" phase
+    # Therefore
+    # * A GroupPipelineRecord will only ever be in a before or after phase per the db
+    # * A GroupChatTranscript will never be associated with a before or after phase
     BEFORE_AUDIENCE = "before_audience"
+    AUDIENCE = "audience"
     AFTER_AUDIENCE = "after_audience"
+    REMINDER = "reminder"
     AFTER_REMINDER = "after_reminder"
+    FOLLOWUP = "followup"
     AFTER_FOLLOWUP = "after_followup"
+    SUMMARY = "summary"
     AFTER_SUMMARY = "after_summary"
 
 
@@ -124,11 +133,11 @@ class GroupSession(BaseSession):
 
     @property
     def reminder_sent(self) -> bool:
-        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.AFTER_REMINDER).exists()
+        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.REMINDER).exists()
 
     @property
     def summary_sent(self) -> bool:
-        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.AFTER_SUMMARY).exists()
+        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.SUMMARY).exists()
 
     def __str__(self):
         return f"{self.group} - {self.message_type} (wk {self.week_number})"

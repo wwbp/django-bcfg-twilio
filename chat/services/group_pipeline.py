@@ -134,8 +134,6 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
         record.save()
-    session.current_strategy_phase = next_strategy_phase
-    session.save()
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
     )
@@ -201,42 +199,58 @@ def take_action_on_group(run_id: str, user_chat_transcript_id: int):
         if _newer_user_messages_exist(record):
             return
 
-        next_strategy_phase: GroupStrategyPhase | None
+        # figure out what action we should take
+        next_strategy_phase: GroupStrategyPhase
         match session.current_strategy_phase:
             case GroupStrategyPhase.BEFORE_AUDIENCE:
-                next_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE  # type: ignore[assignment]
+                next_strategy_phase = GroupStrategyPhase.AUDIENCE  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_AUDIENCE:
                 if session.all_participants_responded or session.reminder_sent:
                     # skip reminder, go straight to followup
-                    next_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP  # type: ignore[assignment]
+                    next_strategy_phase = GroupStrategyPhase.FOLLOWUP  # type: ignore[assignment]
                 else:
-                    next_strategy_phase = GroupStrategyPhase.AFTER_REMINDER  # type: ignore[assignment]
+                    next_strategy_phase = GroupStrategyPhase.REMINDER  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_REMINDER:
-                next_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP  # type: ignore[assignment]
+                next_strategy_phase = GroupStrategyPhase.FOLLOWUP  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_FOLLOWUP:
                 if session.fewer_than_three_participants_responded or session.summary_sent:
-                    # nothing to do here
-                    next_strategy_phase = None
-                else:
+                    # nothing to do here, we move right to after summary
                     next_strategy_phase = GroupStrategyPhase.AFTER_SUMMARY  # type: ignore[assignment]
+                else:
+                    next_strategy_phase = GroupStrategyPhase.SUMMARY  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_SUMMARY:
                 raise ValueError(
                     f"No messages to be sent in strategy phase {user_chat_transcript.session.current_strategy_phase}. "
                     "How did we get here?"
                 )
 
-        if not next_strategy_phase:
+        # take the action
+        if next_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY:
             # nothing to do
             record.status = GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
             record.save()
-            return
-        _compute_and_validate_message_to_send(record, session, next_strategy_phase)
-        if _newer_user_messages_exist(record):
-            # computing message takes some time, a new message may have come in since
-            return
-        _save_and_send_message(record, session, next_strategy_phase)
-        if next_strategy_phase != GroupStrategyPhase.AFTER_SUMMARY:
+        else:
+            _compute_and_validate_message_to_send(record, session, next_strategy_phase)
+            if _newer_user_messages_exist(record):
+                # computing message takes some time, a new message may have come in since
+                # in which case, we do not want to take action or move to the next phase
+                # as the new message will take precedence
+                return
+            _save_and_send_message(record, session, next_strategy_phase)
+
+        # move to the next phase
+        if next_strategy_phase not in [GroupStrategyPhase.SUMMARY, GroupStrategyPhase.AFTER_SUMMARY]:
             _clear_existing_and_schedule_group_action(user_chat_transcript, record)
+        match next_strategy_phase:
+            case GroupStrategyPhase.AUDIENCE:
+                session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+            case GroupStrategyPhase.REMINDER:
+                session.current_strategy_phase = GroupStrategyPhase.AFTER_REMINDER
+            case GroupStrategyPhase.FOLLOWUP:
+                session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+            case GroupStrategyPhase.SUMMARY | GroupStrategyPhase.AFTER_SUMMARY:
+                session.current_strategy_phase = GroupStrategyPhase.AFTER_SUMMARY
+        session.save()
 
         logger.info(
             f"Group action complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
