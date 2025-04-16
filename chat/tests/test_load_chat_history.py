@@ -84,3 +84,40 @@ def test_assistant_without_mascot(user_factory, individual_session_factory):
     ]
     assert history == expected_history
     assert latest_message == "Thank you"
+
+
+def test_flagged_moderation_message_ignored(user_factory, individual_session_factory):
+    user = user_factory()
+    session = individual_session_factory(user=user)
+    now = timezone.now()
+    IndividualChatTranscript.objects.create(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="Hi, how can I help?",
+        created_at=now,
+    )
+    IndividualChatTranscript.objects.create(
+        session=session,
+        role=BaseChatTranscript.Role.USER,
+        content="I need assistance with killing",
+        moderation_status=BaseChatTranscript.ModerationStatus.FLAGGED,
+        created_at=now + timezone.timedelta(seconds=10),
+    )
+    # latest message
+    IndividualChatTranscript.objects.create(
+        session=session,
+        role=BaseChatTranscript.Role.USER,
+        content="Hello",
+        created_at=now + timezone.timedelta(seconds=20),
+    )
+
+    history, latest_message = load_individual_chat_history(user)
+    expected_history = [
+        {
+            "role": BaseChatTranscript.Role.ASSISTANT,
+            "content": "Hi, how can I help?",
+            "name": user.school_mascot,
+        },
+    ]
+    assert history == expected_history
+    assert latest_message == "Hello"
