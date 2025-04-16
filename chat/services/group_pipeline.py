@@ -10,9 +10,16 @@ from django.utils import timezone
 from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
 from chat.services.group_crud import ingest_request
 from chat.services.moderation import moderate_message
-from chat.services.send import send_moderation_message
+from chat.services.send import send_message_to_participant_group, send_moderation_message
 
-from ..models import GroupChatTranscript, GroupPipelineRecord, GroupScheduledTaskAssociation
+from ..models import (
+    BaseChatTranscript,
+    GroupChatTranscript,
+    GroupPipelineRecord,
+    GroupScheduledTaskAssociation,
+    GroupSession,
+    GroupStrategyPhase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +79,7 @@ def _get_send_message_delay_seconds(user_chat_transcript: GroupChatTranscript) -
     return random.randint(60, 300)
 
 
-def _clear_existing_and_schedule_response_to_group(
+def _clear_existing_and_schedule_group_action(
     last_user_chat_transcript: GroupChatTranscript, record: GroupPipelineRecord
 ):
     delay_sec = _get_send_message_delay_seconds(last_user_chat_transcript)
@@ -85,15 +92,52 @@ def _clear_existing_and_schedule_response_to_group(
         interval, _ = ClockedSchedule.objects.get_or_create(clocked_time=clocked_time)
         task = PeriodicTask.objects.create(
             name=f"Respond to chat {last_user_chat_transcript.id} (group {record.group.id})",
-            task="chat.services.group_pipeline.respond_to_group",
+            task="chat.services.group_pipeline.take_action_on_group",
             clocked=interval,
             kwargs=json.dumps({"user_chat_transcript_id": last_user_chat_transcript.id, "run_id": str(record.run_id)}),
             one_off=True,
         )
         GroupScheduledTaskAssociation.objects.create(group=record.group, task=task)
+        record.status = GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
+        record.save()
     logger.info(
         f"Scheduled response for group {record.group.id}, sender {record.user.id}, run_id {record.run_id} "
         f"after {delay_sec} seconds"
+    )
+
+
+def _compute_and_validate_message_to_send(
+    record: GroupPipelineRecord, session: GroupSession, next_strategy_phase: GroupStrategyPhase
+):
+    # TODO use the current session and the next_strategy_phase (which implies strategy to use) to compute message
+    # and then validate it
+    # could break this up into two to match individual pipeline
+    record.response = "Some LLM response"
+    record.validated_message = "Some LLM response"
+    record.status = GroupPipelineRecord.StageStatus.PROCESS_PASSED
+    record.save()
+
+
+def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, next_strategy_phase: GroupStrategyPhase):
+    """
+    Stage 5: Retrieve the most recent response and send it to the participant.
+    """
+    group_id = record.group.id
+    response = record.validated_message
+    GroupChatTranscript.objects.create(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content=response,
+        assistant_strategy_phase=next_strategy_phase,
+    )
+    if not record.is_test:
+        send_message_to_participant_group(group_id, response)
+        record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
+        record.save()
+    session.current_strategy_phase = next_strategy_phase
+    session.save()
+    logger.info(
+        f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
     )
 
 
@@ -111,36 +155,95 @@ def handle_inbound_group_message(group_id: str, data: dict):
 
     record: GroupPipelineRecord | None = None
     try:
+        # ingest
         record, user_chat_transcript = _ingest(group_id, group_incoming_message)
+
+        # moderate
         _moderate(record, user_chat_transcript)
         if record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED:
             # if blocked, we tell BCFG and stop here
-            if not record.group.is_test and not record.user.is_test:
+            if not record.is_test:
                 send_moderation_message(record.user.id)
             return
 
+        # handle changing current session if necessary
+        #   all phases revert back to BEFORE_AUDIENCE when a message is received except for AFTER_AUDIENCE,
+        #   which stays on itself while messages are still being received
+        if user_chat_transcript.session.current_strategy_phase not in [
+            GroupStrategyPhase.BEFORE_AUDIENCE,
+            GroupStrategyPhase.AFTER_AUDIENCE,
+        ]:
+            user_chat_transcript.session.current_strategy_phase = GroupStrategyPhase.BEFORE_AUDIENCE
+            user_chat_transcript.session.save()
+
+        # schedule response
         if _newer_user_messages_exist(record):
             return
-        _clear_existing_and_schedule_response_to_group(user_chat_transcript, record)
+        _clear_existing_and_schedule_group_action(user_chat_transcript, record)
     except Exception as exc:
         if record:
             record.status = GroupPipelineRecord.StageStatus.FAILED
             record.error_log = str(exc)
             record.save()
-        logger.exception(f"Group pipeline failed for group {group_id}")
+        logger.exception(f"Group pipeline ingestion failed for group {group_id}")
         raise
 
 
 @shared_task
-def respond_to_group(run_id: str, user_chat_transcript_id: int):
+def take_action_on_group(run_id: str, user_chat_transcript_id: int):
     """
     Stage 3: Send the response to the group.
     """
     record = GroupPipelineRecord.objects.get(run_id=run_id)
-    user_chat_transcript = GroupChatTranscript.objects.get(id=user_chat_transcript_id)
-    # if _newer_user_messages_exist(record):
-    #     return
-    # TODO Implement sending logic here
-    logger.info(
-        f"Group response pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
-    )
+    try:
+        user_chat_transcript = GroupChatTranscript.objects.get(id=user_chat_transcript_id)
+        session = user_chat_transcript.session
+        if _newer_user_messages_exist(record):
+            return
+
+        next_strategy_phase: GroupStrategyPhase | None
+        match session.current_strategy_phase:
+            case GroupStrategyPhase.BEFORE_AUDIENCE:
+                next_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE  # type: ignore[assignment]
+            case GroupStrategyPhase.AFTER_AUDIENCE:
+                if session.all_participants_responded or session.reminder_sent:
+                    # skip reminder, go straight to followup
+                    next_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP  # type: ignore[assignment]
+                else:
+                    next_strategy_phase = GroupStrategyPhase.AFTER_REMINDER  # type: ignore[assignment]
+            case GroupStrategyPhase.AFTER_REMINDER:
+                next_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP  # type: ignore[assignment]
+            case GroupStrategyPhase.AFTER_FOLLOWUP:
+                if session.fewer_than_three_participants_responded or session.summary_sent:
+                    # nothing to do here
+                    next_strategy_phase = None
+                else:
+                    next_strategy_phase = GroupStrategyPhase.AFTER_SUMMARY  # type: ignore[assignment]
+            case GroupStrategyPhase.AFTER_SUMMARY:
+                raise ValueError(
+                    f"No messages to be sent in strategy phase {user_chat_transcript.session.current_strategy_phase}. "
+                    "How did we get here?"
+                )
+
+        if not next_strategy_phase:
+            # nothing to do
+            record.status = GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
+            record.save()
+            return
+        _compute_and_validate_message_to_send(record, session, next_strategy_phase)
+        if _newer_user_messages_exist(record):
+            # computing message takes some time, a new message may have come in since
+            return
+        _save_and_send_message(record, session, next_strategy_phase)
+        if next_strategy_phase != GroupStrategyPhase.AFTER_SUMMARY:
+            _clear_existing_and_schedule_group_action(user_chat_transcript, record)
+
+        logger.info(
+            f"Group action complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
+        )
+    except Exception as exc:
+        record.status = GroupPipelineRecord.StageStatus.FAILED
+        record.error_log = str(exc)
+        record.save()
+        logger.exception(f"Action on group failed for group {record.group.id}")
+        raise

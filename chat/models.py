@@ -14,6 +14,14 @@ class MessageType(models.TextChoices):
     SUMMARY = "summary", "Summary"
 
 
+class GroupStrategyPhase(models.TextChoices):
+    BEFORE_AUDIENCE = "before_audience"
+    AFTER_AUDIENCE = "after_audience"
+    AFTER_REMINDER = "after_reminder"
+    AFTER_FOLLOWUP = "after_followup"
+    AFTER_SUMMARY = "after_summary"
+
+
 class ModelBase(models.Model):
     history = HistoricalRecords(inherit=True, excluded_fields=["created_at"])
 
@@ -90,17 +98,37 @@ class IndividualSession(BaseSession):
 
 
 class GroupSession(BaseSession):
-    class StrategyPhase(models.TextChoices):
-        BEFORE_AUDIENCE = "before_audience"
-        AFTER_AUDIENCE = "after_audience"
-        AFTER_REMINDER = "after_reminder"
-        AFTER_FOLLOWUP = "after_followup"
-        AFTER_SUMMARY = "after_summary"
-
     group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
     current_strategy_phase = models.CharField(
-        max_length=20, choices=StrategyPhase.choices, default=StrategyPhase.BEFORE_AUDIENCE
+        max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.BEFORE_AUDIENCE
     )
+
+    @property
+    def all_participants_responded(self) -> bool:
+        # note that participants can be added or removed from groups (e.g. if a participant leaves the study)
+        # so we need to check if all participants have responded who are still in the group
+        user_ids_responded = [
+            u["sender_id"]
+            for u in list(self.transcripts.filter(role=BaseChatTranscript.Role.USER).values("sender_id").distinct())
+        ]
+        group_user_ids = [u["id"] for u in list(self.group.users.values("id").all())]
+        return set(group_user_ids) - set(user_ids_responded) == set()
+
+    @property
+    def fewer_than_three_participants_responded(self) -> bool:
+        user_ids_responded = {
+            u["sender_id"]
+            for u in self.transcripts.filter(role=BaseChatTranscript.Role.USER).values("sender_id").distinct()
+        }
+        return len(user_ids_responded) < 3
+
+    @property
+    def reminder_sent(self) -> bool:
+        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.AFTER_REMINDER).exists()
+
+    @property
+    def summary_sent(self) -> bool:
+        return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.AFTER_SUMMARY).exists()
 
     def __str__(self):
         return f"{self.group} - {self.message_type} (wk {self.week_number})"
@@ -134,6 +162,7 @@ class IndividualChatTranscript(BaseChatTranscript):
 class GroupChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
+    assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
 class Prompt(ModelBase):
@@ -231,12 +260,20 @@ class GroupPipelineRecord(BasePipelineRecord):
         INGEST_PASSED = "INGEST_PASSED", "Ingest Passed"
         MODERATION_BLOCKED = "MODERATION_BLOCKED", "Moderation Blocked"
         MODERATION_PASSED = "MODERATION_PASSED", "Moderation Passed"
+        PROCESS_PASSED = "PROCESS_PASSED", "Process Passed"
         PROCESS_SKIPPED = "PROCESS_SKIPPED", "Process Skipped"
+        PROCESS_NOTHING_TO_DO = "PROCESS_NOTHING_TO_DO", "Process Nothing To Do"
+        SEND_PASSED = "SEND_PASSED", "Send Passed"
+        SCHEDULED_ACTION = "SCHEDULED_ACTION", "Scheduled Action"
         FAILED = "FAILED", "Failed"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+
+    @property
+    def is_test(self):
+        return self.user.is_test or self.group.is_test
 
     def __str__(self):
         return f"GroupPipelineRecord({self.user}, {self.run_id})"

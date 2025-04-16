@@ -1,12 +1,13 @@
 import sys
 from unittest.mock import MagicMock, patch
 from django.test import override_settings
-import factory.random
+from django.test import Client
 import pytest
 import factory
 from pytest_factoryboy import register
 
 from chat.models import (
+    BaseChatTranscript,
     Group,
     GroupSession,
     IndividualSession,
@@ -53,6 +54,19 @@ def celery_task_always_eager(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
     yield
     settings.CELERY_TASK_ALWAYS_EAGER = False
+
+
+@pytest.fixture
+def message_client():
+    api_key = "valid-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=api_key):
+        yield Client(headers={"Authorization": f"Bearer {api_key}"})
+
+
+def test_view_with_custom_header(client_with_headers):
+    response = client_with_headers.get("/your-url/")
+    assert response.status_code == 200
+    # Additional assertions based on the header
 
 
 class IndividualPipelineMocks:
@@ -104,6 +118,55 @@ def mock_all_individual_external_calls():
         )
 
 
+@pytest.fixture
+def group_with_initial_message_interaction(
+    group_factory,
+    user_factory,
+    group_session_factory,
+    group_chat_transcript_factory,
+    faker,
+    group_pipeline_record_factory,
+):
+    initial_message = "some initial LLM message"
+    user_message = "some message from user"
+
+    school_mascot = faker.word()
+    school_name = faker.word()
+    group = group_factory()
+    users = user_factory.create_batch(6, group=group, school_mascot=school_mascot, school_name=school_name)
+    session = group_session_factory(group=group, week_number=1, message_type=MessageType.INITIAL)
+    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message)
+    group_chat_transcript_factory(
+        session=session, role=BaseChatTranscript.Role.USER, content=user_message, sender=users[0]
+    )
+    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content="some LLM response")
+    group_pipeline_record = group_pipeline_record_factory(
+        group=group,
+        user=users[0],
+        status=GroupPipelineRecord.StageStatus.MODERATION_PASSED,
+        message=user_message,
+        response=None,
+        instruction_prompt=None,
+        validated_message=None,
+        error_log=None,
+    )
+    example_message_context = {
+        "school_name": school_name,
+        "school_mascot": school_mascot,
+        "initial_message": initial_message,
+        "week_number": 1,
+        "message_type": MessageType.INITIAL,
+        "participants": [
+            {
+                "id": user.id,
+                "name": user.name,
+            }
+            for user in users
+        ],
+    }
+    yield group, session, group_pipeline_record, example_message_context
+
+
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User
@@ -143,7 +206,7 @@ class ChatTranscriptFactory(factory.django.DjangoModelFactory):
         model = IndividualChatTranscript
 
     session = factory.SubFactory(IndividualSessionFactory)
-    role = factory.Faker("word")
+    role = BaseChatTranscript.Role.ASSISTANT
     content = factory.Faker("sentence")
 
 
@@ -152,8 +215,8 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
         model = GroupChatTranscript
 
     session = factory.SubFactory(GroupSessionFactory)
-    sender = factory.SubFactory(UserFactory)
-    role = factory.Faker("word")
+    sender = None
+    role = BaseChatTranscript.Role.ASSISTANT
     content = factory.Faker("sentence")
 
 
@@ -212,6 +275,7 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupPipelineRecord
 
+    run_id = factory.Faker("uuid4")
     user = factory.SubFactory(UserFactory)
     group = factory.SubFactory(GroupFactory)
     message = factory.Faker("sentence")
@@ -233,3 +297,4 @@ register(StrategyPromptFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
+register(GroupSessionFactory)
