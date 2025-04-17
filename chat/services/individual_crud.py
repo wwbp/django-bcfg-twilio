@@ -1,18 +1,14 @@
 from django.utils import timezone
 import re
-import json
 import logging
 
-from .constant import MODERATION_MESSAGE_DEFAULT
 from ..models import (
     BaseChatTranscript,
-    Group,
-    GroupChatTranscript,
     IndividualSession,
     User,
     IndividualChatTranscript,
     Prompt,
-    Control,
+    ControlConfig,
 )
 from django.db import transaction
 
@@ -45,17 +41,21 @@ def ingest_request(participant_id: str, data: dict):
             message_type=context.get("message_type"),
         )
 
-        if created_session:
-            # if we created a new session, we need to add the initial message to it
-            IndividualChatTranscript.objects.create(
-                session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
-            )
-        else:
-            if session.initial_message != context.get("initial_message"):
-                logger.error(
-                    f"Got new initial_message for existing individual session {session}. "
-                    f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+        if not user.group:
+            # we only care about the initial message if the user is not in a group condition, because
+            # if the user is in the group condition, we already captured the initial message in the
+            # group session's transcript
+            if created_session:
+                # if we created a new session, we need to add the initial message to it
+                IndividualChatTranscript.objects.create(
+                    session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
                 )
+            else:
+                if session.initial_message != context.get("initial_message") and not user.is_test:
+                    logger.error(
+                        f"Got new initial_message for existing individual session {session}. "
+                        f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+                    )
 
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
@@ -74,6 +74,12 @@ def sanitize_name(name: str) -> str:
     return sanitized if sanitized else "default"
 
 
+def load_individual_and_group_chat_history_for_direct_messaging(user: User):
+    logger.info(f"Loading chat history for participant and their group for direct-messaging: {user.id}")
+    # TODO 10187 - implement and remove call to old function
+    return load_individual_chat_history(user)
+
+
 def load_individual_chat_history(user: User):
     logger.info(f"Loading chat history for participant: {user.id}")
 
@@ -90,7 +96,9 @@ def load_individual_chat_history(user: User):
     # Build chat history, excluding the latest user message
     history = []
     for t in transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if (
+            latest_user_transcript and t.id == latest_user_transcript.id
+        ) or t.moderation_status == BaseChatTranscript.ModerationStatus.FLAGGED:
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
@@ -115,55 +123,10 @@ def load_individual_chat_history(user: User):
     return history, latest_user_message_content
 
 
-def load_detailed_transcript(group_id: str):
-    logger.info(f"Loading detailed transcript for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
-    messages = []
-    for t in transcripts:
-        sender_name = t.sender.name if t.sender else BaseChatTranscript.Role.ASSISTANT  # TODO: pipe mascot name
-        messages.append({"sender": sender_name, "role": t.role, "timestamp": str(t.created_at), "content": t.content})
-    return json.dumps(messages, indent=2)
-
-
-def load_chat_history_json_group(group_id: str):
-    logger.info(f"Loading chat history for group ID: {group_id}")
-    transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
-    history = [{"role": t.role, "content": t.content} for t in transcripts]
-    return history
-
-
-def get_latest_assistant_response(user_id: str):
-    logger.info(f"Fetching latest assistant response for participant with id: {user_id}")
-
-    # Retrieve the most recent assistant response for the given user
-    latest_assistant_transcript = (
-        IndividualChatTranscript.objects.filter(session__user_id=user_id, role=BaseChatTranscript.Role.ASSISTANT)
-        .order_by("-created_at")
-        .first()
-    )
-
-    # Return the content if a transcript exists; otherwise, return None
-    return latest_assistant_transcript.content if latest_assistant_transcript else None
-
-
 def save_assistant_response(user: User, response: str, session: IndividualSession):
     logger.info(f"Saving assistant response for participant: {user.id}")
     IndividualChatTranscript.objects.create(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response)
     logger.info("Assistant Response saved successfully.")
-
-
-@transaction.atomic
-def save_chat_round_group(group_id: str, sender_id: str, message, response):
-    logger.info(f"Saving chat round for group ID: {group_id}")
-    group = Group.objects.get(id=group_id)
-    if message:
-        sender = User.objects.get(id=sender_id)
-        GroupChatTranscript.objects.create(
-            group=group, role=BaseChatTranscript.Role.USER, content=message, sender=sender
-        )
-    if response:
-        GroupChatTranscript.objects.create(group=group, role=BaseChatTranscript.Role.ASSISTANT, content=response)
-    logger.info("Chat round saved successfully.")
 
 
 INSTRUCTION_PROMPT_TEMPLATE = (
@@ -176,6 +139,12 @@ INSTRUCTION_PROMPT_TEMPLATE = (
 )
 
 
+def load_instruction_prompt_for_direct_messaging(user: User):
+    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+    # TODO 10187 - implement and remove call to old function
+    return load_instruction_prompt(user)
+
+
 def load_instruction_prompt(user: User):
     # get latest session for the user
     session = user.sessions.order_by("-created_at").first()
@@ -184,7 +153,11 @@ def load_instruction_prompt(user: User):
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
 
     # Load the most recent controls record
-    controls = Control.objects.latest("created_at")
+    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    if not persona or not system:
+        raise ValueError("System or Persona prompt not found in ControlConfig.")
+
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None
     if week is not None and message_type is not None:
@@ -198,19 +171,9 @@ def load_instruction_prompt(user: User):
 
     # Format the final prompt using the template
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
-        system=controls.system,
-        persona=controls.persona,
+        system=system,
+        persona=persona,
         assistant_name=assistant_name,
         activity=activity,
     )
     return instruction_prompt
-
-
-def get_moderation_message():
-    try:
-        controls = Control.objects.latest("created_at")
-    except Control.DoesNotExist:
-        controls = Control.objects.create()
-    if len(controls.moderation) > 0:
-        return controls.moderation
-    return MODERATION_MESSAGE_DEFAULT

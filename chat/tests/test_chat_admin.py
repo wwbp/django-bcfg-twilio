@@ -1,5 +1,7 @@
 from django.urls import reverse
 
+from chat.models import ControlConfig
+
 
 def test_view_user_list(admin_client, user_factory):
     users = user_factory.create_batch(2)
@@ -79,9 +81,11 @@ def test_view_prompt_list(admin_client, prompt_factory):
         assert str(prompt.id) in response.content.decode("utf-8")
 
 
-def test_view_control_list(admin_client, control_factory):
-    controls = control_factory.create_batch(2)
-    response = admin_client.get(reverse("admin:chat_control_changelist"))
+def test_view_control_list(admin_client):
+    control1 = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test_value")
+    control2 = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test_value")
+    controls = [control1, control2]
+    response = admin_client.get(reverse("admin:chat_controlconfig_changelist"))
     assert response.status_code == 200
     for control in controls:
         assert str(control.id) in response.content.decode("utf-8")

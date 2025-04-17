@@ -1,13 +1,14 @@
 import logging
 from django.contrib import admin
 from .models import (
+    ControlConfig,
     GroupSession,
+    GroupStrategyPhaseConfig,
     User,
     Group,
     IndividualChatTranscript,
     GroupChatTranscript,
     Prompt,
-    Control,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -34,8 +35,8 @@ class BaseAdmin(SimpleHistoryAdmin):
 class ReadonlyAdmin(BaseAdmin):
     # base admin class that is read-omly by default
     def has_change_permission(self, request, obj=None):
-        if request.user.is_staff and (  # type: ignore
-            AuthGroupName.UnlockRestrictedContent.value in request.user.groups.values_list("name", flat=True)  # type: ignore
+        if request.user.is_staff and (
+            AuthGroupName.UnlockRestrictedContent.value in request.user.groups.values_list("name", flat=True)
         ):
             return super().has_change_permission(request, obj)
         else:
@@ -43,11 +44,11 @@ class ReadonlyAdmin(BaseAdmin):
 
 
 class ReadonlyTabularInline(admin.TabularInline):
-    fields = ()
+    fields: tuple = ()
     extra = 0
     ordering = ("timestamp",)
     can_delete = False
-    has_add_permission = lambda self, request, obj: False  # type: ignore
+    has_add_permission = lambda self, request, obj: False
     template = "admin/read_only_tabular.html"
     classes = ["collapse", "collapsed"]
 
@@ -133,15 +134,9 @@ class PromptAdmin(BaseAdmin):
     list_filter = ("week", "type")
 
 
-@admin.register(Control)
-class ControlAdmin(BaseAdmin):
-    list_display = ("persona", "system", "default", "moderation", "created_at")
-    search_fields = (
-        "persona",
-        "system",
-        "default",
-        "moderation",
-    )
+@admin.register(ControlConfig)
+class ControlConfigAdmin(BaseAdmin):
+    list_display = ("key", "value", "created_at")
 
 
 @admin.register(Summary)
@@ -151,9 +146,22 @@ class SummaryAdmin(BaseAdmin):
     list_filter = ("school", "type")
 
 
+@admin.register(GroupStrategyPhaseConfig)
+class GroupStrategyPhaseConfigAdmin(BaseAdmin):
+    list_display = ("group_strategy_phase", "min_wait_seconds", "max_wait_seconds")
+
+
 @admin.register(IndividualPipelineRecord)
 class IndividualPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
+    list_display = (
+        "user",
+        "status",
+        "is_for_group_direct_messaging",
+        "message",
+        "validated_message",
+        "error_log",
+        "updated_at",
+    )
     search_fields = ("message", "validated_message", "error_log")
     list_filter = ("status",)
 
