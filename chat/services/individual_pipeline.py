@@ -2,9 +2,11 @@ import logging
 from celery import shared_task
 from .moderation import moderate_message
 from .individual_crud import (
+    load_individual_and_group_chat_history_for_direct_messaging,
     load_individual_chat_history,
     load_instruction_prompt,
     ingest_request,
+    load_instruction_prompt_for_direct_messaging,
     save_assistant_response,
 )
 from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
@@ -33,9 +35,14 @@ def individual_ingest(participant_id: str, data: dict):
     """
     user, session, user_chat_transcript = ingest_request(participant_id, data)
     record = IndividualPipelineRecord.objects.create(
-        user=user, message=data.get("message", ""), status=IndividualPipelineRecord.StageStatus.INGEST_PASSED
+        user=user,
+        message=data.get("message", ""),
+        status=IndividualPipelineRecord.StageStatus.INGEST_PASSED,
+        is_for_group_direct_messaging=user.group is not None,
     )
     logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
+    if record.is_for_group_direct_messaging:
+        logger.info(f"User {user.id} is in group {user.group.id}, using group direct-message strategy.")
     return record, session, user_chat_transcript
 
 
@@ -61,9 +68,13 @@ def individual_process(record: IndividualPipelineRecord):
     Stage 3: Process data via an LLM call.
     """
     # Load chat history and instructions from the database
-    chat_history, message = load_individual_chat_history(record.user)
+    if record.is_for_group_direct_messaging:
+        chat_history, message = load_individual_and_group_chat_history_for_direct_messaging(record.user)
+        instructions = load_instruction_prompt_for_direct_messaging(record.user)
+    else:
+        chat_history, message = load_individual_chat_history(record.user)
+        instructions = load_instruction_prompt(record.user)
 
-    instructions = load_instruction_prompt(record.user)
     response = generate_response(chat_history, instructions, message)
     record.instruction_prompt = instructions
     record.response = response

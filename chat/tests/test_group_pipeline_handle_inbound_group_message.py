@@ -3,30 +3,30 @@ import json
 import logging
 from unittest.mock import patch
 from uuid import uuid4
-from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 import pytest
 
 from chat.models import (
     BaseChatTranscript,
-    Control,
+    ControlConfig,
     Group,
     GroupChatTranscript,
     GroupPipelineRecord,
     GroupScheduledTaskAssociation,
     GroupSession,
+    GroupStrategyPhase,
+    GroupStrategyPhaseConfig,
     MessageType,
     Prompt,
     User,
 )
 from chat.serializers import GroupIncomingMessageSerializer
 from config import celery
-from chat.services.group_pipeline import _ingest
+from chat.services.group_pipeline import _FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS, _ingest
 
 _INITIAL_MESSAGE = "Some initial message"
 _FIRST_USER_MESSAGE = "some message from user"
-_VALID_API_KEY = "valid-api-key"
 
 
 @pytest.fixture
@@ -72,7 +72,8 @@ def _inbound_call():
         type=inbound_payload["context"]["message_type"],
         activity="base activity",
     )
-    Control.objects.create(system="System", persona="Persona")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     yield group_id, sender_id, inbound_payload, other_user1_id, other_user2_id, other_user3_id
 
@@ -84,27 +85,30 @@ def _mocks():
         patch(
             "chat.services.group_pipeline.send_moderation_message", return_value={"status": "ok"}
         ) as mock_send_moderation_message,
+        patch(
+            "chat.services.group_pipeline.send_message_to_participant_group", return_value={"status": "ok"}
+        ) as mock_send_message_to_participant,
     ):
-        yield mock_moderate_message, mock_send_moderation_message
+        yield mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
 @pytest.mark.parametrize("moderated", [True, False])
-def test_group_pipeline(_inbound_call, _mocks, celery_task_always_eager, client, caplog, moderated):
+def test_group_pipeline_handle_inbound_message(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog, moderated
+):
     # arrange
     group_id, sender_id, data, _, _, _ = _inbound_call
-    mock_moderate_message, mock_send_moderation_message = _mocks
+    mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant = _mocks
     if moderated:
         mock_moderate_message.return_value = "Blocked message"
     caplog.set_level(logging.INFO)
     url = reverse("chat:ingest-group", args=[group_id])
 
     # act
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
 
     # assert response
@@ -119,13 +123,14 @@ def test_group_pipeline(_inbound_call, _mocks, celery_task_always_eager, client,
         assert record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED
         assert mock_send_moderation_message.call_count == 1
     else:
-        assert record.status == GroupPipelineRecord.StageStatus.MODERATION_PASSED
+        assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
         assert mock_send_moderation_message.call_count == 0
 
     # assert session and transcript
     session = GroupSession.objects.get()
     assert session == record.group.current_session
     assert session.initial_message == _INITIAL_MESSAGE
+    assert session.current_strategy_phase == GroupStrategyPhase.BEFORE_AUDIENCE
     transcripts = list(session.transcripts.order_by("created_at").all())
     assert len(transcripts) == 2
     assert transcripts[0].role == BaseChatTranscript.Role.ASSISTANT
@@ -158,16 +163,26 @@ def test_group_pipeline(_inbound_call, _mocks, celery_task_always_eager, client,
         args = json.loads(task.args)
         kwargs = json.loads(task.kwargs)
         task_function.apply_async(args=args, kwargs=kwargs)
-        assert "Group response pipeline complete for group" in caplog.text
+
+        record.refresh_from_db()
+        session.refresh_from_db()
+        assert "Group action complete for group" in caplog.text
+        assert mock_send_message_to_participant.call_count == 1
+        assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
+        assert session.current_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE
+        transcripts = list(session.transcripts.order_by("created_at").all())
+        assert len(transcripts) == 3
+        assert transcripts[2].role == BaseChatTranscript.Role.ASSISTANT
+        assert transcripts[2].content == f"Dummy LLM response for phase: {GroupStrategyPhase.AUDIENCE}"
+        assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
 
     # Finally, send a second message, group and session exist and are reused
     second_message_data = copy.deepcopy(data)
     second_message_data["message"] = "some other message from user"
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     records = list(GroupPipelineRecord.objects.order_by("created_at").all())
@@ -181,8 +196,9 @@ def test_group_pipeline(_inbound_call, _mocks, celery_task_always_eager, client,
     assert "Existing group does not yet have user" not in caplog.text
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_participants_changed(_inbound_call, _mocks, celery_task_always_eager, client, caplog):
+def test_group_pipeline_handle_inbound_message_participants_changed(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
     caplog.set_level(logging.INFO)
     group_id, sender_id, data, other_user1_id, other_user2_id, other_user3_id = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
@@ -217,11 +233,10 @@ def test_group_pipeline_participants_changed(_inbound_call, _mocks, celery_task_
         school_mascot=data["context"]["school_mascot"],
     )
 
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
 
     assert response.status_code == 202
@@ -245,58 +260,58 @@ def test_group_pipeline_participants_changed(_inbound_call, _mocks, celery_task_
     assert sender_user.history.count() == 1  # no change needed so just creation,
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_sender_not_in_participant_list(_inbound_call, _mocks, celery_task_always_eager, client, caplog):
+def test_group_pipeline_handle_inbound_message_sender_not_in_participant_list(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
     new_sender_id = str(uuid4())
     data["sender_id"] = new_sender_id
 
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
 
     assert response.status_code == 202
-    assert f"Group pipeline failed for group {group_id}" in caplog.text
+    assert f"Group pipeline ingestion failed for group {group_id}" in caplog.text
     assert f"Sender ID {new_sender_id} not found in the list of participants" in caplog.text
     assert GroupPipelineRecord.objects.count() == 0
     assert GroupScheduledTaskAssociation.objects.count() == 0
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_invalid_message_type(_inbound_call, _mocks, celery_task_always_eager, client, caplog):
+def test_group_pipeline_handle_inbound_message_invalid_message_type(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
     data["context"]["message_type"] = MessageType.CHECK_IN.value
 
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
 
     assert response.status_code == 202
-    assert f"Group pipeline failed for group {group_id}" in caplog.text
+    assert f"Group pipeline ingestion failed for group {group_id}" in caplog.text
     assert "Group session cannot be of type" in caplog.text
     assert GroupPipelineRecord.objects.count() == 0
     assert GroupScheduledTaskAssociation.objects.count() == 0
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_changed_initial_message(_inbound_call, _mocks, celery_task_always_eager, client, caplog):
+def test_group_pipeline_handle_inbound_message_changed_initial_message(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
 
     # send initial message as before
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     session = GroupSession.objects.get()
@@ -305,11 +320,10 @@ def test_group_pipeline_changed_initial_message(_inbound_call, _mocks, celery_ta
     # send a second message with different initial message
     new_initial_message_data = copy.deepcopy(data)
     new_initial_message_data["context"]["initial_message"] = "New initial message"
-    response = client.post(
+    response = message_client.post(
         url,
         new_initial_message_data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     session = GroupSession.objects.get()
@@ -317,40 +331,40 @@ def test_group_pipeline_changed_initial_message(_inbound_call, _mocks, celery_ta
     assert "Got new initial_message for existing group session" in caplog.text
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_throws_exception_after_ingest(_inbound_call, _mocks, celery_task_always_eager, client, caplog):
+def test_group_pipeline_handle_inbound_message_throws_exception_after_ingest(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
-    mock_moderate_message, _ = _mocks
+    mock_moderate_message, _, mock_send_message_to_participant = _mocks
     mock_moderate_message.side_effect = Exception("Some error")
 
     # send initial message as before
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     record = GroupPipelineRecord.objects.get()
     assert record.status == GroupPipelineRecord.StageStatus.FAILED
     assert record.error_log == "Some error"
-    assert "Group pipeline failed for group" in caplog.text
+    assert "Group pipeline ingestion failed for group" in caplog.text
     assert "Some error" in caplog.text
     assert GroupScheduledTaskAssociation.objects.count() == 0
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_clears_existing_scheduled_message(_inbound_call, _mocks, client, celery_task_always_eager):
+def test_group_pipeline_handle_inbound_message_clears_existing_scheduled_message(
+    _inbound_call, _mocks, message_client, celery_task_always_eager
+):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
 
     # send message, first task scheduled
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     record = GroupPipelineRecord.objects.get()
@@ -358,11 +372,10 @@ def test_group_pipeline_clears_existing_scheduled_message(_inbound_call, _mocks,
     assert json.loads(task_association.task.kwargs)["run_id"] == str(record.run_id)
 
     # send another message, second task scheduled, first task deleted
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
     records = list(GroupPipelineRecord.objects.order_by("created_at").all())
@@ -373,10 +386,11 @@ def test_group_pipeline_clears_existing_scheduled_message(_inbound_call, _mocks,
     assert json.loads(task_association.task.kwargs)["run_id"] == str(new_record.run_id)
 
 
-@override_settings(INBOUND_MESSAGE_API_KEY=_VALID_API_KEY)
-def test_group_pipeline_new_message_during_ingrestion(_inbound_call, _mocks, client, celery_task_always_eager):
+def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
+    _inbound_call, _mocks, message_client, celery_task_always_eager
+):
     group_id, sender_id, data, second_sender_id, _, _ = _inbound_call
-    mock_moderate_message, _ = _mocks
+    mock_moderate_message, _, mock_send_message_to_participant = _mocks
     url = reverse("chat:ingest-group", args=[group_id])
     second_payload = copy.deepcopy(data)
     second_payload["message"] = "some message from user during first moderation"
@@ -391,11 +405,10 @@ def test_group_pipeline_new_message_during_ingrestion(_inbound_call, _mocks, cli
 
     mock_moderate_message.side_effect = mock_moderate_message_side_effect
 
-    response = client.post(
+    response = message_client.post(
         url,
         data,
         content_type="application/json",
-        headers={"Authorization": f"Bearer {_VALID_API_KEY}"},
     )
     assert response.status_code == 202
 
@@ -411,3 +424,108 @@ def test_group_pipeline_new_message_during_ingrestion(_inbound_call, _mocks, cli
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
     assert transcripts[2].content == "some message from user during first moderation"
+
+
+@pytest.mark.parametrize(
+    "current_strategy_phase",
+    [
+        GroupStrategyPhase.BEFORE_AUDIENCE,
+        GroupStrategyPhase.AFTER_AUDIENCE,
+        GroupStrategyPhase.AFTER_REMINDER,
+        GroupStrategyPhase.AFTER_FOLLOWUP,
+        GroupStrategyPhase.AFTER_SUMMARY,
+    ],
+)
+def test_group_pipeline_handle_inbound_message_updates_strategy_phase(
+    _mocks, message_client, celery_task_always_eager, current_strategy_phase, group_with_initial_message_interaction
+):
+    group, session, _, example_message_context = group_with_initial_message_interaction
+    url = reverse("chat:ingest-group", args=[group.id])
+    session.current_strategy_phase = current_strategy_phase
+    session.save()
+    inbound_payload = {
+        "message": "some next message from user",
+        "sender_id": group.users.first().id,
+        "context": example_message_context,
+    }
+
+    # send another message, second task scheduled, first task deleted
+    response = message_client.post(
+        url,
+        inbound_payload,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    pipeline_records = GroupPipelineRecord.objects.order_by("created_at").all()
+    assert len(pipeline_records) == 2
+    created_record = pipeline_records[1]
+    assert created_record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
+    session.refresh_from_db()
+    assert session.transcripts.count() == 4  # add one message or inbound
+    # when we receive a message, we always revert to BEFORE_AUDIENCE phase
+    # unless we are in AFTER_AUDIENCE phase, then we stay there
+    if current_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE:
+        assert session.current_strategy_phase == current_strategy_phase
+    else:
+        assert session.current_strategy_phase == GroupStrategyPhase.BEFORE_AUDIENCE
+
+
+@pytest.mark.parametrize(
+    "min_delay,max_delay,is_test", [[1, 3, False], [10, 10, False], [None, None, False], [100, 100, True]]
+)
+def test_group_pipeline_handle_inbound_message_delays_correct_duration(
+    _mocks,
+    message_client,
+    celery_task_always_eager,
+    group_with_initial_message_interaction,
+    min_delay,
+    max_delay,
+    is_test,
+    caplog,
+):
+    GroupStrategyPhaseConfig.objects.all().delete()
+    current_phase = GroupStrategyPhase.BEFORE_AUDIENCE
+    if min_delay:
+        GroupStrategyPhaseConfig.objects.create(
+            group_strategy_phase=current_phase,
+            min_wait_seconds=min_delay,
+            max_wait_seconds=max_delay,
+        )
+
+    group, session, _, example_message_context = group_with_initial_message_interaction
+    if is_test:
+        group.is_test = True
+        group.save()
+        for user in group.users.all():
+            user.is_test = True
+            user.save()
+    url = reverse("chat:ingest-group", args=[group.id])
+    session.current_strategy_phase = current_phase
+    session.save()
+    inbound_payload = {
+        "message": "some next message from user",
+        "sender_id": group.users.first().id,
+        "context": example_message_context,
+    }
+
+    response = message_client.post(
+        url,
+        inbound_payload,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    task = GroupScheduledTaskAssociation.objects.get().task
+    clocked_time = task.clocked.clocked_time
+    if is_test:
+        assert clocked_time > timezone.now()
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=1)
+    elif min_delay:
+        assert clocked_time > timezone.now() + timezone.timedelta(seconds=min_delay - 1)
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=max_delay)
+    else:
+        # fallback is hardcode to 60
+        assert clocked_time > timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS - 1)
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS)
+        assert f"Group strategy phase config not found for phase '{current_phase}'" in caplog.text

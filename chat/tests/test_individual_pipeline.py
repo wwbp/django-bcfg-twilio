@@ -6,8 +6,8 @@ from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     IndividualChatTranscript,
-    Control,
     IndividualPipelineRecord,
     MessageType,
     Prompt,
@@ -98,7 +98,7 @@ def default_context():
     ],
 )
 def test_individual_pipeline_parametrized(
-    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls
+    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls, caplog
 ):
     """
     Test the individual_pipeline task by simulating:
@@ -117,7 +117,8 @@ def test_individual_pipeline_parametrized(
         type=default_context["message_type"],
         activity="base activity",
     )
-    Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
     mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]
@@ -179,6 +180,10 @@ def test_individual_pipeline_parametrized(
     else:
         assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.NOT_FLAGGED
         assert record.user.current_session.transcripts.count() == 3  # initial, user, assistant response
+
+    # confirm this was not for direct messaging
+    assert "direct-messaging" not in caplog.text
+    assert IndividualPipelineRecord.objects.filter(is_for_group_direct_messaging=True).count() == 0
 
 
 @patch("chat.services.individual_pipeline.individual_ingest")
