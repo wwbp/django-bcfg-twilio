@@ -1,13 +1,13 @@
 import logging
 from django.contrib import admin
 from .models import (
+    ControlConfig,
     GroupSession,
     User,
     Group,
     IndividualChatTranscript,
     GroupChatTranscript,
     Prompt,
-    Control,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -133,15 +133,9 @@ class PromptAdmin(BaseAdmin):
     list_filter = ("week", "type")
 
 
-@admin.register(Control)
-class ControlAdmin(BaseAdmin):
-    list_display = ("persona", "system", "default", "moderation", "created_at")
-    search_fields = (
-        "persona",
-        "system",
-        "default",
-        "moderation",
-    )
+@admin.register(ControlConfig)
+class ControlConfigAdmin(BaseAdmin):
+    list_display = ("key", "value", "created_at")
 
 
 @admin.register(Summary)

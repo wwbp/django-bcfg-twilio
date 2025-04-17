@@ -9,7 +9,7 @@ import pytest
 
 from chat.models import (
     BaseChatTranscript,
-    Control,
+    ControlConfig,
     Group,
     GroupChatTranscript,
     GroupPipelineRecord,
@@ -71,7 +71,8 @@ def _inbound_call():
         type=inbound_payload["context"]["message_type"],
         activity="base activity",
     )
-    Control.objects.create(system="System", persona="Persona")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     yield group_id, sender_id, inbound_payload, other_user1_id, other_user2_id, other_user3_id
 

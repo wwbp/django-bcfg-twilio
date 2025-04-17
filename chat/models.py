@@ -1,10 +1,12 @@
+import logging
 import uuid
 from django.db import models
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 from simple_history.models import HistoricalRecords
 
-from .services.constant import MODERATION_MESSAGE_DEFAULT
+
+logger = logging.getLogger(__name__)
 
 
 class MessageType(models.TextChoices):
@@ -102,6 +104,9 @@ class BaseSession(ModelBase):
 class IndividualSession(BaseSession):
     user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
 
+    class Meta(BaseSession.Meta):
+        unique_together = ["user", "week_number", "message_type"]
+
     def __str__(self):
         return f"{self.user} - {self.message_type} (wk {self.week_number})"
 
@@ -138,6 +143,9 @@ class GroupSession(BaseSession):
     @property
     def summary_sent(self) -> bool:
         return self.transcripts.filter(assistant_strategy_phase=GroupStrategyPhase.SUMMARY).exists()
+
+    class Meta(BaseSession.Meta):
+        unique_together = ["group", "week_number", "message_type"]
 
     def __str__(self):
         return f"{self.group} - {self.message_type} (wk {self.week_number})"
@@ -186,19 +194,33 @@ class Prompt(ModelBase):
             raise ValueError(f"Group prompts cannot be of type {MessageType.CHECK_IN}")
 
     class Meta:
+        unique_together = ["is_for_group", "week", "type"]
         verbose_name_plural = "Weekly Prompts"
         ordering = ["week", "type", "-created_at"]
 
 
-class Control(ModelBase):
-    persona = models.TextField()
-    system = models.TextField()
-    default = models.TextField()
-    moderation = models.TextField(default=MODERATION_MESSAGE_DEFAULT)
+class ControlConfig(ModelBaseWithUuidId):
+    class ControlConfigKey(models.TextChoices):
+        PERSONA_PROMPT = "persona_prompt"
+        SYSTEM_PROMPT = "system_prompt"
+        GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
+
+    key = models.TextField(unique=True, choices=ControlConfigKey.choices)
+    value = models.TextField(blank=True, null=True)
+
+    @classmethod
+    def retrieve(cls, key: ControlConfigKey):
+        try:
+            return cls.objects.get(key=key).value
+        except cls.DoesNotExist:
+            logger.warning(f"ControlConfigKey key '{key}' requested but not found.")
+            return None
 
     class Meta:
-        verbose_name_plural = "Control Prompts"
-        ordering = ["-created_at"]
+        ordering = ["key"]
+
+    def __str__(self) -> str:
+        return self.key
 
 
 class Summary(ModelBase):
@@ -218,18 +240,6 @@ class Summary(ModelBase):
     class Meta:
         verbose_name_plural = "Summaries"
         ordering = ["-updated_at"]
-
-
-class StrategyPrompt(ModelBase):
-    name = models.CharField(max_length=255)
-    what_prompt = models.TextField(help_text="Prompt used to generate a response", default="")
-    when_prompt = models.TextField(help_text="Conditions or triggers for using this strategy", default="")
-    who_prompt = models.TextField(help_text="Criteria for selecting the response's addressee", default="")
-    is_active = models.BooleanField(default=True, help_text="Soft delete flag")
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["is_active", "name"]
 
 
 class BasePipelineRecord(ModelBase):

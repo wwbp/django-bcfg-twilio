@@ -16,9 +16,7 @@ from chat.models import (
     IndividualChatTranscript,
     GroupChatTranscript,
     Prompt,
-    Control,
     Summary,
-    StrategyPrompt,
     IndividualPipelineRecord,
     GroupPipelineRecord,
 )
@@ -224,19 +222,9 @@ class PromptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Prompt
 
-    week = 1
+    week = factory.Faker("random_int")
     activity = factory.Faker("sentence")
     type = MessageType.INITIAL
-
-
-class ControlFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = Control
-
-    persona = factory.Faker("sentence")
-    system = factory.Faker("sentence")
-    default = factory.Faker("sentence")
-    moderation = factory.Faker("sentence")
 
 
 class SummaryFactory(factory.django.DjangoModelFactory):
@@ -246,17 +234,6 @@ class SummaryFactory(factory.django.DjangoModelFactory):
     school = factory.Faker("word")
     type = Summary.TYPE_CHOICES[0][0]
     summary = factory.Faker("sentence")
-
-
-class StrategyPromptFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = StrategyPrompt
-
-    name = factory.Faker("word")
-    what_prompt = factory.Faker("sentence")
-    when_prompt = factory.Faker("sentence")
-    who_prompt = factory.Faker("sentence")
-    is_active = True
 
 
 class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
@@ -291,9 +268,7 @@ register(GroupFactory)
 register(ChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
 register(PromptFactory)
-register(ControlFactory)
 register(SummaryFactory)
-register(StrategyPromptFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)

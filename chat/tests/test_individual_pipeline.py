@@ -6,8 +6,8 @@ from chat.services.completion import MAX_RESPONSE_CHARACTER_LENGTH
 from chat.services.individual_pipeline import individual_pipeline
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     IndividualChatTranscript,
-    Control,
     IndividualPipelineRecord,
     MessageType,
     Prompt,
@@ -117,7 +117,8 @@ def test_individual_pipeline_parametrized(
         type=default_context["message_type"],
         activity="base activity",
     )
-    Control.objects.create(system="System B", persona="Persona B", default="Default Activity B")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
     mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]

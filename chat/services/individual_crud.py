@@ -8,7 +8,7 @@ from ..models import (
     User,
     IndividualChatTranscript,
     Prompt,
-    Control,
+    ControlConfig,
 )
 from django.db import transaction
 
@@ -170,7 +170,11 @@ def load_instruction_prompt(user: User):
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
 
     # Load the most recent controls record
-    controls = Control.objects.latest("created_at")
+    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    if not persona or not system:
+        raise ValueError("System or Persona prompt not found in ControlConfig.")
+
     # Retrieve the prompt for the given week, falling back to a default if none is found
     prompt_obj = None
     if week is not None and message_type is not None:
@@ -184,8 +188,8 @@ def load_instruction_prompt(user: User):
 
     # Format the final prompt using the template
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
-        system=controls.system,
-        persona=controls.persona,
+        system=system,
+        persona=persona,
         assistant_name=assistant_name,
         activity=activity,
     )
