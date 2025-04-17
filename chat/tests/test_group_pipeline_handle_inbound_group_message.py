@@ -16,13 +16,14 @@ from chat.models import (
     GroupScheduledTaskAssociation,
     GroupSession,
     GroupStrategyPhase,
+    GroupStrategyPhaseConfig,
     MessageType,
     Prompt,
     User,
 )
 from chat.serializers import GroupIncomingMessageSerializer
 from config import celery
-from chat.services.group_pipeline import _ingest
+from chat.services.group_pipeline import _FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS, _ingest
 
 _INITIAL_MESSAGE = "Some initial message"
 _FIRST_USER_MESSAGE = "some message from user"
@@ -172,7 +173,7 @@ def test_group_pipeline_handle_inbound_message(
         transcripts = list(session.transcripts.order_by("created_at").all())
         assert len(transcripts) == 3
         assert transcripts[2].role == BaseChatTranscript.Role.ASSISTANT
-        assert transcripts[2].content == "Some LLM response"
+        assert transcripts[2].content == f"Dummy LLM response for phase: {GroupStrategyPhase.AUDIENCE}"
         assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
 
     # Finally, send a second message, group and session exist and are reused
@@ -468,3 +469,63 @@ def test_group_pipeline_handle_inbound_message_updates_strategy_phase(
         assert session.current_strategy_phase == current_strategy_phase
     else:
         assert session.current_strategy_phase == GroupStrategyPhase.BEFORE_AUDIENCE
+
+
+@pytest.mark.parametrize(
+    "min_delay,max_delay,is_test", [[1, 3, False], [10, 10, False], [None, None, False], [100, 100, True]]
+)
+def test_group_pipeline_handle_inbound_message_delays_correct_duration(
+    _mocks,
+    message_client,
+    celery_task_always_eager,
+    group_with_initial_message_interaction,
+    min_delay,
+    max_delay,
+    is_test,
+    caplog,
+):
+    GroupStrategyPhaseConfig.objects.all().delete()
+    current_phase = GroupStrategyPhase.BEFORE_AUDIENCE
+    if min_delay:
+        GroupStrategyPhaseConfig.objects.create(
+            group_strategy_phase=current_phase,
+            min_wait_seconds=min_delay,
+            max_wait_seconds=max_delay,
+        )
+
+    group, session, _, example_message_context = group_with_initial_message_interaction
+    if is_test:
+        group.is_test = True
+        group.save()
+        for user in group.users.all():
+            user.is_test = True
+            user.save()
+    url = reverse("chat:ingest-group", args=[group.id])
+    session.current_strategy_phase = current_phase
+    session.save()
+    inbound_payload = {
+        "message": "some next message from user",
+        "sender_id": group.users.first().id,
+        "context": example_message_context,
+    }
+
+    response = message_client.post(
+        url,
+        inbound_payload,
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    task = GroupScheduledTaskAssociation.objects.get().task
+    clocked_time = task.clocked.clocked_time
+    if is_test:
+        assert clocked_time > timezone.now()
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=1)
+    elif min_delay:
+        assert clocked_time > timezone.now() + timezone.timedelta(seconds=min_delay - 1)
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=max_delay)
+    else:
+        # fallback is hardcode to 60
+        assert clocked_time > timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS - 1)
+        assert clocked_time <= timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS)
+        assert f"Group strategy phase config not found for phase '{current_phase}'" in caplog.text

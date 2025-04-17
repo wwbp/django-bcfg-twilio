@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     ControlConfig,
     GroupSession,
+    GroupStrategyPhaseConfig,
     User,
     Group,
     IndividualChatTranscript,
@@ -143,6 +144,11 @@ class SummaryAdmin(BaseAdmin):
     list_display = ("school", "type", "summary", "updated_at")
     search_fields = ("summary",)
     list_filter = ("school", "type")
+
+
+@admin.register(GroupStrategyPhaseConfig)
+class GroupStrategyPhaseConfigAdmin(BaseAdmin):
+    list_display = ("group_strategy_phase", "min_wait_seconds", "max_wait_seconds")
 
 
 @admin.register(IndividualPipelineRecord)

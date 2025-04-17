@@ -1,7 +1,14 @@
 from unittest.mock import patch
 import pytest
+from django.utils import timezone
 
-from chat.models import BaseChatTranscript, GroupPipelineRecord, GroupScheduledTaskAssociation, GroupStrategyPhase
+from chat.models import (
+    BaseChatTranscript,
+    GroupPipelineRecord,
+    GroupScheduledTaskAssociation,
+    GroupStrategyPhase,
+    GroupStrategyPhaseConfig,
+)
 from chat.services.group_pipeline import take_action_on_group
 
 
@@ -39,6 +46,22 @@ def test_group_pipeline_take_action_on_group(
     at_least_three_participants_responded,
     group_chat_transcript_factory,
 ):
+    GroupStrategyPhaseConfig.objects.all().delete()
+    GroupStrategyPhaseConfig.objects.create(
+        group_strategy_phase=GroupStrategyPhase.AFTER_AUDIENCE,
+        min_wait_seconds=1,
+        max_wait_seconds=2,
+    )
+    GroupStrategyPhaseConfig.objects.create(
+        group_strategy_phase=GroupStrategyPhase.AFTER_REMINDER,
+        min_wait_seconds=3,
+        max_wait_seconds=4,
+    )
+    GroupStrategyPhaseConfig.objects.create(
+        group_strategy_phase=GroupStrategyPhase.AFTER_FOLLOWUP,
+        min_wait_seconds=5,
+        max_wait_seconds=6,
+    )
     mock_send_message_to_participant = _mocks
     group, session, group_pipeline_record, _ = group_with_initial_message_interaction
     most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
@@ -95,6 +118,12 @@ def test_group_pipeline_take_action_on_group(
             assert GroupScheduledTaskAssociation.objects.count() == 1
             assert session.transcripts.count() == starting_transcript_count + 1
             assert mock_send_message_to_participant.call_count == 1
+
+            # we can do this here because we assert that session.current_strategy_phase is correct below
+            config = GroupStrategyPhaseConfig.objects.get(group_strategy_phase=session.current_strategy_phase)
+            task_clocked_time = GroupScheduledTaskAssociation.objects.get().task.clocked.clocked_time
+            assert task_clocked_time > timezone.now() + timezone.timedelta(seconds=config.min_wait_seconds - 1)
+            assert task_clocked_time <= timezone.now() + timezone.timedelta(seconds=config.max_wait_seconds)
         case GroupStrategyPhase.AFTER_FOLLOWUP:
             # for this case, we conditionally send a message and never schedule another action
             assert GroupScheduledTaskAssociation.objects.count() == 0

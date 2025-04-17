@@ -19,6 +19,7 @@ from ..models import (
     GroupScheduledTaskAssociation,
     GroupSession,
     GroupStrategyPhase,
+    GroupStrategyPhaseConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Pipeline Functions
 # =============================================================================
+
+_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS = 60
 
 
 def _newer_user_messages_exist(record: GroupPipelineRecord):
@@ -75,11 +78,21 @@ def _moderate(record: GroupPipelineRecord, user_chat_transcript: GroupChatTransc
 
 
 def _get_send_message_delay_seconds(user_chat_transcript: GroupChatTranscript) -> int:
-    # TODO 9853 - get this from the database
     if user_chat_transcript.session.group.is_test:
         # enable faster testing
         return 1
-    return random.randint(60, 300)
+    try:
+        phase_config = GroupStrategyPhaseConfig.objects.get(
+            group_strategy_phase=user_chat_transcript.session.current_strategy_phase
+        )
+        if phase_config.min_wait_seconds == phase_config.max_wait_seconds:
+            return phase_config.min_wait_seconds
+        return random.randint(phase_config.min_wait_seconds, phase_config.max_wait_seconds)
+    except GroupStrategyPhaseConfig.DoesNotExist:
+        logger.error(
+            f"Group strategy phase config not found for phase '{user_chat_transcript.session.current_strategy_phase}'"
+        )
+        return _FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS
 
 
 def _clear_existing_and_schedule_group_action(
@@ -115,8 +128,8 @@ def _compute_and_validate_message_to_send(
     # TODO use the current session and the next_strategy_phase (which implies strategy to use) to compute message
     # and then validate it
     # could break this up into two to match individual pipeline
-    record.response = "Some LLM response"
-    record.validated_message = "Some LLM response"
+    record.response = f"Dummy LLM response for phase: {next_strategy_phase}"
+    record.validated_message = f"Dummy LLM response for phase: {next_strategy_phase}"
     record.status = GroupPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
 
@@ -242,8 +255,6 @@ def take_action_on_group(run_id: str, user_chat_transcript_id: int):
             _save_and_send_message(record, session, next_strategy_phase)
 
         # move to the next phase
-        if next_strategy_phase not in [GroupStrategyPhase.SUMMARY, GroupStrategyPhase.AFTER_SUMMARY]:
-            _clear_existing_and_schedule_group_action(user_chat_transcript, record)
         match next_strategy_phase:
             case GroupStrategyPhase.AUDIENCE:
                 session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -254,6 +265,8 @@ def take_action_on_group(run_id: str, user_chat_transcript_id: int):
             case GroupStrategyPhase.SUMMARY | GroupStrategyPhase.AFTER_SUMMARY:
                 session.current_strategy_phase = GroupStrategyPhase.AFTER_SUMMARY
         session.save()
+        if session.current_strategy_phase != GroupStrategyPhase.AFTER_SUMMARY:
+            _clear_existing_and_schedule_group_action(user_chat_transcript, record)
 
         logger.info(
             f"Group action complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"

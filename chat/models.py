@@ -1,6 +1,7 @@
 import logging
 import uuid
 from django.db import models
+from django.forms import ValidationError
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 from simple_history.models import HistoricalRecords
@@ -31,6 +32,13 @@ class GroupStrategyPhase(models.TextChoices):
     AFTER_FOLLOWUP = "after_followup"
     SUMMARY = "summary"
     AFTER_SUMMARY = "after_summary"
+
+
+class GroupStrategyPhasesThatAllowConfig(models.TextChoices):
+    BEFORE_AUDIENCE = GroupStrategyPhase.BEFORE_AUDIENCE
+    AFTER_AUDIENCE = GroupStrategyPhase.AFTER_AUDIENCE
+    AFTER_REMINDER = GroupStrategyPhase.AFTER_REMINDER
+    AFTER_FOLLOWUP = GroupStrategyPhase.AFTER_FOLLOWUP
 
 
 class ModelBase(models.Model):
@@ -223,6 +231,24 @@ class ControlConfig(ModelBaseWithUuidId):
 
     def __str__(self) -> str:
         return self.key
+
+
+class GroupStrategyPhaseConfig(ModelBaseWithUuidId):
+    group_strategy_phase = models.CharField(choices=GroupStrategyPhasesThatAllowConfig.choices, unique=True)
+    min_wait_seconds = models.IntegerField()
+    max_wait_seconds = models.IntegerField()
+
+    def clean(self):
+        super().clean()
+        if self.min_wait_seconds < 0:
+            raise ValidationError("min_wait_seconds must be greater than or equal to 0")
+        if self.max_wait_seconds < 0:
+            raise ValidationError("max_wait_seconds must be greater than or equal to 0")
+        if self.min_wait_seconds > self.max_wait_seconds:
+            raise ValidationError("min_wait_seconds must be less than or equal to max_wait_seconds")
+
+    class Meta:
+        ordering = ["group_strategy_phase"]
 
 
 class Summary(ModelBase):
