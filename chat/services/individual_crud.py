@@ -41,17 +41,21 @@ def ingest_request(participant_id: str, data: dict):
             message_type=context.get("message_type"),
         )
 
-        if created_session:
-            # if we created a new session, we need to add the initial message to it
-            IndividualChatTranscript.objects.create(
-                session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
-            )
-        else:
-            if session.initial_message != context.get("initial_message") and not user.is_test:
-                logger.error(
-                    f"Got new initial_message for existing individual session {session}. "
-                    f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+        if not user.group:
+            # we only care about the initial message if the user is not in a group condition, because
+            # if the user is in the group condition, we already captured the initial message in the
+            # group session's transcript
+            if created_session:
+                # if we created a new session, we need to add the initial message to it
+                IndividualChatTranscript.objects.create(
+                    session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
                 )
+            else:
+                if session.initial_message != context.get("initial_message") and not user.is_test:
+                    logger.error(
+                        f"Got new initial_message for existing individual session {session}. "
+                        f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+                    )
 
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
@@ -68,6 +72,12 @@ def sanitize_name(name: str) -> str:
     """
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", name)
     return sanitized if sanitized else "default"
+
+
+def load_individual_and_group_chat_history_for_direct_messaging(user: User):
+    logger.info(f"Loading chat history for participant and their group for direct-messaging: {user.id}")
+    # TODO 10187 - implement and remove call to old function
+    return load_individual_chat_history(user)
 
 
 def load_individual_chat_history(user: User):
@@ -113,39 +123,6 @@ def load_individual_chat_history(user: User):
     return history, latest_user_message_content
 
 
-# TODO - do we still need these commented out functions?
-
-# def load_detailed_transcript(group_id: str):
-#     logger.info(f"Loading detailed transcript for group ID: {group_id}")
-#     transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
-#     messages = []
-#     for t in transcripts:
-#         sender_name = t.sender.name if t.sender else BaseChatTranscript.Role.ASSISTANT  # TODO: pipe mascot name
-#         messages.append({"sender": sender_name, "role": t.role, "timestamp": str(t.created_at), "content": t.content})
-#     return json.dumps(messages, indent=2)
-
-
-# def load_chat_history_json_group(group_id: str):
-#     logger.info(f"Loading chat history for group ID: {group_id}")
-#     transcripts = GroupChatTranscript.objects.filter(group_id=group_id).order_by("created_at")
-#     history = [{"role": t.role, "content": t.content} for t in transcripts]
-#     return history
-
-
-# def get_latest_assistant_response(user_id: str):
-#     logger.info(f"Fetching latest assistant response for participant with id: {user_id}")
-
-#     # Retrieve the most recent assistant response for the given user
-#     latest_assistant_transcript = (
-#         IndividualChatTranscript.objects.filter(session__user_id=user_id, role=BaseChatTranscript.Role.ASSISTANT)
-#         .order_by("-created_at")
-#         .first()
-#     )
-
-#     # Return the content if a transcript exists; otherwise, return None
-#     return latest_assistant_transcript.content if latest_assistant_transcript else None
-
-
 def save_assistant_response(user: User, response: str, session: IndividualSession):
     logger.info(f"Saving assistant response for participant: {user.id}")
     IndividualChatTranscript.objects.create(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response)
@@ -160,6 +137,12 @@ INSTRUCTION_PROMPT_TEMPLATE = (
     "Assistant Name: {assistant_name}\n\n"
     "Activity: {activity}\n\n"
 )
+
+
+def load_instruction_prompt_for_direct_messaging(user: User):
+    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+    # TODO 10187 - implement and remove call to old function
+    return load_instruction_prompt(user)
 
 
 def load_instruction_prompt(user: User):

@@ -79,6 +79,8 @@ class User(ModelBase):
 
     @property
     def current_session(self) -> "IndividualSession | None":
+        if self.group:
+            return self.group.current_session
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
@@ -269,6 +271,10 @@ class IndividualPipelineRecord(BasePipelineRecord):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+
+    # note that we could use a derived property for this, but we would lose history if the user
+    # is removed from the group
+    is_for_group_direct_messaging = models.BooleanField(default=False)
 
     def __str__(self):
         return f"IndividualPipelineRecord({self.user}, {self.run_id})"

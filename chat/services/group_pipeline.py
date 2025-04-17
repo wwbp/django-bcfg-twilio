@@ -76,6 +76,9 @@ def _moderate(record: GroupPipelineRecord, user_chat_transcript: GroupChatTransc
 
 def _get_send_message_delay_seconds(user_chat_transcript: GroupChatTranscript) -> int:
     # TODO 9853 - get this from the database
+    if user_chat_transcript.session.group.is_test:
+        # enable faster testing
+        return 1
     return random.randint(60, 300)
 
 

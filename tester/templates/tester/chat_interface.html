@@ -22,7 +22,7 @@
                     data-week_number="{{ user.current_session.week_number }}"
                     data-initial_message="{{ user.current_session.initial_message }}"
                     data-message_type="{{ user.current_session.message_type }}">
-                    {{ user.name }} - {{ user.school_name }}
+                    {{ user.name }} - {{ user.school_name }} {% if user.group %}(Group Direct-Messaging){% endif %}
                 </option>
                 {% endfor %}
             </select>

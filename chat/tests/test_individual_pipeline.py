@@ -98,7 +98,7 @@ def default_context():
     ],
 )
 def test_individual_pipeline_parametrized(
-    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls
+    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls, caplog
 ):
     """
     Test the individual_pipeline task by simulating:
@@ -180,6 +180,10 @@ def test_individual_pipeline_parametrized(
     else:
         assert user_chat_transcript.moderation_status == IndividualChatTranscript.ModerationStatus.NOT_FLAGGED
         assert record.user.current_session.transcripts.count() == 3  # initial, user, assistant response
+
+    # confirm this was not for direct messaging
+    assert "direct-messaging" not in caplog.text
+    assert IndividualPipelineRecord.objects.filter(is_for_group_direct_messaging=True).count() == 0
 
 
 @patch("chat.services.individual_pipeline.individual_ingest")

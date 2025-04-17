@@ -26,7 +26,6 @@ class ChatTestInterface(View, PermissionRequiredMixin):
         # Retrieve stored responses to display on the page.
         responses = ChatResponse.objects.order_by("-created_at")
         test_users = ChatUser.objects.filter(is_test=True)
-                    
 
         return render(
             request,
@@ -128,6 +127,8 @@ def create_test_case(request):
 
 
 def chat_transcript(request, test_case_id):
+    # TODO 10187 - load correctly if user is direct messaging group
+    # can this use the crud function(s) (and therefore get direct messaging transcript from shared function as well?)
     transcripts = IndividualChatTranscript.objects.filter(session__user_id=test_case_id).order_by("created_at")
     transcript = [
         {
