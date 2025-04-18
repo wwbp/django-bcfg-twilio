@@ -162,10 +162,10 @@ class ControlConfigAdmin(EditableAdmin):
 
 
 @admin.register(Summary)
-class SummaryAdmin(EditableAdmin):
-    list_display = ("school", "type", "summary", "updated_at")
+class SummaryAdmin(BaseAdmin):
+    list_display = ("school_name", "week_number", "summary", "selected", "updated_at")
     search_fields = ("summary",)
-    list_filter = ("school", "type")
+    list_filter = ("school_name", "week_number", "selected")
 
 
 @admin.register(GroupStrategyPhaseConfig)

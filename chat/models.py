@@ -264,17 +264,10 @@ class GroupStrategyPhaseConfig(ModelBaseWithUuidId):
 
 
 class Summary(ModelBase):
-    TYPE_CHOICES = [
-        ("influencer", "Influencer"),
-        ("song", "Song"),
-        ("spot", "Spot"),
-        ("idea", "Idea"),
-        ("pick", "Pick"),
-    ]
-
-    school = models.CharField(max_length=255)
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    school_name = models.CharField(max_length=255)
+    week_number = models.IntegerField()
     summary = models.TextField()
+    selected = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

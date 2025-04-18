@@ -201,7 +201,7 @@ class GroupSessionFactory(factory.django.DjangoModelFactory):
     message_type = MessageType.INITIAL
 
 
-class ChatTranscriptFactory(factory.django.DjangoModelFactory):
+class IndividualChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IndividualChatTranscript
 
@@ -242,8 +242,8 @@ class SummaryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Summary
 
-    school = factory.Faker("word")
-    type = Summary.TYPE_CHOICES[0][0]
+    school_name = factory.Faker("word")
+    week_number = factory.Faker("random_int")
     summary = factory.Faker("sentence")
 
 
@@ -276,7 +276,7 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
 # register factories as fixtures
 register(UserFactory)
 register(GroupFactory)
-register(ChatTranscriptFactory)
+register(IndividualChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
 register(GroupPromptFactory)
 register(IndividualPromptFactory)

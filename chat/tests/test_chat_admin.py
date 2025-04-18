@@ -51,16 +51,16 @@ def test_view_group_detail(admin_client, group_factory, user_factory):
     assert users[1].name in response.content.decode("utf-8")
 
 
-def test_view_individualtranscript_list(admin_client, chat_transcript_factory):
-    transcripts = chat_transcript_factory.create_batch(2)
+def test_view_individualtranscript_list(admin_client, individual_chat_transcript_factory):
+    transcripts = individual_chat_transcript_factory.create_batch(2)
     response = admin_client.get(reverse("admin:chat_individualchattranscript_changelist"))
     assert response.status_code == 200
     for transcript in transcripts:
         assert str(transcript.id) in response.content.decode("utf-8")
 
 
-def test_view_individualtranscript_detail(admin_client, chat_transcript_factory):
-    transcript = chat_transcript_factory()
+def test_view_individualtranscript_detail(admin_client, individual_chat_transcript_factory):
+    transcript = individual_chat_transcript_factory()
     response = admin_client.get(reverse("admin:chat_individualchattranscript_change", args=(transcript.id,)))
     assert response.status_code == 200
 
