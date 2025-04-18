@@ -3,7 +3,7 @@ from chat.models import ControlConfig, MessageType, User, IndividualPrompt, Indi
 from chat.services.individual_crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
 
-def test_load_instruction_prompt_with_existing_user_and_prompt():
+def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_factory):
     """
     When a user exists and a Prompt for the user's week is available,
     the function should use the Prompt's activity.
@@ -16,10 +16,8 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
         message_type=MessageType.INITIAL,
     )
     # Create ControlConfig records
-    persona = ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt"
-    )
-    system = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    persona = control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    system = control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     # Create a Prompt for the user's week.
     prompt = IndividualPrompt.objects.create(
         week=3, message_type=MessageType.INITIAL, activity="Custom Activity for Week 3"
@@ -35,7 +33,7 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
     assert result == expected
 
 
-def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt():
+def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(control_config_factory):
     """
     When a user exists and a Prompt for the user's seesion is unavailable,
     the function should raise a ValueError.
@@ -48,8 +46,8 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
         message_type=MessageType.SUMMARY,
     )
     # Create ControlConfig records
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     # Create a Prompt for the user's week.
     IndividualPrompt.objects.create(week=3, message_type=MessageType.INITIAL, activity="Custom Activity for Week 3")
@@ -58,7 +56,7 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
         load_instruction_prompt(user)
 
 
-def test_load_instruction_prompt_with_existing_user_no_prompt():
+def test_load_instruction_prompt_with_existing_user_no_prompt(control_config_factory):
     """
     When a user exists but there is no matching Prompt for their week,
     the function should fall back to using the ControlConfig's default activity.
@@ -69,15 +67,15 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
         week_number=2,
         message_type=MessageType.INITIAL,
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     # Do not create a Prompt for week 2.
 
     with pytest.raises(IndividualPrompt.DoesNotExist):
         load_instruction_prompt(user)
 
 
-def test_load_instruction_prompt_with_empty_school_mascot():
+def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory):
     """
     When a user has an empty school mascot, the function should fall back to
     the default assistant name ("Assistant") in the prompt.
@@ -88,10 +86,8 @@ def test_load_instruction_prompt_with_empty_school_mascot():
         week_number=1,
         message_type=MessageType.INITIAL,
     )
-    persona = ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt"
-    )
-    system = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    persona = control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    system = control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     prompt = IndividualPrompt.objects.create(week=1, message_type=MessageType.INITIAL, activity="Activity D")
 
     result = load_instruction_prompt(user)

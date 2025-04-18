@@ -12,7 +12,7 @@ from chat.models import (
 from chat.services.group_crud import load_instruction_prompt, GROUP_INSTRUCTION_PROMPT_TEMPLATE
 
 
-def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_prompt_factory):
+def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_prompt_factory, control_config_factory):
     """
     When a group has at least one user and there is a matching Prompt
     (week + strategy phase + is_for_group),
@@ -32,8 +32,8 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
     )
 
     # latest Control via factory
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Persona Y")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="System X")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Persona Y")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="System X")
 
     # matching Prompt via factory
     prompt = group_prompt_factory(
@@ -52,7 +52,7 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
     assert result == expected
 
 
-def test_load_group_instruction_prompt_raises_when_no_prompt():
+def test_load_group_instruction_prompt_raises_when_no_prompt(control_config_factory):
     """
     If there is no Prompt matching the session’s week and given phase,
     _load_instruction_prompt must raise ValueError.
@@ -70,8 +70,8 @@ def test_load_group_instruction_prompt_raises_when_no_prompt():
         message_type=MessageType.INITIAL,
     )
 
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="P")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="S")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="P")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="S")
 
     with pytest.raises(GroupPrompt.DoesNotExist) as exc:
         load_instruction_prompt(session, GroupStrategyPhase.AUDIENCE)
@@ -79,7 +79,9 @@ def test_load_group_instruction_prompt_raises_when_no_prompt():
     assert "Prompt matching query does not exist." in str(exc.value)
 
 
-def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user(group_prompt_factory):
+def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user(
+    group_prompt_factory, control_config_factory
+):
     """
     If the group has no users at all, assistant_name should fall back
     to BaseChatTranscript.Role.ASSISTANT.
@@ -91,8 +93,8 @@ def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user
         message_type=MessageType.INITIAL,
     )
 
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="Sys1")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Pers1")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="Sys1")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Pers1")
 
     group_prompt_factory(
         week=1,

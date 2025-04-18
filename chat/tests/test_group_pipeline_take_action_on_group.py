@@ -49,6 +49,7 @@ def test_group_pipeline_take_action_on_group(
     at_least_three_participants_responded,
     group_chat_transcript_factory,
     group_prompt_factory,
+    control_config_factory,
 ):
     GroupStrategyPhaseConfig.objects.all().delete()
     GroupStrategyPhaseConfig.objects.create(
@@ -107,11 +108,11 @@ def test_group_pipeline_take_action_on_group(
                 sender=group_users[i],
             )
     starting_transcript_count = session.transcripts.count()
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="<<PERSONA PROMPT>>",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
@@ -255,17 +256,15 @@ def test_group_pipeline_take_action_on_group_not_latest_action_after_compute_res
 
 
 def test_audience_action_loads_instruction_prompt_and_schedules(
-    _mocks,
-    group_with_initial_message_interaction,
-    group_prompt_factory,
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="<<PERSONA PROMPT>>",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
@@ -286,18 +285,131 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
     assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt
 
 
-def test_reminder_action_loads_instruction_prompt_and_schedules(
+def test_summary_action_loads_instruction_prompt_and_schedules(
     _mocks,
     group_with_initial_message_interaction,
     group_prompt_factory,
+    group_chat_transcript_factory,
+    control_config_factory,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    ControlConfig.objects.create(
+    users = User.objects.filter(group=group)
+    for user in users:
+        group_chat_transcript_factory(
+            session=session,
+            role=BaseChatTranscript.Role.USER,
+            content="User response",
+            sender=user,
+        )
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="<<PERSONA PROMPT>>",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
+
+    # start at AFTER_FOLLOWUP
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # all participants +3 interacted, should trigger summary
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR SUMMARY>>" in record.instruction_prompt
+
+
+def test_no_summary_action_one_participant_interacted(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
+
+    # start at AFTER_FOLLOWUP
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # less than 3 participant interacted, should not trigger summary
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY
+    assert record.status == GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
+
+
+def test_no_summary_action_sent_once(
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+    group_chat_transcript_factory,
+    control_config_factory,
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    group_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="user_message",
+        assistant_strategy_phase=GroupStrategyPhase.SUMMARY,
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
+
+    # start at AFTER_FOLLOWUP
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # less than 3 participant interacted, should not trigger summary
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY
+    assert record.status == GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
+
+
+def test_reminder_action_loads_instruction_prompt_and_schedules(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
@@ -321,7 +433,11 @@ def test_reminder_action_loads_instruction_prompt_and_schedules(
 
 
 def test_no_reminder_action_all_user_responded(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+    group_chat_transcript_factory,
+    control_config_factory,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -330,11 +446,11 @@ def test_no_reminder_action_all_user_responded(
         group_chat_transcript_factory(
             session=session, role=BaseChatTranscript.Role.USER, content="user_message", sender=user
         )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="<<PERSONA PROMPT>>",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
@@ -359,7 +475,11 @@ def test_no_reminder_action_all_user_responded(
 
 
 def test_no_reminder_action_assistant_sent_one(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+    group_chat_transcript_factory,
+    control_config_factory,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -369,11 +489,11 @@ def test_no_reminder_action_assistant_sent_one(
         content="user_message",
         assistant_strategy_phase=GroupStrategyPhase.REMINDER,
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="<<PERSONA PROMPT>>",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )

@@ -81,9 +81,9 @@ def test_view_prompt_list(admin_client, individual_prompt_factory):
         assert str(prompt.id) in response.content.decode("utf-8")
 
 
-def test_view_control_list(admin_client):
-    control1 = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test_value")
-    control2 = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test_value")
+def test_view_control_list(admin_client, control_config_factory):
+    control1 = control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test_value")
+    control2 = control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test_value")
     controls = [control1, control2]
     response = admin_client.get(reverse("admin:chat_controlconfig_changelist"))
     assert response.status_code == 200

@@ -30,7 +30,7 @@ _FIRST_USER_MESSAGE = "some message from user"
 
 
 @pytest.fixture
-def _inbound_call():
+def _inbound_call(control_config_factory):
     group_id = str(uuid4())
     sender_id = str(uuid4())
     other_user1_id = str(uuid4())
@@ -71,8 +71,8 @@ def _inbound_call():
         strategy_type=GroupStrategyPhase.AUDIENCE,
         activity="base activity",
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     yield group_id, sender_id, inbound_payload, other_user1_id, other_user2_id, other_user3_id
 

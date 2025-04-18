@@ -8,6 +8,7 @@ from pytest_factoryboy import register
 
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     Group,
     GroupPrompt,
     GroupSession,
@@ -273,6 +274,22 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     status = GroupPipelineRecord.StageStatus.INGEST_PASSED
 
 
+class ControlConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ControlConfig
+
+    # if you only ever care about persona & system, you can restrict the iterator:
+    key = factory.Iterator(
+        [
+            ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+            ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+            ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
+        ]
+    )
+    # default fake value; you can always override in a test
+    value = factory.Faker("sentence")
+
+
 # register factories as fixtures
 register(UserFactory)
 register(GroupFactory)
@@ -285,3 +302,4 @@ register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
 register(GroupSessionFactory)
+register(ControlConfigFactory)
