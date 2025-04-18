@@ -1,5 +1,10 @@
 import logging
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.db import transaction
+from django.db.models import Count
+from django.db.models.query import QuerySet
+
+from chat.services.summaries import handle_summaries_selected_change
 from .models import (
     ControlConfig,
     GroupPrompt,
@@ -166,6 +171,47 @@ class SummaryAdmin(BaseAdmin):
     list_display = ("school_name", "week_number", "summary", "selected", "updated_at")
     search_fields = ("summary",)
     list_filter = ("school_name", "week_number", "selected")
+
+    @admin.action(description="Add selected summaries to messages")
+    def select_summaries(self, request, queryset: QuerySet[Summary]):
+        max_allowed_selected_summaries_per_school = 3
+        try:
+            with transaction.atomic():
+                for s in queryset:
+                    s.selected = True
+                    s.save()
+                schools_with_more_than_three_selected_summaries = list(
+                    Summary.objects.filter(selected=True)
+                    .values("school_name")
+                    .annotate(selected_count=Count("id"))
+                    .filter(selected_count__gt=max_allowed_selected_summaries_per_school)
+                )
+                if schools_with_more_than_three_selected_summaries:
+                    raise ValueError(
+                        "Selecting these options would result in the following schools having "
+                        f"more than {max_allowed_selected_summaries_per_school} selected "
+                        f"summaries: {schools_with_more_than_three_selected_summaries}"
+                    )
+            handle_summaries_selected_change.delay([str(s.id) for s in queryset])
+        except ValueError as e:
+            self.message_user(
+                request,
+                str(e),
+                messages.ERROR,
+            )
+
+    @admin.action(description="Remove selected summaries from messages")
+    def deselect_summaries(self, request, queryset: QuerySet[Summary]):
+        with transaction.atomic():
+            for s in queryset:
+                s.selected = False
+                s.save()
+        handle_summaries_selected_change.delay([str(s.id) for s in queryset])
+
+    actions = [
+        "select_summaries",
+        "deselect_summaries",
+    ]
 
 
 @admin.register(GroupStrategyPhaseConfig)

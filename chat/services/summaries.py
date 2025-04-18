@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from chat.models import GroupChatTranscript, IndividualChatTranscript, Summary, User
+from chat.services.send import send_school_summaries_to_hub_for_week
 
 logger = logging.getLogger(__name__)
 
@@ -127,3 +128,16 @@ def generate_weekly_summaries():
             school_name, school_week_number, all_individual_school_chats, all_group_school_chats
         )
         _persist_summaries(school_name, school_week_number, summaries)
+
+
+@shared_task
+def handle_summaries_selected_change(changed_summary_ids: list[str]):
+    """
+    Handle the change in selected summaries by sending all selected summaries
+    to the BCFG endpoint for any schools and weeks involed in the change.
+    """
+    changed_summaries = list(Summary.objects.filter(id__in=changed_summary_ids))
+    schools_and_weeks_included = {(s.school_name, s.week_number) for s in changed_summaries}
+    for school_name, week_number in schools_and_weeks_included:
+        summaries = list(Summary.objects.filter(school_name=school_name, week_number=week_number, selected=True))
+        send_school_summaries_to_hub_for_week(school_name, week_number, [s.summary for s in summaries])
