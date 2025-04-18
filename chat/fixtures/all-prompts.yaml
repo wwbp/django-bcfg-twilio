@@ -242,21 +242,19 @@
       impossible. For example, if a student said their favorite hobby is to fly with
       wings, you will react surprised and confused.\r\nYou should do this:\r\nOnly
       ask one question at a time."
-- model: chat.prompt
+- model: chat.individualprompt
   pk: 3
   fields:
     created_at: 2025-04-10 17:28:00.769507+00:00
-    is_for_group: false
     week: -2
     activity: Engage in a friendly, personalized way. Acknowledge their details and
       share your thoughts. Then ask a thought-provoking follow-up, like “How has your
       hometown shaped your interests?” or “What draws you to your hobby/major?”
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 4
   fields:
     created_at: 2025-04-10 17:28:32.377848+00:00
-    is_for_group: false
     week: -1
     activity: Acknowledge their choice with value affirmation (e.g., “That’s a great
       choice!”). Emphasize that having a role model can be truly beneficial, as psychology
@@ -265,12 +263,11 @@
       that inspires you?” Once they do, follow up by asking how that inspiration has
       influenced their personal growth, emphasizing actionable insights and a growth
       mindset.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 5
   fields:
     created_at: 2025-04-10 17:28:48.018603+00:00
-    is_for_group: false
     week: 1
     activity: "If challenges are shared: Validate their feelings briefly. Introduce
       social belonging intervention and affirm that it's normal to experience these
@@ -279,12 +276,11 @@
       challenge.\r\nIf no challenges are mentioned: Affirm their positive experience
       and ask what aspects of college life (e.g., new friendships or favorite classes)
       they're enjoying, encouraging self-reflection and growth mindsets."
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 6
   fields:
     created_at: 2025-04-10 17:28:58.284836+00:00
-    is_for_group: false
     week: 2
     activity: When a student replies, gently share your impression of the song’s emotional
       tone without assuming too much. Invite them to share any memories or thoughts
@@ -294,12 +290,11 @@
       and social belonging to help them reflect on the positive role music can play.
       Tailor your follow-up based on their response, keeping the conversation fun,
       engaging, and empathetic.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 7
   fields:
     created_at: 2025-04-10 17:29:07.818876+00:00
-    is_for_group: false
     week: 3
     activity: When the student responds, warmly and briefly affirm their goal and
       invite them to break it down into small, manageable steps. Encourage a growth
@@ -307,12 +302,11 @@
       envisioning the best outcome, considering potential obstacles, and identifying
       a small, concrete step they can take. Validate their effort and reinforce that
       every bit of progress counts.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 8
   fields:
     created_at: 2025-04-10 17:29:20.601180+00:00
-    is_for_group: false
     week: 4
     activity: When a student responds, start by normalizing their feelings using insights
       from social belonging research—reminding them that nearly everyone experiences
@@ -322,23 +316,21 @@
       belonging is a gradual, growth-oriented process. If they’re unsure or their
       suggestion seems vague, normalize that uncertainty and explore further by asking
       what specific moments or actions made them feel more at home.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 9
   fields:
     created_at: 2025-04-10 17:29:30.823383+00:00
-    is_for_group: false
     week: 5
     activity: After the student asks a question, provide a clear answer and share
       your own perspective on the topic. Invite them to dive deeper by asking a thought-provoking
       follow-up that encourages reflection. Use psychological insights to validate
       their inquiry and reinforce your supportive role.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 10
   fields:
     created_at: 2025-04-10 17:29:42.774232+00:00
-    is_for_group: false
     week: 6
     activity: When the student replies, first check for a genuine response and gently
       clarify if needed. Then, acknowledge their choice and invite them to reflect
@@ -348,12 +340,11 @@
       boost their productivity. Maintain a reflective, supportive tone that connects
       their personal experience with insights from environmental psychology and practical
       behavior strategies.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 11
   fields:
     created_at: 2025-04-10 17:29:54.873314+00:00
-    is_for_group: false
     week: 7
     activity: When a student responds, begin by normalizing their stress and validating
       that it's a common experience. Then invite them to reframe their challenge using
@@ -362,12 +353,11 @@
       they aren’t facing any challenges, maintain support by asking about what they’re
       enjoying in college, reinforcing that every experience is a chance for personal
       development.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 12
   fields:
     created_at: 2025-04-10 17:30:06.739309+00:00
-    is_for_group: false
     week: 8
     activity: After the student responds with their major or intended major, the chatbot
       should provide tailored information about that field. It should discuss important
@@ -377,12 +367,11 @@
       on industry trends, suggest potential resources (like internships, networking
       opportunities, or online courses), and highlight how building these skills can
       boost confidence and long-term success.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 13
   fields:
     created_at: 2025-04-10 17:30:19.963005+00:00
-    is_for_group: false
     week: 9
     activity: When a student responds, first acknowledge their expression of gratitude
       and emphasize that research shows gratitude can improve mood, boost resilience,
@@ -392,12 +381,11 @@
       role as a tool for stress management and growth. Keep the discussion reflective
       and grounded in positive psychology, inviting them to think about how regular
       gratitude practice might enhance their college experience and personal development.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 14
   fields:
     created_at: 2025-04-10 17:30:32.883858+00:00
-    is_for_group: false
     week: 10
     activity: When a student responds, warmly acknowledge their choice and have fun
       guessing a movie you think they'd enjoy based on their taste. Encourage them
@@ -407,12 +395,11 @@
       their experiences, and ask how they might apply any lessons learned to current
       challenges or aspirations based on chat history. Keep the tone fun, engaging,
       thoughtful, and supportive throughout the conversation.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 15
   fields:
     created_at: 2025-04-10 17:30:44.337750+00:00
-    is_for_group: false
     week: 11
     activity: When a student responds, acknowledge their achievement warmly and encourage
       them to reflect on how their effort, ability, and persistence contributed to
@@ -422,12 +409,11 @@
       shift focus to even the smallest wins or efforts, and reassure them that progress
       is more important than perfection. Maintain an empowering, supportive tone that
       reinforces a growth mindset throughout.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 16
   fields:
     created_at: 2025-04-10 17:30:53.970602+00:00
-    is_for_group: false
     week: 12
     activity: When a student responds, briefly validatd their excitement. Then, subtly
       reframe the conversation by guiding them to shift from just looking forward
@@ -437,12 +423,11 @@
       can take. If they’re unsure about a specific goal, invite them to reflect on
       smaller joys or emerging opportunities while normalizing any uncertainty. Maintain
       an encouraging, growth-oriented tone throughout.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 17
   fields:
     created_at: 2025-04-10 17:31:06.667697+00:00
-    is_for_group: false
     week: 13
     activity: When a student responds, acknowledge their advice warmly and reflect
       on how it ties into insights they've shared previously. Encourage them to elaborate
@@ -452,24 +437,22 @@
       challenges leads to personal development. Ask a follow-up that deepens the discussion
       on how their advice can be a practical tool for overcoming future obstacles
       while reinforcing the positive impact of their own progress.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 18
   fields:
     created_at: 2025-04-10 17:31:18.325735+00:00
-    is_for_group: false
     week: 14
     activity: After the student asks a question, provide a clear answer and share
       your own perspective on the topic, as well as based on past chat history with
       the students. Invite them to dive deeper by asking a thought-provoking follow-up
       that encourages reflection. Use psychological insights to validate their inquiry
       and reinforce your supportive role.
-    type: initial
-- model: chat.prompt
+    message_type: initial
+- model: chat.individualprompt
   pk: 19
   fields:
     created_at: 2025-04-10 17:31:30.610216+00:00
-    is_for_group: false
     week: -2
     activity: "If the student selects 1, respond with an enthusiastic \"Awesome!\"
       and ask what specifically makes them excited about the upcoming week. Use psychological
@@ -480,12 +463,11 @@
       or mindfulness to prompt reflection on how they can transform uncertainty into
       a learning opportunity, and invite them to consider resources or small actions
       to feel more prepared."
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 20
   fields:
     created_at: 2025-04-10 17:31:51.486474+00:00
-    is_for_group: false
     week: 1
     activity: After the student provides their rating, invite them to share more about
       what that number represents—what experiences or emotions contribute to feeling
@@ -500,12 +482,11 @@
       and resilience. Tailor your follow-up questions to delve deeper into their personal
       narrative, helping them connect their feelings to broader life experiences and
       offering supportive guidance without prescriptive categories.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 21
   fields:
     created_at: 2025-04-10 17:32:05.661513+00:00
-    is_for_group: false
     week: 3
     activity: 'After the student provides a rating, invite them to share more about
       the story behind their number. Encourage them to describe what aspects of their
@@ -522,12 +503,11 @@
       growth mindset and self-efficacy. In every case, the chatbot should aim to deepen
       the conversation by connecting the student''s reflections to broader strategies
       for emotional regulation and personal growth.'
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 22
   fields:
     created_at: 2025-04-10 17:36:10.434640+00:00
-    is_for_group: false
     week: 4
     activity: After the student responds, invite them to share more about their experience
       of belonging. Ask open-ended questions that let them elaborate on how they feel
@@ -542,12 +522,11 @@
       and cognitive reappraisal to help them reflect on their emotions, emphasizing
       that their feelings are valid and that understanding these experiences is an
       important step toward building a stronger sense of community.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 23
   fields:
     created_at: 2025-04-10 17:36:24.972602+00:00
-    is_for_group: false
     week: 5
     activity: After the student responds, ask them to share more about what led to
       that number without immediately offering any advice. Let them explain what aspects
@@ -561,12 +540,11 @@
       psychological insights like social belonging and self-efficacy to validate their
       perspective. The goal is to let them feel heard and supported while giving them
       control over whether they want further suggestions or just a space to vent.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 24
   fields:
     created_at: 2025-04-10 17:36:38.375074+00:00
-    is_for_group: false
     week: 7
     activity: 'After the student shares their rating, invite them to describe the
       story behind it. Encourage them to explain which factors contribute to their
@@ -583,12 +561,11 @@
       value of their approach. In all cases, maintain a supportive and curious tone
       to help the student connect their experiences with actionable insights for personal
       growth.'
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 25
   fields:
     created_at: 2025-04-10 17:36:52.179243+00:00
-    is_for_group: false
     week: 9
     activity: After the student provides a rating, invite them to share more about
       their experience without making assumptions. If they indicate lower stress,
@@ -602,12 +579,11 @@
       unique situation and invite them to explore possible strategies only if they’re
       interested in discussing further. Always maintain a supportive, empathetic tone
       that respects their personal experience.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 26
   fields:
     created_at: 2025-04-10 17:37:04.914256+00:00
-    is_for_group: false
     week: 11
     activity: After the student responds, invite them to share more about the story
       behind their rating. If their response reflects a growth mindset—showing strong
@@ -621,12 +597,11 @@
       perseverance build new neural pathways. Throughout, maintain a supportive dialogue
       that emphasizes self-efficacy and the empowering notion that intelligence can
       evolve with persistence and practice.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 27
   fields:
     created_at: 2025-04-10 17:37:18.390573+00:00
-    is_for_group: false
     week: 12
     activity: After the student responds, invite them to share more about the feelings
       and experiences behind their confidence rating. Encourage open discussion about
@@ -642,12 +617,11 @@
       them to think about ways to maintain or even boost that confidence further.
       Throughout, maintain an empathetic, empowering tone that reinforces self-efficacy
       and a growth mindset.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 28
   fields:
     created_at: 2025-04-10 17:37:31.255758+00:00
-    is_for_group: false
     week: 13
     activity: After the student provides their rating, invite them to explain what
       that number represents for them. Encourage them to share details about their
@@ -663,12 +637,11 @@
       and encourage them to share what has worked well, reinforcing their sense of
       belonging and possibly inspiring ideas that could help others. Keep the tone
       empathetic, supportive, and reflective throughout.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 29
   fields:
     created_at: 2025-04-10 17:37:50.371634+00:00
-    is_for_group: false
     week: 14
     activity: After the student provides their rating, invite them to elaborate on
       the story behind their number, drawing on themes and experiences they've shared
@@ -683,70 +656,63 @@
       is high, celebrate their progress and ask what has contributed most to their
       satisfaction, reinforcing their resilience and self-efficacy. Conclude by offering
       one final reminder of available resources and strategies as they move forward.
-    type: check-in
-- model: chat.prompt
+    message_type: check-in
+- model: chat.individualprompt
   pk: 30
   fields:
     created_at: 2025-04-10 17:38:11.546654+00:00
-    is_for_group: false
     week: -1
     activity: Deeply discuss with the students on the specific influencers or the
       trends we see from the influencers, if they respond to the question. Reinforce
       that inspiration from the influencers can influence personal growth, emphasizing
       actionable insights and a growth mindset.
-    type: summary
-- model: chat.prompt
+    message_type: summary
+- model: chat.individualprompt
   pk: 31
   fields:
     created_at: 2025-04-10 17:38:22.340857+00:00
-    is_for_group: false
     week: 2
     activity: If the student responds, deeply discuss the songs, or the trends of
       music industry, and reinforce that music can be a way to manage their moods.
-    type: summary
-- model: chat.prompt
+    message_type: summary
+- model: chat.individualprompt
   pk: 32
   fields:
     created_at: 2025-04-10 17:39:14.722626+00:00
-    is_for_group: false
     week: 6
     activity: If the student responds, reinforce that environmental elements support
       students’ focus and small tweaks might further boost their productivity.
-    type: summary
-- model: chat.prompt
+    message_type: summary
+- model: chat.individualprompt
   pk: 33
   fields:
     created_at: 2025-04-10 17:39:26.876622+00:00
-    is_for_group: false
     week: 8
     activity: If the student responds, discuss the specific majors or the general
       trend of popular majors.
-    type: summary
-- model: chat.prompt
+    message_type: summary
+- model: chat.individualprompt
   pk: 34
   fields:
     created_at: 2025-04-10 17:39:38.022380+00:00
-    is_for_group: false
     week: 10
     activity: If the student responds, discuss the specific media that’s popular,
       and reinforce that media not only help people unwind but also provide insights
       to personal growth.
-    type: summary
-- model: chat.prompt
+    message_type: summary
+- model: chat.individualprompt
   pk: 35
   fields:
     created_at: 2025-04-10 17:40:08.307429+00:00
-    is_for_group: false
     week: -2
     activity: Engage in a friendly, personalized way. Acknowledge their details and
       share your thoughts. Then ask a thought-provoking follow-up, like “How has your
       hometown shaped your interests?” or “What draws you to your hobby/major?”
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 36
   fields:
     created_at: 2025-04-10 17:40:20.156790+00:00
-    is_for_group: false
     week: -1
     activity: Acknowledge their choice with value affirmation (e.g., “That’s a great
       choice!”). Emphasize that having a role model can be truly beneficial, as psychology
@@ -755,12 +721,11 @@
       that inspires you?” Once they do, follow up by asking how that inspiration has
       influenced their personal growth, emphasizing actionable insights and a growth
       mindset.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 37
   fields:
     created_at: 2025-04-10 17:40:31.139441+00:00
-    is_for_group: false
     week: 1
     activity: "If challenges are shared: Validate their feelings briefly. Introduce
       social belonging intervention and affirm that it's normal to experience these
@@ -769,12 +734,11 @@
       challenge.\r\nIf no challenges are mentioned: Affirm their positive experience
       and ask what aspects of college life (e.g., new friendships or favorite classes)
       they're enjoying, encouraging self-reflection and growth mindsets."
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 38
   fields:
     created_at: 2025-04-10 17:40:41.040740+00:00
-    is_for_group: false
     week: 2
     activity: When a student replies, gently share your impression of the song’s emotional
       tone without assuming too much. Invite them to share any memories or thoughts
@@ -784,12 +748,11 @@
       and social belonging to help them reflect on the positive role music can play.
       Tailor your follow-up based on their response, keeping the conversation fun,
       engaging, and empathetic.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 39
   fields:
     created_at: 2025-04-10 17:40:53.434748+00:00
-    is_for_group: false
     week: 3
     activity: When the student responds, warmly and briefly affirm their goal and
       invite them to break it down into small, manageable steps. Encourage a growth
@@ -797,12 +760,11 @@
       envisioning the best outcome, considering potential obstacles, and identifying
       a small, concrete step they can take. Validate their effort and reinforce that
       every bit of progress counts.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 40
   fields:
     created_at: 2025-04-10 17:41:10.735136+00:00
-    is_for_group: false
     week: 4
     activity: When a student responds, start by normalizing their feelings using insights
       from social belonging research—reminding them that nearly everyone experiences
@@ -812,23 +774,21 @@
       belonging is a gradual, growth-oriented process. If they’re unsure or their
       suggestion seems vague, normalize that uncertainty and explore further by asking
       what specific moments or actions made them feel more at home.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 41
   fields:
     created_at: 2025-04-10 17:41:21.030562+00:00
-    is_for_group: false
     week: 5
     activity: After the student asks a question, provide a clear answer and share
       your own perspective on the topic. Invite them to dive deeper by asking a thought-provoking
       follow-up that encourages reflection. Use psychological insights to validate
       their inquiry and reinforce your supportive role.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 42
   fields:
     created_at: 2025-04-10 17:41:31.912687+00:00
-    is_for_group: false
     week: 6
     activity: When the student replies, first check for a genuine response and gently
       clarify if needed. Then, acknowledge their choice and invite them to reflect
@@ -838,12 +798,11 @@
       boost their productivity. Maintain a reflective, supportive tone that connects
       their personal experience with insights from environmental psychology and practical
       behavior strategies.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 43
   fields:
     created_at: 2025-04-10 17:41:44.440514+00:00
-    is_for_group: false
     week: 7
     activity: When a student responds, begin by normalizing their stress and validating
       that it's a common experience. Then invite them to reframe their challenge using
@@ -852,12 +811,11 @@
       they aren’t facing any challenges, maintain support by asking about what they’re
       enjoying in college, reinforcing that every experience is a chance for personal
       development.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 44
   fields:
     created_at: 2025-04-10 17:41:56.138794+00:00
-    is_for_group: false
     week: 8
     activity: After the student responds with their major or intended major, the chatbot
       should provide tailored information about that field. It should discuss important
@@ -867,12 +825,11 @@
       on industry trends, suggest potential resources (like internships, networking
       opportunities, or online courses), and highlight how building these skills can
       boost confidence and long-term success.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 45
   fields:
     created_at: 2025-04-10 17:42:08.626182+00:00
-    is_for_group: false
     week: 9
     activity: When a student responds, first acknowledge their expression of gratitude
       and emphasize that research shows gratitude can improve mood, boost resilience,
@@ -882,12 +839,11 @@
       role as a tool for stress management and growth. Keep the discussion reflective
       and grounded in positive psychology, inviting them to think about how regular
       gratitude practice might enhance their college experience and personal development.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 46
   fields:
     created_at: 2025-04-10 17:42:19.449972+00:00
-    is_for_group: false
     week: 10
     activity: When a student responds, warmly acknowledge their choice and have fun
       guessing a movie you think they'd enjoy based on their taste. Encourage them
@@ -897,12 +853,11 @@
       their experiences, and ask how they might apply any lessons learned to current
       challenges or aspirations based on chat history. Keep the tone fun, engaging,
       thoughtful, and supportive throughout the conversation.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 47
   fields:
     created_at: 2025-04-10 17:42:30.413606+00:00
-    is_for_group: false
     week: 11
     activity: When a student responds, acknowledge their achievement warmly and encourage
       them to reflect on how their effort, ability, and persistence contributed to
@@ -912,12 +867,11 @@
       shift focus to even the smallest wins or efforts, and reassure them that progress
       is more important than perfection. Maintain an empowering, supportive tone that
       reinforces a growth mindset throughout.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 48
   fields:
     created_at: 2025-04-10 17:42:43.615175+00:00
-    is_for_group: false
     week: 12
     activity: When a student responds, briefly validatd their excitement. Then, subtly
       reframe the conversation by guiding them to shift from just looking forward
@@ -927,12 +881,11 @@
       can take. If they’re unsure about a specific goal, invite them to reflect on
       smaller joys or emerging opportunities while normalizing any uncertainty. Maintain
       an encouraging, growth-oriented tone throughout.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 49
   fields:
     created_at: 2025-04-10 17:42:56.648092+00:00
-    is_for_group: false
     week: 13
     activity: When a student responds, acknowledge their advice warmly and reflect
       on how it ties into insights they've shared previously. Encourage them to elaborate
@@ -942,16 +895,15 @@
       challenges leads to personal development. Ask a follow-up that deepens the discussion
       on how their advice can be a practical tool for overcoming future obstacles
       while reinforcing the positive impact of their own progress.
-    type: reminder
-- model: chat.prompt
+    message_type: reminder
+- model: chat.individualprompt
   pk: 50
   fields:
     created_at: 2025-04-10 17:43:07.046346+00:00
-    is_for_group: false
     week: 14
     activity: After the student asks a question, provide a clear answer and share
       your own perspective on the topic, as well as based on past chat history with
       the students. Invite them to dive deeper by asking a thought-provoking follow-up
       that encourages reflection. Use psychological insights to validate their inquiry
       and reinforce your supportive role.
-    type: reminder
+    message_type: reminder
