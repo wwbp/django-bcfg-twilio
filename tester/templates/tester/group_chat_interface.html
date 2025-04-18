@@ -258,7 +258,7 @@
                       // Simply reload to update the test groups.
                       location.reload();
                   } else {
-                      alert("Error creating test group.");
+                        alert("Error creating test group: " + data.error);
                   }
               })
               .catch(error => {

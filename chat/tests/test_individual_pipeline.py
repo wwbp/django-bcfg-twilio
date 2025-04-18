@@ -10,7 +10,7 @@ from chat.models import (
     IndividualChatTranscript,
     IndividualPipelineRecord,
     MessageType,
-    Prompt,
+    IndividualPrompt,
     User,
 )
 
@@ -112,9 +112,9 @@ def test_individual_pipeline_parametrized(
         "message": message,
         "context": default_context,
     }
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=default_context["week_number"],
-        type=default_context["message_type"],
+        message_type=default_context["message_type"],
         activity="base activity",
     )
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")

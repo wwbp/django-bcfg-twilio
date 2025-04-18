@@ -39,6 +39,8 @@ def chat_completion(instructions: str) -> str:
 
 
 def ensure_within_character_limit(current_text: str) -> str:
+    if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
+        return current_text
     for _ in range(2):
         if len(current_text) > MAX_RESPONSE_CHARACTER_LENGTH:
             instructions = (

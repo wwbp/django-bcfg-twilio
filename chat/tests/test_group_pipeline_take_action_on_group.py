@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     GroupPipelineRecord,
     GroupScheduledTaskAssociation,
     GroupStrategyPhase,
@@ -18,8 +19,9 @@ def _mocks():
         patch(
             "chat.services.group_pipeline.send_message_to_participant_group", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
+        patch("chat.services.completion._generate_response", return_value="LLM response") as mock_generate_response,
     ):
-        yield mock_send_message_to_participant
+        yield mock_send_message_to_participant, mock_generate_response
 
 
 @pytest.mark.parametrize(
@@ -45,6 +47,7 @@ def test_group_pipeline_take_action_on_group(
     all_participants_responded,
     at_least_three_participants_responded,
     group_chat_transcript_factory,
+    group_prompt_factory,
 ):
     GroupStrategyPhaseConfig.objects.all().delete()
     GroupStrategyPhaseConfig.objects.create(
@@ -62,7 +65,7 @@ def test_group_pipeline_take_action_on_group(
         min_wait_seconds=5,
         max_wait_seconds=6,
     )
-    mock_send_message_to_participant = _mocks
+    mock_send_message_to_participant, _ = _mocks
     group, session, group_pipeline_record, _ = group_with_initial_message_interaction
     most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
     session.current_strategy_phase = current_strategy_phase
@@ -103,6 +106,18 @@ def test_group_pipeline_take_action_on_group(
                 sender=group_users[i],
             )
     starting_transcript_count = session.transcripts.count()
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.AUDIENCE)
+    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.FOLLOWUP)
+    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.SUMMARY)
+    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.REMINDER)
 
     take_action_on_group(group_pipeline_record.run_id, most_recent_chat_transcript.id)
 
@@ -186,7 +201,7 @@ def test_group_pipeline_take_action_on_group_not_latest_action_on_start(
 ):
     group, session, group_pipeline_record, _ = group_with_initial_message_interaction
     most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
-    mock_send_message_to_participant = _mocks
+    mock_send_message_to_participant, _ = _mocks
     group_pipeline_record_factory(
         group=group,
         user=group.users.first(),
@@ -214,7 +229,7 @@ def test_group_pipeline_take_action_on_group_not_latest_action_after_compute_res
 ):
     group, session, group_pipeline_record, _ = group_with_initial_message_interaction
     most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
-    mock_send_message_to_participant = _mocks
+    mock_send_message_to_participant, _ = _mocks
 
     def _compute_and_validate_message_to_send_side_effect(*args, **kwargs):
         # mock new message comes in here
@@ -236,3 +251,35 @@ def test_group_pipeline_take_action_on_group_not_latest_action_after_compute_res
     group_pipeline_record.refresh_from_db()
     assert group_pipeline_record.status == GroupPipelineRecord.StageStatus.PROCESS_SKIPPED
     assert mock_send_message_to_participant.call_count == 0
+
+
+def test_audience_action_loads_instruction_prompt_and_schedules(
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR AUDIENCE>>", strategy_type=GroupStrategyPhase.AUDIENCE)
+
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.BEFORE_AUDIENCE
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt

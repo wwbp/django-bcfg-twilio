@@ -9,13 +9,15 @@ from pytest_factoryboy import register
 from chat.models import (
     BaseChatTranscript,
     Group,
+    GroupPrompt,
     GroupSession,
+    GroupStrategyPhase,
     IndividualSession,
     MessageType,
     User,
     IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
+    IndividualPrompt,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -218,13 +220,22 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
     content = factory.Faker("sentence")
 
 
-class PromptFactory(factory.django.DjangoModelFactory):
+class IndividualPromptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Prompt
+        model = IndividualPrompt
 
     week = factory.Faker("random_int")
     activity = factory.Faker("sentence")
-    type = MessageType.INITIAL
+    message_type = MessageType.INITIAL
+
+
+class GroupPromptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GroupPrompt
+
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
+    strategy_type = GroupStrategyPhase.AUDIENCE
 
 
 class SummaryFactory(factory.django.DjangoModelFactory):
@@ -267,7 +278,8 @@ register(UserFactory)
 register(GroupFactory)
 register(ChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
-register(PromptFactory)
+register(GroupPromptFactory)
+register(IndividualPromptFactory)
 register(SummaryFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)

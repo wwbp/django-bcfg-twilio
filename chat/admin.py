@@ -2,13 +2,14 @@ import logging
 from django.contrib import admin
 from .models import (
     ControlConfig,
+    GroupPrompt,
     GroupSession,
     GroupStrategyPhaseConfig,
     User,
     Group,
     IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
+    IndividualPrompt,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -127,11 +128,18 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
     list_filter = ("role",)
 
 
-@admin.register(Prompt)
-class PromptAdmin(BaseAdmin):
-    list_display = ("week", "activity", "type")
+@admin.register(IndividualPrompt)
+class IndividualPromptAdmin(BaseAdmin):
+    list_display = ("week", "activity", "message_type")
     search_fields = ("activity",)
-    list_filter = ("week", "type")
+    list_filter = ("week", "message_type")
+
+
+@admin.register(GroupPrompt)
+class GroupPromptAdmin(BaseAdmin):
+    list_display = ("week", "activity", "strategy_type")
+    search_fields = ("activity",)
+    list_filter = ("week", "strategy_type")
 
 
 @admin.register(ControlConfig)

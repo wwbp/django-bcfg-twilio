@@ -18,7 +18,7 @@ from chat.models import (
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
     MessageType,
-    Prompt,
+    GroupPrompt,
     User,
 )
 from chat.serializers import GroupIncomingMessageSerializer
@@ -66,10 +66,9 @@ def _inbound_call():
         },
     }
 
-    Prompt.objects.create(
-        is_for_group=True,
+    GroupPrompt.objects.create(
         week=inbound_payload["context"]["week_number"],
-        type=inbound_payload["context"]["message_type"],
+        strategy_type=GroupStrategyPhase.AUDIENCE,
         activity="base activity",
     )
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
@@ -88,8 +87,16 @@ def _mocks():
         patch(
             "chat.services.group_pipeline.send_message_to_participant_group", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
+        patch(
+            "chat.services.completion._generate_response", return_value="Some LLM response"
+        ) as mock_generate_response,
     ):
-        yield mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant
+        yield (
+            mock_moderate_message,
+            mock_send_moderation_message,
+            mock_send_message_to_participant,
+            mock_generate_response,
+        )
 
 
 @pytest.mark.parametrize("moderated", [True, False])
@@ -98,7 +105,9 @@ def test_group_pipeline_handle_inbound_message(
 ):
     # arrange
     group_id, sender_id, data, _, _, _ = _inbound_call
-    mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant = _mocks
+    mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant, mock_generate_response = (
+        _mocks
+    )
     if moderated:
         mock_moderate_message.return_value = "Blocked message"
     caplog.set_level(logging.INFO)
@@ -122,6 +131,7 @@ def test_group_pipeline_handle_inbound_message(
     if moderated:
         assert record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED
         assert mock_send_moderation_message.call_count == 1
+        assert mock_generate_response.call_count == 0
     else:
         assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
         assert mock_send_moderation_message.call_count == 0
@@ -162,8 +172,9 @@ def test_group_pipeline_handle_inbound_message(
         task_function = celery.app.tasks[task.task]
         args = json.loads(task.args)
         kwargs = json.loads(task.kwargs)
-        task_function.apply_async(args=args, kwargs=kwargs)
 
+        task_function.apply_async(args=args, kwargs=kwargs)
+        assert mock_generate_response.call_count == 1
         record.refresh_from_db()
         session.refresh_from_db()
         assert "Group action complete for group" in caplog.text
@@ -173,7 +184,7 @@ def test_group_pipeline_handle_inbound_message(
         transcripts = list(session.transcripts.order_by("created_at").all())
         assert len(transcripts) == 3
         assert transcripts[2].role == BaseChatTranscript.Role.ASSISTANT
-        assert transcripts[2].content == f"Dummy LLM response for phase: {GroupStrategyPhase.AUDIENCE}"
+        assert transcripts[2].content == "Some LLM response"
         assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
 
     # Finally, send a second message, group and session exist and are reused
@@ -336,7 +347,7 @@ def test_group_pipeline_handle_inbound_message_throws_exception_after_ingest(
 ):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
-    mock_moderate_message, _, mock_send_message_to_participant = _mocks
+    mock_moderate_message, _, mock_send_message_to_participant, _ = _mocks
     mock_moderate_message.side_effect = Exception("Some error")
 
     # send initial message as before
@@ -390,7 +401,7 @@ def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
     _inbound_call, _mocks, message_client, celery_task_always_eager
 ):
     group_id, sender_id, data, second_sender_id, _, _ = _inbound_call
-    mock_moderate_message, _, mock_send_message_to_participant = _mocks
+    mock_moderate_message, _, mock_send_message_to_participant, _ = _mocks
     url = reverse("chat:ingest-group", args=[group_id])
     second_payload = copy.deepcopy(data)
     second_payload["message"] = "some message from user during first moderation"

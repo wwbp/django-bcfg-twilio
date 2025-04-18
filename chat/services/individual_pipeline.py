@@ -9,7 +9,7 @@ from .individual_crud import (
     load_instruction_prompt_for_direct_messaging,
     save_assistant_response,
 )
-from .completion import MAX_RESPONSE_CHARACTER_LENGTH, ensure_within_character_limit, generate_response
+from .completion import ensure_within_character_limit, generate_response
 from .send import send_moderation_message, send_message_to_participant
 from ..models import IndividualChatTranscript, IndividualPipelineRecord, IndividualSession
 
@@ -88,11 +88,7 @@ def individual_validate(record: IndividualPipelineRecord):
     Stage 4: Validate the outgoing response before sending.
     """
     response = record.response
-    if len(response) <= MAX_RESPONSE_CHARACTER_LENGTH:
-        record.validated_message = response
-    else:
-        processed_response = ensure_within_character_limit(response)
-        record.validated_message = processed_response
+    record.validated_message = ensure_within_character_limit(response)
     record.status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
     record.save()
     logger.info(f"Individual validate pipeline complete for participant {record.user.id}, run_id {record.run_id}")

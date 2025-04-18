@@ -1,5 +1,5 @@
 import pytest
-from chat.models import ControlConfig, MessageType, User, Prompt, IndividualSession
+from chat.models import ControlConfig, MessageType, User, IndividualPrompt, IndividualSession
 from chat.services.individual_crud import load_instruction_prompt, INSTRUCTION_PROMPT_TEMPLATE
 
 
@@ -21,7 +21,9 @@ def test_load_instruction_prompt_with_existing_user_and_prompt():
     )
     system = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     # Create a Prompt for the user's week.
-    prompt = Prompt.objects.create(week=3, type=MessageType.INITIAL, activity="Custom Activity for Week 3")
+    prompt = IndividualPrompt.objects.create(
+        week=3, message_type=MessageType.INITIAL, activity="Custom Activity for Week 3"
+    )
 
     result = load_instruction_prompt(user)
     expected = INSTRUCTION_PROMPT_TEMPLATE.format(
@@ -50,9 +52,9 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     # Create a Prompt for the user's week.
-    Prompt.objects.create(week=3, type=MessageType.INITIAL, activity="Custom Activity for Week 3")
+    IndividualPrompt.objects.create(week=3, message_type=MessageType.INITIAL, activity="Custom Activity for Week 3")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndividualPrompt.DoesNotExist):
         load_instruction_prompt(user)
 
 
@@ -71,7 +73,7 @@ def test_load_instruction_prompt_with_existing_user_no_prompt():
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     # Do not create a Prompt for week 2.
 
-    with pytest.raises(ValueError):
+    with pytest.raises(IndividualPrompt.DoesNotExist):
         load_instruction_prompt(user)
 
 
@@ -90,7 +92,7 @@ def test_load_instruction_prompt_with_empty_school_mascot():
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt"
     )
     system = ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
-    prompt = Prompt.objects.create(week=1, type="initial", activity="Activity D")
+    prompt = IndividualPrompt.objects.create(week=1, message_type=MessageType.INITIAL, activity="Activity D")
 
     result = load_instruction_prompt(user)
     expected = INSTRUCTION_PROMPT_TEMPLATE.format(

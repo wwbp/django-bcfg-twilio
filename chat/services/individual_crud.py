@@ -7,7 +7,7 @@ from ..models import (
     IndividualSession,
     User,
     IndividualChatTranscript,
-    Prompt,
+    IndividualPrompt,
     ControlConfig,
 )
 from django.db import transaction
@@ -158,16 +158,11 @@ def load_instruction_prompt(user: User):
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
-    # Retrieve the prompt for the given week, falling back to a default if none is found
-    prompt_obj = None
-    if week is not None and message_type is not None:
-        prompt_obj = Prompt.objects.filter(week=week, type=message_type).order_by("created_at").last()
-
-    if prompt_obj:
-        activity = prompt_obj.activity
-    else:
-        logger.info(f"No Prompt found for week '{week}' and type '{message_type}'. Falling back to default activity.")
-        raise ValueError(f"No Prompt found for week '{week}' and type '{message_type}'.")
+    try:
+        activity = IndividualPrompt.objects.get(week=week, message_type=message_type).activity
+    except IndividualPrompt.DoesNotExist as err:
+        logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
+        raise
 
     # Format the final prompt using the template
     instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(

@@ -73,9 +73,9 @@ def test_view_group_transcript_list(admin_client, group_chat_transcript_factory)
         assert str(transcript.id) in response.content.decode("utf-8")
 
 
-def test_view_prompt_list(admin_client, prompt_factory):
-    prompts = prompt_factory.create_batch(2)
-    response = admin_client.get(reverse("admin:chat_prompt_changelist"))
+def test_view_prompt_list(admin_client, individual_prompt_factory):
+    prompts = individual_prompt_factory.create_batch(2)
+    response = admin_client.get(reverse("admin:chat_individualprompt_changelist"))
     assert response.status_code == 200
     for prompt in prompts:
         assert str(prompt.id) in response.content.decode("utf-8")

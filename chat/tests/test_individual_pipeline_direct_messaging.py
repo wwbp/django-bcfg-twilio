@@ -6,7 +6,7 @@ from chat.models import (
     GroupPipelineRecord,
     IndividualPipelineRecord,
     MessageType,
-    Prompt,
+    IndividualPrompt,
 )
 
 
@@ -28,9 +28,9 @@ def test_individual_pipeline_for_direct_messaging(
         "message": "Some message from user",
         "context": context,
     }
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=context["week_number"],
-        type=context["message_type"],
+        message_type=context["message_type"],
         activity="base activity",
     )
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")

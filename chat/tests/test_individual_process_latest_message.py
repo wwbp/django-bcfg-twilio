@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from chat.models import ControlConfig, IndividualChatTranscript, IndividualPipelineRecord, MessageType, Prompt
+from chat.models import ControlConfig, IndividualChatTranscript, IndividualPipelineRecord, MessageType, IndividualPrompt
 from chat.services.individual_pipeline import individual_ingest, individual_pipeline
 from chat.tests.conftest import IndividualPipelineMocks
 
@@ -35,9 +35,9 @@ def inbound_call_and_mocks(mock_all_individual_external_calls) -> tuple[UUID, di
         },
     }
 
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=inbound_payload["context"]["week_number"],  # type: ignore[index]
-        type=inbound_payload["context"]["message_type"],  # type: ignore[index]
+        message_type=inbound_payload["context"]["message_type"],  # type: ignore[index]
         activity="base activity",
     )
     ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")

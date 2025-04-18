@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from chat.models import (
     BaseChatTranscript,
     GroupSession,
+    GroupStrategyPhase,
     IndividualChatTranscript,
     GroupChatTranscript,
     IndividualSession,
@@ -174,34 +175,37 @@ def create_group_test_case(request):
     message_type = data.get("message_type")
 
     if group_id and participants_str:
-        group = Group.objects.create(id=group_id, is_test=True)
-        for pair in participants_str.split(","):
-            if ":" in pair:
-                uid, name = pair.split(":")
-                uid = uid.strip()
-                name = name.strip()
-                user, _ = ChatUser.objects.get_or_create(
-                    id=uid,
-                    defaults={
-                        "name": name,
-                        "school_name": school_name,
-                        "school_mascot": school_mascot,
-                        "is_test": True,
-                    },
-                )
-                group.users.add(user)
-
-            session = GroupSession.objects.create(
-                group=group,
-                week_number=week_number,
-                message_type=message_type,
+        try:
+            group = Group.objects.create(id=group_id, is_test=True)
+            for pair in participants_str.split(","):
+                if ":" in pair:
+                    uid, name = pair.split(":")
+                    uid = uid.strip()
+                    name = name.strip()
+                    ChatUser.objects.create(
+                        id=uid,
+                        group=group,
+                        name=name,
+                        school_name=school_name,
+                        school_mascot=school_mascot,
+                        is_test=True,
+                    )
+        except IntegrityError:
+            # Notify the user if the group ID already exists.
+            return JsonResponse(
+                {"success": False, "error": "Group ID or User ID already exists. Please use a unique ID."}, status=400
             )
-            GroupChatTranscript.objects.create(
-                session=session,
-                sender=None,
-                role=BaseChatTranscript.Role.ASSISTANT,
-                content=initial_message,
-            )
+        session = GroupSession.objects.create(
+            group=group,
+            week_number=week_number,
+            message_type=message_type,
+        )
+        GroupChatTranscript.objects.create(
+            session=session,
+            role=BaseChatTranscript.Role.ASSISTANT,
+            content=initial_message,
+            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+        )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
