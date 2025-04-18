@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "djangosaml2",
     "django_celery_beat",
     "simple_history",
+    "import_export",
 ]
 
 MIDDLEWARE = [
