@@ -1,5 +1,7 @@
 from django.urls import reverse
 
+from chat.models import ControlConfig
+
 
 def test_view_user_list(admin_client, user_factory):
     users = user_factory.create_batch(2)
@@ -49,17 +51,17 @@ def test_view_group_detail(admin_client, group_factory, user_factory):
     assert users[1].name in response.content.decode("utf-8")
 
 
-def test_view_transcript_list(admin_client, chat_transcript_factory):
-    transcripts = chat_transcript_factory.create_batch(2)
-    response = admin_client.get(reverse("admin:chat_chattranscript_changelist"))
+def test_view_individualtranscript_list(admin_client, individual_chat_transcript_factory):
+    transcripts = individual_chat_transcript_factory.create_batch(2)
+    response = admin_client.get(reverse("admin:chat_individualchattranscript_changelist"))
     assert response.status_code == 200
     for transcript in transcripts:
         assert str(transcript.id) in response.content.decode("utf-8")
 
 
-def test_view_transcript_detail(admin_client, chat_transcript_factory):
-    transcript = chat_transcript_factory()
-    response = admin_client.get(reverse("admin:chat_chattranscript_change", args=(transcript.id,)))
+def test_view_individualtranscript_detail(admin_client, individual_chat_transcript_factory):
+    transcript = individual_chat_transcript_factory()
+    response = admin_client.get(reverse("admin:chat_individualchattranscript_change", args=(transcript.id,)))
     assert response.status_code == 200
 
 
@@ -71,17 +73,19 @@ def test_view_group_transcript_list(admin_client, group_chat_transcript_factory)
         assert str(transcript.id) in response.content.decode("utf-8")
 
 
-def test_view_prompt_list(admin_client, prompt_factory):
-    prompts = prompt_factory.create_batch(2)
-    response = admin_client.get(reverse("admin:chat_prompt_changelist"))
+def test_view_prompt_list(admin_client, individual_prompt_factory):
+    prompts = individual_prompt_factory.create_batch(2)
+    response = admin_client.get(reverse("admin:chat_individualprompt_changelist"))
     assert response.status_code == 200
     for prompt in prompts:
         assert str(prompt.id) in response.content.decode("utf-8")
 
 
-def test_view_control_list(admin_client, control_factory):
-    controls = control_factory.create_batch(2)
-    response = admin_client.get(reverse("admin:chat_control_changelist"))
+def test_view_control_list(admin_client, control_config_factory):
+    control1 = control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test_value")
+    control2 = control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test_value")
+    controls = [control1, control2]
+    response = admin_client.get(reverse("admin:chat_controlconfig_changelist"))
     assert response.status_code == 200
     for control in controls:
         assert str(control.id) in response.content.decode("utf-8")

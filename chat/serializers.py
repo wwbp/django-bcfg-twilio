@@ -1,34 +1,50 @@
-from rest_framework import serializers
+from dataclasses import dataclass
+from rest_framework_dataclasses.serializers import DataclassSerializer
 
 
-class ContextSerializer(serializers.Serializer):
-    school_name = serializers.CharField()
-    school_mascot = serializers.CharField()
-    initial_message = serializers.CharField()
-    week_number = serializers.IntegerField()
-    name = serializers.CharField()
-    message_type = serializers.CharField()
+@dataclass
+class _BaseContext:
+    school_name: str
+    school_mascot: str
+    initial_message: str
+    week_number: int
+    message_type: str
 
 
-class IncomingMessageSerializer(serializers.Serializer):
-    context = ContextSerializer()
-    message = serializers.CharField()
+@dataclass
+class IndividualContext(_BaseContext):
+    name: str
 
 
-class ParticipantSerializer(serializers.Serializer):
-    name = serializers.CharField()
-    id = serializers.CharField()
+@dataclass
+class IndividualIncomingMessage:
+    context: IndividualContext
+    message: str
 
 
-class GroupContextSerializer(serializers.Serializer):
-    school_name = serializers.CharField()
-    school_mascot = serializers.CharField()
-    initial_message = serializers.CharField()
-    week_number = serializers.IntegerField()
-    participants = ParticipantSerializer(many=True)
+@dataclass
+class Participant:
+    name: str
+    id: str
 
 
-class GroupIncomingMessageSerializer(serializers.Serializer):
-    context = GroupContextSerializer()
-    sender_id = serializers.CharField()
-    message = serializers.CharField()
+@dataclass
+class GroupContext(_BaseContext):
+    participants: list[Participant]
+
+
+@dataclass
+class GroupIncomingMessage:
+    context: GroupContext
+    sender_id: str
+    message: str
+
+
+class IndividualIncomingMessageSerializer(DataclassSerializer):
+    class Meta:
+        dataclass = IndividualIncomingMessage
+
+
+class GroupIncomingMessageSerializer(DataclassSerializer):
+    class Meta:
+        dataclass = GroupIncomingMessage

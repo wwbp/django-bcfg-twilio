@@ -1,21 +1,25 @@
 import sys
+from unittest.mock import MagicMock, patch
 from django.test import override_settings
-import factory.random
+from django.test import Client
 import pytest
 import factory
 from pytest_factoryboy import register
 
 from chat.models import (
+    BaseChatTranscript,
+    ControlConfig,
     Group,
+    GroupPrompt,
+    GroupSession,
+    GroupStrategyPhase,
     IndividualSession,
     MessageType,
     User,
-    ChatTranscript,
+    IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
-    Control,
+    IndividualPrompt,
     Summary,
-    StrategyPrompt,
     IndividualPipelineRecord,
     GroupPipelineRecord,
 )
@@ -46,6 +50,124 @@ def overwrite_secrets():
         yield
 
 
+@pytest.fixture
+def celery_task_always_eager(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    yield
+    settings.CELERY_TASK_ALWAYS_EAGER = False
+
+
+@pytest.fixture
+def message_client():
+    api_key = "valid-api-key"
+    with override_settings(INBOUND_MESSAGE_API_KEY=api_key):
+        yield Client(headers={"Authorization": f"Bearer {api_key}"})
+
+
+def test_view_with_custom_header(client_with_headers):
+    response = client_with_headers.get("/your-url/")
+    assert response.status_code == 200
+    # Additional assertions based on the header
+
+
+class IndividualPipelineMocks:
+    def __init__(
+        self,
+        mock_moderate_message: MagicMock,
+        mock_generate_response: MagicMock,
+        mock_ensure_within_character_limit: MagicMock,
+        mock_send_message_to_participant: MagicMock,
+        mock_send_moderation_message: MagicMock,
+    ):
+        self.mock_moderate_message = mock_moderate_message
+        self.mock_generate_response = mock_generate_response
+        self.mock_ensure_within_character_limit = mock_ensure_within_character_limit
+        self.mock_send_message_to_participant = mock_send_message_to_participant
+        self.mock_send_moderation_message = mock_send_moderation_message
+
+
+@pytest.fixture
+def mock_all_individual_external_calls():
+    # default mocks to make entire pipeline run but return values or
+    # general mocking behavior can be overriden via returned object
+
+    # Note that these mocks don't actually extend all the way to the external interfaces
+    # and could be taken further to mock only http requests (or libraries) but for now
+    # other unit tests capture that coverage
+    with (
+        patch("chat.services.individual_pipeline.moderate_message", return_value="") as mock_moderate_message,
+        patch(
+            "chat.services.individual_pipeline.generate_response", return_value="Some LLM response"
+        ) as mock_generate_response,
+        patch(
+            "chat.services.individual_pipeline.ensure_within_character_limit",
+            return_value="Some shortened LLM response",
+        ) as mock_ensure_within_character_limit,
+        patch(
+            "chat.services.individual_pipeline.send_message_to_participant", return_value={"status": "ok"}
+        ) as mock_send_message_to_participant,
+        patch(
+            "chat.services.individual_pipeline.send_moderation_message", return_value={"status": "ok"}
+        ) as mock_send_moderation_message,
+    ):
+        yield IndividualPipelineMocks(
+            mock_moderate_message=mock_moderate_message,
+            mock_generate_response=mock_generate_response,
+            mock_ensure_within_character_limit=mock_ensure_within_character_limit,
+            mock_send_message_to_participant=mock_send_message_to_participant,
+            mock_send_moderation_message=mock_send_moderation_message,
+        )
+
+
+@pytest.fixture
+def group_with_initial_message_interaction(
+    group_factory,
+    user_factory,
+    group_session_factory,
+    group_chat_transcript_factory,
+    faker,
+    group_pipeline_record_factory,
+):
+    initial_message = "some initial LLM message"
+    user_message = "some message from user"
+
+    school_mascot = faker.word()
+    school_name = faker.word()
+    group = group_factory()
+    users = user_factory.create_batch(6, group=group, school_mascot=school_mascot, school_name=school_name)
+    session = group_session_factory(group=group, week_number=1, message_type=MessageType.INITIAL)
+    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message)
+    group_chat_transcript_factory(
+        session=session, role=BaseChatTranscript.Role.USER, content=user_message, sender=users[0]
+    )
+    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content="some LLM response")
+    group_pipeline_record = group_pipeline_record_factory(
+        group=group,
+        user=users[0],
+        status=GroupPipelineRecord.StageStatus.MODERATION_PASSED,
+        message=user_message,
+        response=None,
+        instruction_prompt=None,
+        validated_message=None,
+        error_log=None,
+    )
+    example_message_context = {
+        "school_name": school_name,
+        "school_mascot": school_mascot,
+        "initial_message": initial_message,
+        "week_number": 1,
+        "message_type": MessageType.INITIAL,
+        "participants": [
+            {
+                "id": user.id,
+                "name": user.name,
+            }
+            for user in users
+        ],
+    }
+    yield group, session, group_pipeline_record, example_message_context
+
+
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User
@@ -71,12 +193,21 @@ class GroupFactory(factory.django.DjangoModelFactory):
     id = factory.Faker("uuid4")
 
 
-class ChatTranscriptFactory(factory.django.DjangoModelFactory):
+class GroupSessionFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = ChatTranscript
+        model = GroupSession
+
+    group = factory.SubFactory(GroupFactory)
+    week_number = 1
+    message_type = MessageType.INITIAL
+
+
+class IndividualChatTranscriptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = IndividualChatTranscript
 
     session = factory.SubFactory(IndividualSessionFactory)
-    role = factory.Faker("word")
+    role = BaseChatTranscript.Role.ASSISTANT
     content = factory.Faker("sentence")
 
 
@@ -84,49 +215,37 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupChatTranscript
 
-    group = factory.SubFactory(GroupFactory)
-    sender = factory.SubFactory(UserFactory)
-    role = factory.Faker("word")
+    session = factory.SubFactory(GroupSessionFactory)
+    sender = None
+    role = BaseChatTranscript.Role.ASSISTANT
     content = factory.Faker("sentence")
 
 
-class PromptFactory(factory.django.DjangoModelFactory):
+class IndividualPromptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Prompt
+        model = IndividualPrompt
 
-    week = 1
+    week = factory.Faker("random_int")
     activity = factory.Faker("sentence")
-    type = MessageType.INITIAL
+    message_type = MessageType.INITIAL
 
 
-class ControlFactory(factory.django.DjangoModelFactory):
+class GroupPromptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Control
+        model = GroupPrompt
 
-    persona = factory.Faker("sentence")
-    system = factory.Faker("sentence")
-    default = factory.Faker("sentence")
-    moderation = factory.Faker("sentence")
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
+    strategy_type = GroupStrategyPhase.AUDIENCE
 
 
 class SummaryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Summary
 
-    school = factory.Faker("word")
-    type = Summary.TYPE_CHOICES[0][0]
+    school_name = factory.Faker("word")
+    week_number = factory.Faker("random_int")
     summary = factory.Faker("sentence")
-
-
-class StrategyPromptFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = StrategyPrompt
-
-    name = factory.Faker("word")
-    what_prompt = factory.Faker("sentence")
-    when_prompt = factory.Faker("sentence")
-    who_prompt = factory.Faker("sentence")
-    is_active = True
 
 
 class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
@@ -138,26 +257,49 @@ class IndividualPipelineRecordFactory(factory.django.DjangoModelFactory):
     response = factory.Faker("sentence")
     instruction_prompt = factory.Faker("sentence")
     validated_message = factory.Faker("sentence")
-    status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
+    status = IndividualPipelineRecord.StageStatus.INGEST_PASSED
 
 
 class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = GroupPipelineRecord
 
+    run_id = factory.Faker("uuid4")
+    user = factory.SubFactory(UserFactory)
     group = factory.SubFactory(GroupFactory)
-    ingested = True
+    message = factory.Faker("sentence")
+    response = factory.Faker("sentence")
+    instruction_prompt = factory.Faker("sentence")
+    validated_message = factory.Faker("sentence")
+    status = GroupPipelineRecord.StageStatus.INGEST_PASSED
+
+
+class ControlConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ControlConfig
+
+    # if you only ever care about persona & system, you can restrict the iterator:
+    key = factory.Iterator(
+        [
+            ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+            ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+            ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
+        ]
+    )
+    # default fake value; you can always override in a test
+    value = factory.Faker("sentence")
 
 
 # register factories as fixtures
 register(UserFactory)
 register(GroupFactory)
-register(ChatTranscriptFactory)
+register(IndividualChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
-register(PromptFactory)
-register(ControlFactory)
+register(GroupPromptFactory)
+register(IndividualPromptFactory)
 register(SummaryFactory)
-register(StrategyPromptFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
+register(GroupSessionFactory)
+register(ControlConfigFactory)

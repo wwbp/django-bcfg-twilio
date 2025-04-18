@@ -1,12 +1,13 @@
+from dataclasses import asdict
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
-from .services.group_pipeline import group_pipeline_ingest_task
+from .services.group_pipeline import handle_inbound_group_message
 from .services.individual_pipeline import individual_pipeline
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import IncomingMessageSerializer, GroupIncomingMessageSerializer
+from .serializers import IndividualIncomingMessageSerializer, GroupIncomingMessageSerializer
 
 
 class HealthCheckView(APIView):
@@ -25,9 +26,9 @@ class BaseIngestView(APIView):
 
 class IngestIndividualView(BaseIngestView):
     def post(self, request, id):
-        serializer = IncomingMessageSerializer(data=request.data)
+        serializer = IndividualIncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            individual_pipeline.delay(id, serializer.validated_data)
+            individual_pipeline.delay(id, asdict(serializer.validated_data))
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -36,7 +37,6 @@ class IngestGroupView(BaseIngestView):
     def post(self, request, id):
         serializer = GroupIncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
-            # ingest_group_task.delay(id, serializer.validated_data)
-            group_pipeline_ingest_task.delay(id, serializer.validated_data)
+            handle_inbound_group_message.delay(id, asdict(serializer.validated_data))
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

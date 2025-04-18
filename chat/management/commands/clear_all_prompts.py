@@ -1,7 +1,7 @@
 import os
 from django.core.management.base import BaseCommand, CommandError
 
-from chat.models import Control, Prompt
+from chat.models import ControlConfig, GroupPrompt, IndividualPrompt
 
 
 class Command(BaseCommand):
@@ -17,7 +17,8 @@ class Command(BaseCommand):
         if confirm.lower() != "yes":
             raise CommandError("Operation cancelled")
 
-        Control.objects.all().delete()
-        Prompt.objects.all().delete()
+        ControlConfig.objects.all().delete()
+        GroupPrompt.objects.all().delete()
+        IndividualPrompt.objects.all().delete()
 
         self.stdout.write(self.style.SUCCESS("Successfully cleared all prompts"))

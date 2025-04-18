@@ -22,7 +22,7 @@
                     data-week_number="{{ user.current_session.week_number }}"
                     data-initial_message="{{ user.current_session.initial_message }}"
                     data-message_type="{{ user.current_session.message_type }}">
-                    {{ user.name }} - {{ user.school_name }}
+                    {{ user.name }} - {{ user.school_name }} {% if user.group %}(Group Direct-Messaging){% endif %}
                 </option>
                 {% endfor %}
             </select>
@@ -74,7 +74,7 @@
                 <p><strong>Week Number:</strong> <span id="meta_week_number"></span></p>
                 <p><strong>Initial Message:</strong> <span id="meta_initial_message_display"></span></p>
                 <p><strong>Message Type:</strong> <span id="meta_message_type_display"></span></p>
-                
+
                 <label for="message">Message:</label><br>
                 <textarea id="message" rows="3" cols="50"></textarea><br><br>
                 <button class="button" type="button" onclick="sendChatMessage()">Send Message</button>
@@ -219,17 +219,18 @@
                     message_type: messageType
                 })
             }).then(response => response.json())
-              .then(data => {
-                  if (data.success) {
-                      location.reload();
-                  } else {
-                      alert("Error creating test case.");
-                  }
-              })
-              .catch(error => {
-                  alert("Error creating test case.");
-                  console.error('Error creating test case:', error);
-              });
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    // Display error from the response
+                    alert("Error: " + data.error);
+                }
+            })
+            .catch(error => {
+                alert("Error creating test case.");
+                console.error('Error creating test case:', error);
+            });
         }
         
         // Auto-refresh chat transcript every 1 second.
