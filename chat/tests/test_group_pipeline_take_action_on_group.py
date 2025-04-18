@@ -9,6 +9,7 @@ from chat.models import (
     GroupScheduledTaskAssociation,
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
+    User,
 )
 from chat.services.group_pipeline import take_action_on_group
 
@@ -283,3 +284,114 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt
+
+
+def test_reminder_action_loads_instruction_prompt_and_schedules(
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # group has 6 user with one user messsage and no previous reminders
+    # should trigger reminder
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR REMINDER>>" in record.instruction_prompt
+
+
+def test_no_reminder_action_all_user_responded(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    users = User.objects.filter(group=group)
+    for user in users:
+        group_chat_transcript_factory(
+            session=session, role=BaseChatTranscript.Role.USER, content="user_message", sender=user
+        )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # group has 6 user with all users responding and no previous reminders
+    # should not trigger reminder
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR REMINDER>>" not in record.instruction_prompt
+    assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
+
+
+def test_no_reminder_action_assistant_sent_one(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    group_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="user_message",
+        assistant_strategy_phase=GroupStrategyPhase.REMINDER,
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # 1 previous reminder
+    # should not trigger reminder
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR REMINDER>>" not in record.instruction_prompt
+    assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
