@@ -98,6 +98,7 @@ def _persist_summaries(school_name: str, week_number: int, summaries: list[str])
     Persist summaries to the database.
     """
     with transaction.atomic():
+        Summary.objects.filter(school_name=school_name, week_number=week_number).all().delete()
         for summary in summaries:
             Summary.objects.create(
                 school_name=school_name,

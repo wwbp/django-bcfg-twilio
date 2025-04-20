@@ -172,7 +172,7 @@ class SummaryAdmin(BaseAdmin):
     search_fields = ("summary",)
     list_filter = ("school_name", "week_number", "selected")
 
-    @admin.action(description="Add selected summaries to messages")
+    @admin.action(description="Add selections to summary messages")
     def select_summaries(self, request, queryset: QuerySet[Summary]):
         max_allowed_selected_summaries_per_school = 3
         try:
@@ -182,14 +182,14 @@ class SummaryAdmin(BaseAdmin):
                     s.save()
                 schools_with_more_than_three_selected_summaries = list(
                     Summary.objects.filter(selected=True)
-                    .values("school_name")
+                    .values("school_name", "week_number")
                     .annotate(selected_count=Count("id"))
                     .filter(selected_count__gt=max_allowed_selected_summaries_per_school)
                 )
                 if schools_with_more_than_three_selected_summaries:
                     raise ValueError(
                         "Selecting these options would result in the following schools having "
-                        f"more than {max_allowed_selected_summaries_per_school} selected "
+                        f"more than {max_allowed_selected_summaries_per_school} for a given week: "
                         f"summaries: {schools_with_more_than_three_selected_summaries}"
                     )
             handle_summaries_selected_change.delay([str(s.id) for s in queryset])
@@ -200,7 +200,7 @@ class SummaryAdmin(BaseAdmin):
                 messages.ERROR,
             )
 
-    @admin.action(description="Remove selected summaries from messages")
+    @admin.action(description="Remove selections from summary messages")
     def deselect_summaries(self, request, queryset: QuerySet[Summary]):
         with transaction.atomic():
             for s in queryset:

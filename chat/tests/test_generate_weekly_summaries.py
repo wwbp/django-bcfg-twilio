@@ -237,6 +237,7 @@ def test_generate_weekly_summaries(
     generate_weekly_summaries()
 
     # Verify summaries were created for each school
+    assert Summary.objects.count() == 6
     school1_summaries = list(Summary.objects.filter(school_name=school1).all())
     school2_summaries = list(Summary.objects.filter(school_name=school2).all())
     school3_summaries = list(Summary.objects.filter(school_name=school3).all())
@@ -257,3 +258,7 @@ def test_generate_weekly_summaries(
     assert school_1_mock_call[0][1] == 5
     assert school_1_mock_call[0][2] == school1_included_individual_chats
     assert school_1_mock_call[0][3] == school1_included_group_chats
+
+    # Run again and check that it doesn't create duplicates
+    generate_weekly_summaries()
+    assert Summary.objects.count() == 6
