@@ -284,6 +284,70 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt
 
+def test_followup_action_assistant_after_audience_no_reminder(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    group_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="user_message",
+        assistant_strategy_phase=GroupStrategyPhase.REMINDER,
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    # 1 previous reminder
+    # should not trigger reminder
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
+
+def test_followup_action_assistant_after_reminder(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory
+):
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+        value="<<PERSONA PROMPT>>",
+    )
+    ControlConfig.objects.create(
+        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+        value="<<SYSTEM PROMPT>>",
+    )
+    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
+    # start at BEFORE_AUDIENCE
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_REMINDER
+    session.save()
+
+    # use the most‐recent user transcript as trigger
+    trigger = session.transcripts.order_by("-created_at").first()
+
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    assert record.response == "LLM response"
+    assert record.validated_message == "LLM response"
+    assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
+
 
 def test_summary_action_loads_instruction_prompt_and_schedules(
     _mocks,

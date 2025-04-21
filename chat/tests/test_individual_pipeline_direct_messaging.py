@@ -33,7 +33,9 @@ def test_individual_pipeline_for_direct_messaging(
         message_type=context["message_type"],
         activity="base activity",
     )
-    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT, value="test persona prompt"
+    )
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     individual_pipeline.run(user.id, data)
