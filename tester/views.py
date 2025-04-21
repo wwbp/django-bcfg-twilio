@@ -156,7 +156,7 @@ def chat_transcript(request, test_case_id):
             {
                 "role": t.role,
                 "content": t.content,
-                "created_at": t.session.user.name | "assistant",
+                "name": t.session.user.name if t.role == BaseChatTranscript.Role.USER else "assistant",
             }
         )
     return JsonResponse({"transcript": transcript})
