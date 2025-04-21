@@ -121,11 +121,11 @@
                         data.transcript.forEach(function(message) {
                             var p = document.createElement('p');
                             if (message.role === 'user') {
-                                p.innerHTML = `<span class="user-tag">User:</span> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<span class="user-tag">${message.name}:</span> ${message.content}`;
                             } else if (message.role === 'assistant') {
-                                p.innerHTML = `<span class="assistant-tag">Assistant:</span> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<span class="assistant-tag">${message.name}:</span> ${message.content}`;
                             } else {
-                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content}`;
                             }
                             transcriptDiv.appendChild(p);
                         });
