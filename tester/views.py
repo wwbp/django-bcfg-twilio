@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from chat.models import (
     BaseChatTranscript,
     GroupSession,
+    GroupStrategyPhase,
     IndividualChatTranscript,
     GroupChatTranscript,
     IndividualSession,
@@ -127,17 +128,37 @@ def create_test_case(request):
 
 
 def chat_transcript(request, test_case_id):
-    # TODO 10187 - load correctly if user is direct messaging group
-    # can this use the crud function(s) (and therefore get direct messaging transcript from shared function as well?)
-    transcripts = IndividualChatTranscript.objects.filter(session__user_id=test_case_id).order_by("created_at")
-    transcript = [
-        {
-            "role": t.role,
-            "content": t.content,
-            "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        for t in transcripts
-    ]
+    transcript = []
+    user = ChatUser.objects.get(id=test_case_id)
+    if user.group:
+        group_sessions = GroupSession.objects.filter(group=user.group).order_by("created_at")
+        for gs in group_sessions:
+            group_transcripts = (
+                GroupChatTranscript.objects.filter(session=gs)
+                .exclude(moderation_status=BaseChatTranscript.ModerationStatus.FLAGGED)
+                .order_by("created_at")
+            )
+            for t in group_transcripts:
+                transcript.append(
+                    {
+                        "role": t.role,
+                        "content": t.content,
+                        "name": t.sender.name if t.role == BaseChatTranscript.Role.USER else "assistant",
+                    }
+                )
+    individual_transcripts = (
+        IndividualChatTranscript.objects.filter(session__user_id=test_case_id)
+        .exclude(moderation_status=BaseChatTranscript.ModerationStatus.FLAGGED)
+        .order_by("created_at")
+    )
+    for t in individual_transcripts:
+        transcript.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "created_at": t.session.user.name | "assistant",
+            }
+        )
     return JsonResponse({"transcript": transcript})
 
 
@@ -174,41 +195,48 @@ def create_group_test_case(request):
     message_type = data.get("message_type")
 
     if group_id and participants_str:
-        group = Group.objects.create(id=group_id, is_test=True)
-        for pair in participants_str.split(","):
-            if ":" in pair:
-                uid, name = pair.split(":")
-                uid = uid.strip()
-                name = name.strip()
-                user, _ = ChatUser.objects.get_or_create(
-                    id=uid,
-                    defaults={
-                        "name": name,
-                        "school_name": school_name,
-                        "school_mascot": school_mascot,
-                        "is_test": True,
-                    },
-                )
-                group.users.add(user)
-
-            session = GroupSession.objects.create(
-                group=group,
-                week_number=week_number,
-                message_type=message_type,
+        try:
+            group = Group.objects.create(id=group_id, is_test=True)
+            for pair in participants_str.split(","):
+                if ":" in pair:
+                    uid, name = pair.split(":")
+                    uid = uid.strip()
+                    name = name.strip()
+                    ChatUser.objects.create(
+                        id=uid,
+                        group=group,
+                        name=name,
+                        school_name=school_name,
+                        school_mascot=school_mascot,
+                        is_test=True,
+                    )
+        except IntegrityError:
+            # Notify the user if the group ID already exists.
+            return JsonResponse(
+                {"success": False, "error": "Group ID or User ID already exists. Please use a unique ID."}, status=400
             )
-            GroupChatTranscript.objects.create(
-                session=session,
-                sender=None,
-                role=BaseChatTranscript.Role.ASSISTANT,
-                content=initial_message,
-            )
+        session = GroupSession.objects.create(
+            group=group,
+            week_number=week_number,
+            message_type=message_type,
+        )
+        GroupChatTranscript.objects.create(
+            session=session,
+            role=BaseChatTranscript.Role.ASSISTANT,
+            content=initial_message,
+            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+        )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
 
 def group_chat_transcript(request, group_id):
     group = Group.objects.get(id=group_id)
-    transcripts = GroupChatTranscript.objects.filter(session=group.current_session).order_by("created_at")
+    transcripts = (
+        GroupChatTranscript.objects.filter(session=group.current_session)
+        .exclude(moderation_status=BaseChatTranscript.ModerationStatus.FLAGGED)
+        .order_by("created_at")
+    )
     transcript = [
         {
             "role": t.role,

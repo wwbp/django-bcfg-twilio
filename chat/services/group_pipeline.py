@@ -8,7 +8,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
-from chat.services.group_crud import ingest_request
+from chat.services.completion import ensure_within_character_limit, generate_response
+from chat.services.group_crud import load_group_chat_history, load_instruction_prompt, ingest_request
 from chat.services.moderation import moderate_message
 from chat.services.send import send_message_to_participant_group, send_moderation_message
 
@@ -125,11 +126,17 @@ def _clear_existing_and_schedule_group_action(
 def _compute_and_validate_message_to_send(
     record: GroupPipelineRecord, session: GroupSession, next_strategy_phase: GroupStrategyPhase
 ):
-    # TODO use the current session and the next_strategy_phase (which implies strategy to use) to compute message
-    # and then validate it
-    # could break this up into two to match individual pipeline
-    record.response = f"Dummy LLM response for phase: {next_strategy_phase}"
-    record.validated_message = f"Dummy LLM response for phase: {next_strategy_phase}"
+    # generate response
+    # # load instruction prompt given strategy
+    instruction_prompt = load_instruction_prompt(session, next_strategy_phase)
+    chat_history, message = load_group_chat_history(session)
+    response = generate_response(chat_history, instruction_prompt, message)
+    record.instruction_prompt = instruction_prompt
+    record.response = response
+    # validate response
+    # ensure 320 characters or less
+    record.validated_message = ensure_within_character_limit(response)
+    
     record.status = GroupPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
 

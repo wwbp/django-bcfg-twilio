@@ -192,21 +192,33 @@ class GroupChatTranscript(BaseChatTranscript):
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
-class Prompt(ModelBase):
-    is_for_group = models.BooleanField(default=False)
+class BasePrompt(ModelBase):
     week = models.IntegerField()
     activity = models.TextField()
-    type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
-
-    def clean(self):
-        super().clean()
-        if self.is_for_group and self.type == MessageType.CHECK_IN:
-            raise ValueError(f"Group prompts cannot be of type {MessageType.CHECK_IN}")
 
     class Meta:
-        unique_together = ["is_for_group", "week", "type"]
-        verbose_name_plural = "Weekly Prompts"
-        ordering = ["week", "type", "-created_at"]
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualPrompt(BasePrompt):
+    message_type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
+
+    class Meta:
+        unique_together = ["week", "message_type"]
+        verbose_name_plural = "Weekly Individual Prompts"
+        ordering = ["week", "message_type", "-created_at"]
+
+
+class GroupPrompt(BasePrompt):
+    strategy_type = models.CharField(
+        max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.AUDIENCE
+    )
+
+    class Meta:
+        unique_together = ["week", "strategy_type"]
+        verbose_name_plural = "Weekly Group Prompts"
+        ordering = ["week", "strategy_type", "-created_at"]
 
 
 class ControlConfig(ModelBaseWithUuidId):
@@ -252,17 +264,10 @@ class GroupStrategyPhaseConfig(ModelBaseWithUuidId):
 
 
 class Summary(ModelBase):
-    TYPE_CHOICES = [
-        ("influencer", "Influencer"),
-        ("song", "Song"),
-        ("spot", "Spot"),
-        ("idea", "Idea"),
-        ("pick", "Pick"),
-    ]
-
-    school = models.CharField(max_length=255)
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    school_name = models.CharField(max_length=255)
+    week_number = models.IntegerField()
     summary = models.TextField()
+    selected = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

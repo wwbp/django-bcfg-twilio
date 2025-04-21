@@ -8,14 +8,17 @@ from pytest_factoryboy import register
 
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     Group,
+    GroupPrompt,
     GroupSession,
+    GroupStrategyPhase,
     IndividualSession,
     MessageType,
     User,
     IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
+    IndividualPrompt,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -199,7 +202,7 @@ class GroupSessionFactory(factory.django.DjangoModelFactory):
     message_type = MessageType.INITIAL
 
 
-class ChatTranscriptFactory(factory.django.DjangoModelFactory):
+class IndividualChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IndividualChatTranscript
 
@@ -218,21 +221,30 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
     content = factory.Faker("sentence")
 
 
-class PromptFactory(factory.django.DjangoModelFactory):
+class IndividualPromptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Prompt
+        model = IndividualPrompt
 
     week = factory.Faker("random_int")
     activity = factory.Faker("sentence")
-    type = MessageType.INITIAL
+    message_type = MessageType.INITIAL
+
+
+class GroupPromptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GroupPrompt
+
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
+    strategy_type = GroupStrategyPhase.AUDIENCE
 
 
 class SummaryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Summary
 
-    school = factory.Faker("word")
-    type = Summary.TYPE_CHOICES[0][0]
+    school_name = factory.Faker("word")
+    week_number = factory.Faker("random_int")
     summary = factory.Faker("sentence")
 
 
@@ -262,14 +274,32 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     status = GroupPipelineRecord.StageStatus.INGEST_PASSED
 
 
+class ControlConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ControlConfig
+
+    # if you only ever care about persona & system, you can restrict the iterator:
+    key = factory.Iterator(
+        [
+            ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+            ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+            ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
+        ]
+    )
+    # default fake value; you can always override in a test
+    value = factory.Faker("sentence")
+
+
 # register factories as fixtures
 register(UserFactory)
 register(GroupFactory)
-register(ChatTranscriptFactory)
+register(IndividualChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
-register(PromptFactory)
+register(GroupPromptFactory)
+register(IndividualPromptFactory)
 register(SummaryFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
 register(GroupSessionFactory)
+register(ControlConfigFactory)

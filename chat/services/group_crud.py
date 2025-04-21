@@ -1,14 +1,18 @@
 import logging
+import re
 
 from chat.serializers import GroupIncomingMessage
 
+
 from ..models import (
     BaseChatTranscript,
+    ControlConfig,
     Group,
     GroupChatTranscript,
     GroupSession,
     GroupStrategyPhase,
     MessageType,
+    GroupPrompt,
     User,
 )
 from django.db import transaction
@@ -135,3 +139,83 @@ def ingest_request(group_id: str, group_incoming_message: GroupIncomingMessage):
         )
 
     return group, user_chat_transcript
+
+
+GROUP_INSTRUCTION_PROMPT_TEMPLATE = (
+    "Using the below system prompt as your guide, engage with the group as a participant in a "
+    "manner that reflects your assigned persona and follows the conversation stategy instructions"
+    "System Prompt: {system}\n\n"
+    "Assigned Persona: {persona}\n\n"
+    "Assistant Name: {assistant_name}\n\n"
+    "Strategy: {strategy}\n\n"
+)
+
+
+def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategyPhase) -> str:
+    week = session.week_number
+    user = User.objects.filter(group=session.group).first()
+    assistant_name = user.school_mascot if user else BaseChatTranscript.Role.ASSISTANT
+
+    # Load the most recent controls record
+    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    if not persona or not system:
+        raise ValueError("System or Persona prompt not found in ControlConfig.")
+
+    try:
+        activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
+    except GroupPrompt.DoesNotExist as err:
+        logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
+        raise
+
+    # Format the final prompt using the template
+    instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
+        system=system,
+        persona=persona,
+        assistant_name=assistant_name,
+        strategy=activity,
+    )
+    return instruction_prompt
+
+
+def _sanitize_name(name: str) -> str:
+    """
+    Remove any characters that are not letters, digits, underscores, or hyphens.
+    If the sanitized name is empty, return a default value.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", name)
+    return sanitized if sanitized else "default"
+
+
+def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
+    """
+    Loads the chat history for a group session.
+    """
+    transcripts = GroupChatTranscript.objects.filter(session=session).order_by("created_at")
+    latest_user_transcript = transcripts.filter(role=BaseChatTranscript.Role.USER).last()
+    assistant_name = (
+        latest_user_transcript.sender.school_mascot if latest_user_transcript else BaseChatTranscript.Role.ASSISTANT
+    )
+    history: list[dict] = []
+    for t in transcripts:
+        if (
+            latest_user_transcript and t.id == latest_user_transcript.id
+        ) or t.moderation_status == BaseChatTranscript.ModerationStatus.FLAGGED:
+            continue
+
+        if t.role == BaseChatTranscript.Role.USER:
+            sender_name = t.sender.name if t.sender else BaseChatTranscript.Role.USER
+        else:
+            # assistant
+            sender_name = assistant_name
+
+        sender_name = _sanitize_name(sender_name)  # type: ignore[arg-type]
+        history.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "sender_name": sender_name,
+            }
+        )
+    latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
+    return history, latest_sender_message

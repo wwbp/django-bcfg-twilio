@@ -6,12 +6,12 @@ from chat.models import (
     GroupPipelineRecord,
     IndividualPipelineRecord,
     MessageType,
-    Prompt,
+    IndividualPrompt,
 )
 
 
 def test_individual_pipeline_for_direct_messaging(
-    mock_all_individual_external_calls, caplog, group_with_initial_message_interaction
+    mock_all_individual_external_calls, caplog, group_with_initial_message_interaction, control_config_factory
 ):
     caplog.set_level(logging.INFO)
     group, _, _, _ = group_with_initial_message_interaction
@@ -28,13 +28,15 @@ def test_individual_pipeline_for_direct_messaging(
         "message": "Some message from user",
         "context": context,
     }
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=context["week_number"],
-        type=context["message_type"],
+        message_type=context["message_type"],
         activity="base activity",
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT, value="test persona prompt"
+    )
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     individual_pipeline.run(user.id, data)
 

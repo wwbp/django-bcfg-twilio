@@ -13,11 +13,15 @@ logger = logging.getLogger(__name__)
 MAX_RESPONSE_CHARACTER_LENGTH = 320
 
 
-def _generate_response(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
+async def _generate_response_async(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
     engine = OpenAIEngine(settings.OPENAI_API_KEY, model=settings.OPENAI_MODEL)
     assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
-    response = asyncio.run(assistant.chat_round_str(message))
+    response = await assistant.chat_round_str(message)
     return response
+
+
+def _generate_response(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
+    return asyncio.run(_generate_response_async(chat_history, instructions, message))
 
 
 def generate_response(history_json: list[dict], instructions: str, message: str) -> ChatMessage:
@@ -35,10 +39,12 @@ def chat_completion(instructions: str) -> str:
         ],
     )
     response = completion.choices[0].message.content
-    return response
+    return response or ""
 
 
 def ensure_within_character_limit(current_text: str) -> str:
+    if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
+        return current_text
     for _ in range(2):
         if len(current_text) > MAX_RESPONSE_CHARACTER_LENGTH:
             instructions = (

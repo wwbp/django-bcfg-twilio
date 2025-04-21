@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from chat.models import ControlConfig, IndividualChatTranscript, IndividualPipelineRecord, MessageType, Prompt
+from chat.models import ControlConfig, IndividualChatTranscript, IndividualPipelineRecord, MessageType, IndividualPrompt
 from chat.services.individual_pipeline import individual_ingest, individual_pipeline
 from chat.tests.conftest import IndividualPipelineMocks
 
@@ -21,7 +21,9 @@ _FIRST_USER_MESSAGE = "some message from user"
 
 
 @pytest.fixture
-def inbound_call_and_mocks(mock_all_individual_external_calls) -> tuple[UUID, dict, IndividualPipelineMocks]:
+def inbound_call_and_mocks(
+    mock_all_individual_external_calls, control_config_factory
+) -> tuple[UUID, dict, IndividualPipelineMocks]:
     participant_id = uuid4()
     inbound_payload = {
         "message": _FIRST_USER_MESSAGE,
@@ -35,13 +37,13 @@ def inbound_call_and_mocks(mock_all_individual_external_calls) -> tuple[UUID, di
         },
     }
 
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=inbound_payload["context"]["week_number"],  # type: ignore[index]
-        type=inbound_payload["context"]["message_type"],  # type: ignore[index]
+        message_type=inbound_payload["context"]["message_type"],  # type: ignore[index]
         activity="base activity",
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     mock_all_individual_external_calls.mock_generate_response.return_value = _GENERATED_LLM_RESPONSE
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = _SHORTENED_LLM_RESPONSE

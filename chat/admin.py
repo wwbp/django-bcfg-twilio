@@ -2,13 +2,14 @@ import logging
 from django.contrib import admin
 from .models import (
     ControlConfig,
+    GroupPrompt,
     GroupSession,
     GroupStrategyPhaseConfig,
     User,
     Group,
     IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
+    IndividualPrompt,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -16,6 +17,7 @@ from .models import (
 )
 from admin.models import AuthGroupName
 from simple_history.admin import SimpleHistoryAdmin
+from import_export.admin import ImportExportModelAdmin
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,10 @@ class ReadonlyAdmin(BaseAdmin):
             return False
 
 
+class EditableAdmin(BaseAdmin, ImportExportModelAdmin):
+    pass
+
+
 class ReadonlyTabularInline(admin.TabularInline):
     fields: tuple = ()
     extra = 0
@@ -65,7 +71,7 @@ class IndividualSessionsInline(ReadonlyTabularInline):
 
 class GroupSessionsInline(ReadonlyTabularInline):
     model = GroupSession
-    fields = ("week_number", "message_type")
+    fields = ("week_number", "message_type", "current_strategy_phase")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -86,7 +92,7 @@ class IndividualChatTranscriptInline(ReadonlyTabularInline):
 
 class GroupChatTranscriptInline(ReadonlyTabularInline):
     model = GroupChatTranscript
-    fields = ("sender", "role", "content", "moderation_status", "created_at")
+    fields = ("sender", "role", "content", "moderation_status", "assistant_strategy_phase", "created_at")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -122,32 +128,48 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
 
 @admin.register(GroupChatTranscript)
 class GroupChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("session", "session__group", "sender", "role", "content", "moderation_status", "created_at")
+    list_display = (
+        "session",
+        "session__group",
+        "sender",
+        "role",
+        "content",
+        "moderation_status",
+        "assistant_strategy_phase",
+        "created_at",
+    )
     search_fields = ("content",)
     list_filter = ("role",)
 
 
-@admin.register(Prompt)
-class PromptAdmin(BaseAdmin):
-    list_display = ("week", "activity", "type")
+@admin.register(IndividualPrompt)
+class IndividualPromptAdmin(EditableAdmin):
+    list_display = ("week", "activity", "message_type")
     search_fields = ("activity",)
-    list_filter = ("week", "type")
+    list_filter = ("week", "message_type")
+
+
+@admin.register(GroupPrompt)
+class GroupPromptAdmin(EditableAdmin):
+    list_display = ("week", "activity", "strategy_type")
+    search_fields = ("activity",)
+    list_filter = ("week", "strategy_type")
 
 
 @admin.register(ControlConfig)
-class ControlConfigAdmin(BaseAdmin):
+class ControlConfigAdmin(EditableAdmin):
     list_display = ("key", "value", "created_at")
 
 
 @admin.register(Summary)
 class SummaryAdmin(BaseAdmin):
-    list_display = ("school", "type", "summary", "updated_at")
+    list_display = ("school_name", "week_number", "summary", "selected", "updated_at")
     search_fields = ("summary",)
-    list_filter = ("school", "type")
+    list_filter = ("school_name", "week_number", "selected")
 
 
 @admin.register(GroupStrategyPhaseConfig)
-class GroupStrategyPhaseConfigAdmin(BaseAdmin):
+class GroupStrategyPhaseConfigAdmin(EditableAdmin):
     list_display = ("group_strategy_phase", "min_wait_seconds", "max_wait_seconds")
 
 
@@ -183,7 +205,7 @@ class IndividualSessionAdmin(ReadonlyAdmin):
 
 @admin.register(GroupSession)
 class GroupSessionAdmin(ReadonlyAdmin):
-    list_display = ("group", "week_number", "message_type")
+    list_display = ("group", "week_number", "message_type", "current_strategy_phase")
     list_filter = ("week_number", "message_type")
 
     inlines = [GroupChatTranscriptInline]

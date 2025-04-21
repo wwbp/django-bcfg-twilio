@@ -10,7 +10,7 @@ from chat.models import (
     IndividualChatTranscript,
     IndividualPipelineRecord,
     MessageType,
-    Prompt,
+    IndividualPrompt,
     User,
 )
 
@@ -98,7 +98,15 @@ def default_context():
     ],
 )
 def test_individual_pipeline_parametrized(
-    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls, caplog
+    default_context,
+    description,
+    participant_id,
+    message,
+    mocks,
+    expected,
+    mock_all_individual_external_calls,
+    caplog,
+    control_config_factory,
 ):
     """
     Test the individual_pipeline task by simulating:
@@ -112,13 +120,13 @@ def test_individual_pipeline_parametrized(
         "message": message,
         "context": default_context,
     }
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=default_context["week_number"],
-        type=default_context["message_type"],
+        message_type=default_context["message_type"],
         activity="base activity",
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
     mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]
