@@ -52,3 +52,13 @@ def send_moderation_message(participant_id):
         response = client.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
+
+
+def send_school_summaries_to_hub_for_week(school_name: str, week_number: int, summary_contents: list[str]):
+    url = f"{settings.BCFG_DOMAIN}/ai/api/summary/school/{school_name}/week/{week_number}"
+    headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+    payload = {"summaries": summary_contents}
+    with httpx.Client() as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()

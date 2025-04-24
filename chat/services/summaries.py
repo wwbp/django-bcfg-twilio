@@ -1,10 +1,13 @@
 import datetime
 import logging
+import json
 from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
-from chat.models import GroupChatTranscript, IndividualChatTranscript, Summary, User
+from chat.models import BaseChatTranscript, ControlConfig, GroupChatTranscript, IndividualChatTranscript, Summary, User
+from chat.services.send import send_school_summaries_to_hub_for_week
+from chat.services.completion import generate_response
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,22 @@ def _get_all_chats_for_school(
     return all_individual_school_chats, all_group_school_chats
 
 
+def _parse_top_10_summaries(response: str) -> list[str]:
+    """
+    Parse an LLM response into exactly 10 summary strings.
+    Fallbacks: return the entire response as a single‐element list.
+    """
+    resp = response.strip()
+    try:
+        items = json.loads(resp)
+        # If it parsed but isn’t a list, treat as non-JSON
+        if not isinstance(items, list):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        return [response]
+    return items
+
+
 def _generate_top_10_summaries_for_school(
     school_name: str,
     school_week_number: int,
@@ -85,10 +104,29 @@ def _generate_top_10_summaries_for_school(
     """
     Generate top 10 summaries for a given school via an LLM.
     """
-    # TODO assemble prompt
-    # TODO call LLM
-    # TODO validate response
-    summaries = [f"Dummy summary {i + 1} for {school_name} and week {school_week_number}" for i in range(10)]
+    # assemble prompt
+    instructions = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SCHOOL_SUMMARY_PROMPT)
+    transcript: list[dict] = []
+    for t in all_group_school_chats:
+        transcript.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "name": t.sender.name if t.role == BaseChatTranscript.Role.USER else "assistant",
+            }
+        )
+    for t in all_individual_school_chats:
+        transcript.append(
+            {
+                "role": t.role,
+                "content": t.content,
+                "name": t.session.user.name if t.role == BaseChatTranscript.Role.USER else "assistant",
+            }
+        )
+    # call LLM
+    response = generate_response(transcript, instructions, "")
+    # validate response
+    summaries = _parse_top_10_summaries(response)
     return summaries
 
 
@@ -97,6 +135,7 @@ def _persist_summaries(school_name: str, week_number: int, summaries: list[str])
     Persist summaries to the database.
     """
     with transaction.atomic():
+        Summary.objects.filter(school_name=school_name, week_number=week_number).all().delete()
         for summary in summaries:
             Summary.objects.create(
                 school_name=school_name,
@@ -127,3 +166,16 @@ def generate_weekly_summaries():
             school_name, school_week_number, all_individual_school_chats, all_group_school_chats
         )
         _persist_summaries(school_name, school_week_number, summaries)
+
+
+@shared_task
+def handle_summaries_selected_change(changed_summary_ids: list[str]):
+    """
+    Handle the change in selected summaries by sending all selected summaries
+    to the BCFG endpoint for any schools and weeks involed in the change.
+    """
+    changed_summaries = list(Summary.objects.filter(id__in=changed_summary_ids))
+    schools_and_weeks_included = {(s.school_name, s.week_number) for s in changed_summaries}
+    for school_name, week_number in schools_and_weeks_included:
+        summaries = list(Summary.objects.filter(school_name=school_name, week_number=week_number, selected=True))
+        send_school_summaries_to_hub_for_week(school_name, week_number, [s.summary for s in summaries])

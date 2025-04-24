@@ -2,6 +2,8 @@ from django.utils import timezone
 import re
 import logging
 
+from chat.serializers import IndividualIncomingMessage
+
 from ..models import (
     BaseChatTranscript,
     GroupChatTranscript,
@@ -17,14 +19,12 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
-def ingest_request(participant_id: str, data: dict):
+def ingest_request(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
     """
     Ingests an individual request by either creating a new user record or updating
     an existing one. The operation is wrapped in an atomic transaction for consistency.
     """
     logger.info("Processing request for participant ID: %s", participant_id)
-    context: dict = data.get("context", {})
-    message: str = data.get("message", "")
 
     with transaction.atomic():
         # Provide a default for created_at to avoid null value issues.
@@ -32,15 +32,15 @@ def ingest_request(participant_id: str, data: dict):
             id=participant_id,
             defaults={
                 "created_at": timezone.now(),
-                "school_name": context.get("school_name", ""),
-                "school_mascot": context.get("school_mascot", ""),
-                "name": context.get("name", ""),
+                "school_name": individual_incoming_message.context.school_name,
+                "school_mascot": individual_incoming_message.context.school_mascot,
+                "name": individual_incoming_message.context.name,
             },
         )
         session, created_session = IndividualSession.objects.get_or_create(
             user=user,
-            week_number=context.get("week_number"),
-            message_type=context.get("message_type"),
+            week_number=individual_incoming_message.context.week_number,
+            message_type=individual_incoming_message.context.message_type,
         )
 
         if not user.group:
@@ -50,18 +50,21 @@ def ingest_request(participant_id: str, data: dict):
             if created_session:
                 # if we created a new session, we need to add the initial message to it
                 IndividualChatTranscript.objects.create(
-                    session=session, role=BaseChatTranscript.Role.ASSISTANT, content=context.get("initial_message")
+                    session=session,
+                    role=BaseChatTranscript.Role.ASSISTANT,
+                    content=individual_incoming_message.context.initial_message,
                 )
             else:
-                if session.initial_message != context.get("initial_message") and not user.is_test:
+                if session.initial_message != individual_incoming_message.context.initial_message and not user.is_test:
                     logger.error(
                         f"Got new initial_message for existing individual session {session}. "
-                        f"New message: '{context.get('initial_message')}'. Not updating existing initial_message."
+                        f"New message: '{individual_incoming_message.context.initial_message}'."
+                        +" Not updating existing initial_message."
                     )
 
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
-            session=session, role=BaseChatTranscript.Role.USER, content=message
+            session=session, role=BaseChatTranscript.Role.USER, content=individual_incoming_message.message
         )
 
     return user, session, user_chat_transcript
