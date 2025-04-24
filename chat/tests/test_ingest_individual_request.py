@@ -1,5 +1,6 @@
 import pytest
 from chat.models import BaseChatTranscript, IndividualSession, MessageType, User, IndividualChatTranscript
+from chat.serializers import IndividualIncomingMessageSerializer
 from chat.services.individual_crud import ingest_request
 
 
@@ -15,18 +16,34 @@ def base_context():
     }
 
 
-def test_new_user_creation(base_context):
+@pytest.fixture
+def make_input_data(base_context):
+    def _make(overrides=None, message=""):
+        # if you ever have nested structures you want to override, switch to deepcopy
+        ctx = base_context.copy()
+        if overrides:
+            ctx.update(overrides)
+        return {
+            "context": ctx,
+            "message": message,
+        }
+
+    return _make
+
+
+def test_new_user_creation(make_input_data):
     """
     When a user is not found, a new record should be created using context data,
     and two IndividualChatTranscript records should be generated.
     """
     participant_id = "new_user_1"
-    input_data = {
-        "context": base_context,
-        "message": "I would like to enroll.",
-    }
+    input_data = make_input_data(message="I would like to enroll.")
 
-    ingest_request(participant_id, input_data)
+    serializer = IndividualIncomingMessageSerializer(data=input_data)
+    serializer.is_valid(raise_exception=True)
+    individual_incoming_message = serializer.validated_data
+
+    ingest_request(participant_id, individual_incoming_message)
 
     # Assert that the user was created with correct attributes
     user = User.objects.get(id=participant_id)
@@ -71,22 +88,26 @@ def existing_transcript(existing_user):
     )
 
 
-def test_existing_user_update_session_context(existing_user, existing_transcript):
+def test_existing_user_update_session_context(existing_user, existing_transcript, make_input_data):
     """
     When an existing user sends data with a changed week_number,
     the user record should update and a new transcript entry should be added.
     """
     user, session = existing_user
-    input_data = {
-        "context": {
+    input_data = make_input_data(
+        overrides={
             "week_number": 2,
             "message_type": MessageType.INITIAL,
             "initial_message": "Initial Hello From Week 2",
         },
-        "message": "User message for week 2",
-    }
+        message="User message for week 2",
+    )
 
-    ingest_request(user.id, input_data)
+    serializer = IndividualIncomingMessageSerializer(data=input_data)
+    serializer.is_valid(raise_exception=True)
+    individual_incoming_message = serializer.validated_data
+
+    ingest_request(user.id, individual_incoming_message)
 
     new_session = user.sessions.order_by("-created_at").first()
     assert new_session != session
@@ -98,22 +119,26 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     assert transcripts.last().content == "User message for week 2"
 
 
-def test_existing_user_no_update(existing_user, existing_transcript):
+def test_existing_user_no_update(existing_user, existing_transcript, make_input_data):
     """
     When an existing user sends unchanged context data,
     only a new transcript entry should be created.
     """
     user, session = existing_user
-    input_data = {
-        "context": {
+    input_data = make_input_data(
+        overrides={
             "week_number": 1,
-            "initial_message": "Initial Hello",
             "message_type": MessageType.SUMMARY,
+            "initial_message": "Initial Hello",
         },
-        "message": "Just another message",
-    }
+        message="Just another message",
+    )
 
-    ingest_request(user.id, input_data)
+    serializer = IndividualIncomingMessageSerializer(data=input_data)
+    serializer.is_valid(raise_exception=True)
+    individual_incoming_message = serializer.validated_data
+
+    ingest_request(user.id, individual_incoming_message)
 
     new_session = user.sessions.order_by("-created_at").first()
     assert new_session == session

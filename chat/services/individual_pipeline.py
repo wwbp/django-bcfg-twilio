@@ -1,5 +1,6 @@
 import logging
 from celery import shared_task
+from chat.serializers import IndividualIncomingMessage, IndividualIncomingMessageSerializer
 from .moderation import moderate_message
 from .individual_crud import (
     load_individual_and_group_chat_history_for_direct_messaging,
@@ -29,14 +30,14 @@ def _newer_user_messages_exist(record: IndividualPipelineRecord):
     return newer_message_exists
 
 
-def individual_ingest(participant_id: str, data: dict):
+def individual_ingest(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
-    user, session, user_chat_transcript = ingest_request(participant_id, data)
+    user, session, user_chat_transcript = ingest_request(participant_id, individual_incoming_message)
     record = IndividualPipelineRecord.objects.create(
         user=user,
-        message=data.get("message", ""),
+        message=individual_incoming_message.message,
         status=IndividualPipelineRecord.StageStatus.INGEST_PASSED,
         is_for_group_direct_messaging=user.group is not None,
     )
@@ -117,11 +118,14 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
 
 
 @shared_task
-def individual_pipeline(participant_id: str, data: dict):
+def individual_pipeline(participant_id: str, data: IndividualIncomingMessage):
     record: IndividualPipelineRecord | None = None
+    serializer = IndividualIncomingMessageSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    individual_incoming_message: IndividualIncomingMessage = serializer.validated_data
     try:
         # Stage 1: Ingest the data and create a run record.
-        record, session, user_chat_transcript = individual_ingest(participant_id, data)
+        record, session, user_chat_transcript = individual_ingest(participant_id, individual_incoming_message)
         assert record  # to appease the typechecker
 
         # Stage 2: Moderate the incoming message.
