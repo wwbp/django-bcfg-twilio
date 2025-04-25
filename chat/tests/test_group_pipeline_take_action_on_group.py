@@ -116,10 +116,16 @@ def test_group_pipeline_take_action_on_group(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
-    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.AUDIENCE)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT,
+        value="activity",
+    )
     group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.FOLLOWUP)
     group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.SUMMARY)
-    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.REMINDER)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT,
+        value="activity",
+    )
 
     take_action_on_group(group_pipeline_record.run_id, most_recent_chat_transcript.id)
 
@@ -268,7 +274,10 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR AUDIENCE>>", strategy_type=GroupStrategyPhase.AUDIENCE)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT,
+        value="<<INSTRUCTION FOR AUDIENCE>>",
+    )
 
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.BEFORE_AUDIENCE
@@ -283,6 +292,7 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt
+
 
 def test_followup_action_assistant_after_audience_no_reminder(
     _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
@@ -320,9 +330,8 @@ def test_followup_action_assistant_after_audience_no_reminder(
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
 
-def test_followup_action_assistant_after_reminder(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory
-):
+
+def test_followup_action_assistant_after_reminder(_mocks, group_with_initial_message_interaction, group_prompt_factory):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
     ControlConfig.objects.create(
@@ -477,7 +486,10 @@ def test_reminder_action_loads_instruction_prompt_and_schedules(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT,
+        value="<<INSTRUCTION FOR REMINDER>>",
+    )
 
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -518,7 +530,10 @@ def test_no_reminder_action_all_user_responded(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT,
+        value="<<INSTRUCTION FOR REMINDER>>",
+    )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -561,7 +576,10 @@ def test_no_reminder_action_assistant_sent_one(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="<<SYSTEM PROMPT>>",
     )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT,
+        value="<<INSTRUCTION FOR REMINDER>>",
+    )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE

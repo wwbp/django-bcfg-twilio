@@ -162,11 +162,20 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
-    try:
-        activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
-    except GroupPrompt.DoesNotExist as err:
-        logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
-        raise
+    if strategy_phase == GroupStrategyPhase.AUDIENCE:
+        activity = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT)
+        if not activity:
+            raise ValueError("GROUP_AUDIENCE_STRATEGY_PROMPT not found in ControlConfig.")
+    elif strategy_phase == GroupStrategyPhase.REMINDER:
+        activity = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT)
+        if not activity:
+            raise ValueError("GROUP_REMINDER_STRATEGY_PROMPT not found in ControlConfig.")
+    else:
+        try:
+            activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
+        except GroupPrompt.DoesNotExist as err:
+            logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
+            raise
 
     # Format the final prompt using the template
     instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(

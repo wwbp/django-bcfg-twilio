@@ -227,6 +227,8 @@ class ControlConfig(ModelBaseWithUuidId):
         SYSTEM_PROMPT = "system_prompt"
         GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
         SCHOOL_SUMMARY_PROMPT = "school_summary_prompt"
+        GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
+        GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
