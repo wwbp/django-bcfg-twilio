@@ -176,10 +176,14 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
             raise ValueError("GROUP_REMINDER_STRATEGY_PROMPT not found in ControlConfig.")
     else:
         try:
-            activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
+            activity = GroupPrompt.objects.get(
+                week=week, message_type=session.message_type, strategy_type=strategy_phase
+            ).activity
         except GroupPrompt.DoesNotExist as err:
-            logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
-            raise
+            logger.error(
+                f"Prompt not found for week {week}, message_type {session.message_type} and type {strategy_phase}: {err}"
+            )
+            raise err
 
     # Format the final prompt using the template
     instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
