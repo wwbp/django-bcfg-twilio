@@ -181,7 +181,8 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
             ).activity
         except GroupPrompt.DoesNotExist as err:
             logger.error(
-                f"Prompt not found for week {week}, message_type {session.message_type} and type {strategy_phase}: {err}"
+                f"Prompt not found for week {week}, message_type {session.message_type} "
+                f"and type {strategy_phase}: {err}"
             )
             raise err
 
