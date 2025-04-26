@@ -229,14 +229,15 @@ class ControlConfig(ModelBaseWithUuidId):
         SCHOOL_SUMMARY_PROMPT = "school_summary_prompt"
         GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
         GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
+        GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
 
     @classmethod
-    def retrieve(cls, key: ControlConfigKey):
+    def retrieve(cls, key: ControlConfigKey | str):
         try:
-            return cls.objects.get(key=key).value
+            return cls.objects.get(key=str(key)).value
         except cls.DoesNotExist:
             logger.warning(f"ControlConfigKey key '{key}' requested but not found.")
             return None

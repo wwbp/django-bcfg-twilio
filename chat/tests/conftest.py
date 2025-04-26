@@ -168,6 +168,21 @@ def group_with_initial_message_interaction(
     yield group, session, group_pipeline_record, example_message_context
 
 
+@pytest.fixture
+def control_prompts(control_config_factory):
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="<<PERSONA PROMPT>>")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="<<SYSTEM PROMPT>>")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT, value="<<REMINDER PROMPT>>"
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT, value="<<GROUP AUDIENCE PROMPT>>"
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT, value="<<GROUP SUMMARY PERSONA PROMPT>>"
+    )
+
+
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User

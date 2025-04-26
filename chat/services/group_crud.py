@@ -156,9 +156,13 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
     user = User.objects.filter(group=session.group).first()
     assistant_name = user.school_mascot if user else BaseChatTranscript.Role.ASSISTANT
 
-    # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    # We use a different persona prompt for the strategy phase
+    if strategy_phase == GroupStrategyPhase.SUMMARY:
+        persona_key = ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT
+    else:
+        persona_key = ControlConfig.ControlConfigKey.PERSONA_PROMPT
+    persona = ControlConfig.retrieve(persona_key)
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
