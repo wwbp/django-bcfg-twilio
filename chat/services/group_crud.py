@@ -156,9 +156,13 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
     user = User.objects.filter(group=session.group).first()
     assistant_name = user.school_mascot if user else BaseChatTranscript.Role.ASSISTANT
 
-    # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    # We use a different persona prompt for the strategy phase
+    if strategy_phase == GroupStrategyPhase.SUMMARY:
+        persona_key = ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT
+    else:
+        persona_key = ControlConfig.ControlConfigKey.PERSONA_PROMPT
+    persona = ControlConfig.retrieve(persona_key)
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
@@ -172,10 +176,15 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
             raise ValueError("GROUP_REMINDER_STRATEGY_PROMPT not found in ControlConfig.")
     else:
         try:
-            activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
+            activity = GroupPrompt.objects.get(
+                week=week, message_type=session.message_type, strategy_type=strategy_phase
+            ).activity
         except GroupPrompt.DoesNotExist as err:
-            logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
-            raise
+            logger.error(
+                f"Prompt not found for week {week}, message_type {session.message_type} "
+                f"and type {strategy_phase}: {err}"
+            )
+            raise err
 
     # Format the final prompt using the template
     instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
