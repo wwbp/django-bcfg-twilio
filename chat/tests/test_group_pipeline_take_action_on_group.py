@@ -5,7 +5,9 @@ from django.utils import timezone
 from chat.models import (
     BaseChatTranscript,
     ControlConfig,
+    GroupChatTranscript,
     GroupPipelineRecord,
+    GroupPromptMessageType,
     GroupScheduledTaskAssociation,
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
@@ -49,7 +51,7 @@ def test_group_pipeline_take_action_on_group(
     at_least_three_participants_responded,
     group_chat_transcript_factory,
     group_prompt_factory,
-    control_config_factory,
+    control_prompts,
 ):
     GroupStrategyPhaseConfig.objects.all().delete()
     GroupStrategyPhaseConfig.objects.create(
@@ -108,20 +110,17 @@ def test_group_pipeline_take_action_on_group(
                 sender=group_users[i],
             )
     starting_transcript_count = session.transcripts.count()
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
-    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.AUDIENCE)
     group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.FOLLOWUP)
     group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.SUMMARY)
-    group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.REMINDER)
-
     take_action_on_group(group_pipeline_record.run_id, most_recent_chat_transcript.id)
+
+    responded_users = User.objects.filter(
+        id__in=(
+            GroupChatTranscript.objects.filter(session=session, role=BaseChatTranscript.Role.USER)
+            .values_list("sender", flat=True)
+            .distinct()
+        )
+    )
 
     session.refresh_from_db()
     group_pipeline_record.refresh_from_db()
@@ -133,8 +132,12 @@ def test_group_pipeline_take_action_on_group(
             # for these cases, we always send a message and schedule another action
             assert group_pipeline_record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
             assert GroupScheduledTaskAssociation.objects.count() == 1
-            assert session.transcripts.count() == starting_transcript_count + 1
-            assert mock_send_message_to_participant.call_count == 1
+            if session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP:
+                assert session.transcripts.count() == starting_transcript_count + len(responded_users)
+                assert mock_send_message_to_participant.call_count == len(responded_users)
+            else:
+                assert session.transcripts.count() == starting_transcript_count + 1
+                assert mock_send_message_to_participant.call_count == 1
 
             # we can do this here because we assert that session.current_strategy_phase is correct below
             config = GroupStrategyPhaseConfig.objects.get(group_strategy_phase=session.current_strategy_phase)
@@ -256,19 +259,10 @@ def test_group_pipeline_take_action_on_group_not_latest_action_after_compute_res
 
 
 def test_audience_action_loads_instruction_prompt_and_schedules(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_prompts
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR AUDIENCE>>", strategy_type=GroupStrategyPhase.AUDIENCE)
 
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.BEFORE_AUDIENCE
@@ -282,7 +276,8 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
     record.refresh_from_db()
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
-    assert "<<INSTRUCTION FOR AUDIENCE>>" in record.instruction_prompt
+    assert "<<GROUP AUDIENCE PROMPT>>" in record.instruction_prompt
+
 
 def test_followup_action_assistant_after_audience_no_reminder(
     _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
@@ -320,9 +315,8 @@ def test_followup_action_assistant_after_audience_no_reminder(
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
 
-def test_followup_action_assistant_after_reminder(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory
-):
+
+def test_followup_action_assistant_after_reminder(_mocks, group_with_initial_message_interaction, group_prompt_factory):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
     ControlConfig.objects.create(
@@ -354,7 +348,7 @@ def test_summary_action_loads_instruction_prompt_and_schedules(
     group_with_initial_message_interaction,
     group_prompt_factory,
     group_chat_transcript_factory,
-    control_config_factory,
+    control_prompts,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -366,14 +360,6 @@ def test_summary_action_loads_instruction_prompt_and_schedules(
             content="User response",
             sender=user,
         )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
 
     # start at AFTER_FOLLOWUP
@@ -390,21 +376,15 @@ def test_summary_action_loads_instruction_prompt_and_schedules(
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
     assert "<<INSTRUCTION FOR SUMMARY>>" in record.instruction_prompt
+    assert "<<GROUP SUMMARY PERSONA PROMPT>>" in record.instruction_prompt
+    assert "<<PERSONA PROMPT>>" not in record.instruction_prompt
 
 
 def test_no_summary_action_one_participant_interacted(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_prompts
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
 
     # start at AFTER_FOLLOWUP
@@ -428,7 +408,7 @@ def test_no_summary_action_sent_once(
     group_with_initial_message_interaction,
     group_prompt_factory,
     group_chat_transcript_factory,
-    control_config_factory,
+    control_prompts,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -437,14 +417,6 @@ def test_no_summary_action_sent_once(
         role=BaseChatTranscript.Role.ASSISTANT,
         content="user_message",
         assistant_strategy_phase=GroupStrategyPhase.SUMMARY,
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
     )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR SUMMARY>>", strategy_type=GroupStrategyPhase.SUMMARY)
 
@@ -465,19 +437,10 @@ def test_no_summary_action_sent_once(
 
 
 def test_reminder_action_loads_instruction_prompt_and_schedules(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_config_factory
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_prompts
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
 
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -493,7 +456,7 @@ def test_reminder_action_loads_instruction_prompt_and_schedules(
     record.refresh_from_db()
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
-    assert "<<INSTRUCTION FOR REMINDER>>" in record.instruction_prompt
+    assert "<<REMINDER PROMPT>>" in record.instruction_prompt
 
 
 def test_no_reminder_action_all_user_responded(
@@ -501,7 +464,7 @@ def test_no_reminder_action_all_user_responded(
     group_with_initial_message_interaction,
     group_prompt_factory,
     group_chat_transcript_factory,
-    control_config_factory,
+    control_prompts,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -510,15 +473,6 @@ def test_no_reminder_action_all_user_responded(
         group_chat_transcript_factory(
             session=session, role=BaseChatTranscript.Role.USER, content="user_message", sender=user
         )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -534,7 +488,7 @@ def test_no_reminder_action_all_user_responded(
     record.refresh_from_db()
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
-    assert "<<INSTRUCTION FOR REMINDER>>" not in record.instruction_prompt
+    assert "<<REMINDER PROMPT>>" not in record.instruction_prompt
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
 
 
@@ -543,7 +497,7 @@ def test_no_reminder_action_assistant_sent_one(
     group_with_initial_message_interaction,
     group_prompt_factory,
     group_chat_transcript_factory,
-    control_config_factory,
+    control_prompts,
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -553,15 +507,6 @@ def test_no_reminder_action_assistant_sent_one(
         content="user_message",
         assistant_strategy_phase=GroupStrategyPhase.REMINDER,
     )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    control_config_factory(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
-    group_prompt_factory(week=1, activity="<<INSTRUCTION FOR REMINDER>>", strategy_type=GroupStrategyPhase.REMINDER)
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
@@ -577,5 +522,72 @@ def test_no_reminder_action_assistant_sent_one(
     record.refresh_from_db()
     assert record.response == "LLM response"
     assert record.validated_message == "LLM response"
-    assert "<<INSTRUCTION FOR REMINDER>>" not in record.instruction_prompt
+    assert "<<REMINDER PROMPT>>" not in record.instruction_prompt
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
+
+
+def test_after_audience_skips_reminder_when_message_type_summary(
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+    control_prompts,
+):
+    """
+    If session.message_type == SUMMARY in AFTER_AUDIENCE, we must skip the reminder
+    and go straight to FOLLOWUP.
+    """
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+
+    # set up phase and message_type
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.message_type = GroupPromptMessageType.SUMMARY
+    session.save()
+
+    # ensure there's a followup prompt available
+    group_prompt_factory(
+        week=1,
+        message_type=GroupPromptMessageType.SUMMARY,
+        activity="<<FOLLOWUP PROMPT>>",
+        strategy_type=GroupStrategyPhase.FOLLOWUP,
+    )
+
+    trigger = session.transcripts.order_by("-created_at").first()
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+
+    # we should have sent a FOLLOWUP, not a REMINDER
+    assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
+    assert mock_send.call_count == 1
+    assert "<<FOLLOWUP PROMPT>>" in record.instruction_prompt
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
+
+
+def test_after_followup_skips_summary_when_message_type_summary(
+    _mocks,
+    group_with_initial_message_interaction,
+):
+    """
+    If session.message_type == SUMMARY in AFTER_FOLLOWUP, we must skip SUMMARY
+    altogether and move to AFTER_SUMMARY with no message sent.
+    """
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+
+    # set up phase and message_type
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+    session.message_type = GroupPromptMessageType.SUMMARY
+    session.save()
+
+    trigger = session.transcripts.order_by("-created_at").first()
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+
+    # no summary should be sent, and we should end up in AFTER_SUMMARY
+    assert record.status == GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
+    assert mock_send.call_count == 0
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY

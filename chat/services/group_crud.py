@@ -156,17 +156,35 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
     user = User.objects.filter(group=session.group).first()
     assistant_name = user.school_mascot if user else BaseChatTranscript.Role.ASSISTANT
 
-    # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    # We use a different persona prompt for the strategy phase
+    if strategy_phase == GroupStrategyPhase.SUMMARY:
+        persona_key = ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT
+    else:
+        persona_key = ControlConfig.ControlConfigKey.PERSONA_PROMPT
+    persona = ControlConfig.retrieve(persona_key)
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
-    try:
-        activity = GroupPrompt.objects.get(week=week, strategy_type=strategy_phase).activity
-    except GroupPrompt.DoesNotExist as err:
-        logger.error(f"Prompt not found for week {week} and type {strategy_phase}: {err}")
-        raise
+    if strategy_phase == GroupStrategyPhase.AUDIENCE:
+        activity = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT)
+        if not activity:
+            raise ValueError("GROUP_AUDIENCE_STRATEGY_PROMPT not found in ControlConfig.")
+    elif strategy_phase == GroupStrategyPhase.REMINDER:
+        activity = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT)
+        if not activity:
+            raise ValueError("GROUP_REMINDER_STRATEGY_PROMPT not found in ControlConfig.")
+    else:
+        try:
+            activity = GroupPrompt.objects.get(
+                week=week, message_type=session.message_type, strategy_type=strategy_phase
+            ).activity
+        except GroupPrompt.DoesNotExist as err:
+            logger.error(
+                f"Prompt not found for week {week}, message_type {session.message_type} "
+                f"and type {strategy_phase}: {err}"
+            )
+            raise err
 
     # Format the final prompt using the template
     instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
@@ -187,11 +205,13 @@ def _sanitize_name(name: str) -> str:
     return sanitized if sanitized else "default"
 
 
-def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
+def load_group_chat_history(session: GroupSession, user: User = None) -> tuple[list[dict], str]:
     """
     Loads the chat history for a group session.
     """
     transcripts = GroupChatTranscript.objects.filter(session=session).order_by("created_at")
+    if user:
+        transcripts = transcripts.filter(sender__in=[None, user])
     latest_user_transcript = transcripts.filter(role=BaseChatTranscript.Role.USER).last()
     assistant_name = (
         latest_user_transcript.sender.school_mascot if latest_user_transcript else BaseChatTranscript.Role.ASSISTANT
@@ -219,3 +239,6 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
         )
     latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
     return history, latest_sender_message
+
+
+

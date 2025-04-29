@@ -156,9 +156,9 @@ class IndividualPromptAdmin(EditableAdmin):
 
 @admin.register(GroupPrompt)
 class GroupPromptAdmin(EditableAdmin):
-    list_display = ("week", "activity", "strategy_type")
+    list_display = ("week", "activity", "message_type", "strategy_type")
     search_fields = ("activity",)
-    list_filter = ("week", "strategy_type")
+    list_filter = ("week", "message_type", "strategy_type")
 
 
 @admin.register(ControlConfig)
