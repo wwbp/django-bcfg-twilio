@@ -6,6 +6,7 @@ from chat.models import (
     BaseChatTranscript,
     ControlConfig,
     GroupPipelineRecord,
+    GroupPromptMessageType,
     GroupScheduledTaskAssociation,
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
@@ -510,3 +511,70 @@ def test_no_reminder_action_assistant_sent_one(
     assert record.validated_message == "LLM response"
     assert "<<REMINDER PROMPT>>" not in record.instruction_prompt
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
+
+
+def test_after_audience_skips_reminder_when_message_type_summary(
+    _mocks,
+    group_with_initial_message_interaction,
+    group_prompt_factory,
+    control_prompts,
+):
+    """
+    If session.message_type == SUMMARY in AFTER_AUDIENCE, we must skip the reminder
+    and go straight to FOLLOWUP.
+    """
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+
+    # set up phase and message_type
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_AUDIENCE
+    session.message_type = GroupPromptMessageType.SUMMARY
+    session.save()
+
+    # ensure there's a followup prompt available
+    group_prompt_factory(
+        week=1,
+        message_type=GroupPromptMessageType.SUMMARY,
+        activity="<<FOLLOWUP PROMPT>>",
+        strategy_type=GroupStrategyPhase.FOLLOWUP,
+    )
+
+    trigger = session.transcripts.order_by("-created_at").first()
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+
+    # we should have sent a FOLLOWUP, not a REMINDER
+    assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
+    assert mock_send.call_count == 1
+    assert "<<FOLLOWUP PROMPT>>" in record.instruction_prompt
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP
+
+
+def test_after_followup_skips_summary_when_message_type_summary(
+    _mocks,
+    group_with_initial_message_interaction,
+):
+    """
+    If session.message_type == SUMMARY in AFTER_FOLLOWUP, we must skip SUMMARY
+    altogether and move to AFTER_SUMMARY with no message sent.
+    """
+    mock_send, _ = _mocks
+    group, session, record, _ = group_with_initial_message_interaction
+
+    # set up phase and message_type
+    session.current_strategy_phase = GroupStrategyPhase.AFTER_FOLLOWUP
+    session.message_type = GroupPromptMessageType.SUMMARY
+    session.save()
+
+    trigger = session.transcripts.order_by("-created_at").first()
+    take_action_on_group(record.run_id, trigger.id)
+
+    record.refresh_from_db()
+    session.refresh_from_db()
+
+    # no summary should be sent, and we should end up in AFTER_SUMMARY
+    assert record.status == GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
+    assert mock_send.call_count == 0
+    assert session.current_strategy_phase == GroupStrategyPhase.AFTER_SUMMARY

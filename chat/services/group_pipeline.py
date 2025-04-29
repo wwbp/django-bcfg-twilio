@@ -17,6 +17,7 @@ from ..models import (
     BaseChatTranscript,
     GroupChatTranscript,
     GroupPipelineRecord,
+    GroupPromptMessageType,
     GroupScheduledTaskAssociation,
     GroupSession,
     GroupStrategyPhase,
@@ -136,7 +137,7 @@ def _compute_and_validate_message_to_send(
     # validate response
     # ensure 320 characters or less
     record.validated_message = ensure_within_character_limit(response)
-    
+
     record.status = GroupPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
 
@@ -222,25 +223,35 @@ def take_action_on_group(run_id: str, user_chat_transcript_id: int):
         if _newer_user_messages_exist(record):
             return
 
+        def should_skip_reminder(session) -> bool:
+            return (
+                session.message_type == GroupPromptMessageType.SUMMARY
+                or session.all_participants_responded
+                or session.reminder_sent
+            )
+
+        def should_skip_summary(session) -> bool:
+            return (
+                session.message_type == GroupPromptMessageType.SUMMARY
+                or session.fewer_than_three_participants_responded
+                or session.summary_sent
+            )
+
         # figure out what action we should take
         next_strategy_phase: GroupStrategyPhase
         match session.current_strategy_phase:
             case GroupStrategyPhase.BEFORE_AUDIENCE:
                 next_strategy_phase = GroupStrategyPhase.AUDIENCE  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_AUDIENCE:
-                if session.all_participants_responded or session.reminder_sent:
-                    # skip reminder, go straight to followup
-                    next_strategy_phase = GroupStrategyPhase.FOLLOWUP  # type: ignore[assignment]
-                else:
-                    next_strategy_phase = GroupStrategyPhase.REMINDER  # type: ignore[assignment]
+                next_strategy_phase = (
+                    GroupStrategyPhase.FOLLOWUP if should_skip_reminder(session) else GroupStrategyPhase.REMINDER  # type: ignore[assignment]
+                )
             case GroupStrategyPhase.AFTER_REMINDER:
                 next_strategy_phase = GroupStrategyPhase.FOLLOWUP  # type: ignore[assignment]
             case GroupStrategyPhase.AFTER_FOLLOWUP:
-                if session.fewer_than_three_participants_responded or session.summary_sent:
-                    # nothing to do here, we move right to after summary
-                    next_strategy_phase = GroupStrategyPhase.AFTER_SUMMARY  # type: ignore[assignment]
-                else:
-                    next_strategy_phase = GroupStrategyPhase.SUMMARY  # type: ignore[assignment]
+                next_strategy_phase = (
+                    GroupStrategyPhase.AFTER_SUMMARY if should_skip_summary(session) else GroupStrategyPhase.SUMMARY  # type: ignore[assignment]
+                )
             case GroupStrategyPhase.AFTER_SUMMARY:
                 raise ValueError(
                     f"No messages to be sent in strategy phase {user_chat_transcript.session.current_strategy_phase}. "
