@@ -205,11 +205,13 @@ def _sanitize_name(name: str) -> str:
     return sanitized if sanitized else "default"
 
 
-def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
+def load_group_chat_history(session: GroupSession, user: User = None) -> tuple[list[dict], str]:
     """
     Loads the chat history for a group session.
     """
     transcripts = GroupChatTranscript.objects.filter(session=session).order_by("created_at")
+    if user:
+        transcripts = transcripts.filter(sender__in=[None, user])
     latest_user_transcript = transcripts.filter(role=BaseChatTranscript.Role.USER).last()
     assistant_name = (
         latest_user_transcript.sender.school_mascot if latest_user_transcript else BaseChatTranscript.Role.ASSISTANT
@@ -237,3 +239,6 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
         )
     latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
     return history, latest_sender_message
+
+
+

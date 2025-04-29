@@ -9,7 +9,11 @@ from django.utils import timezone
 
 from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
 from chat.services.completion import ensure_within_character_limit, generate_response
-from chat.services.group_crud import load_group_chat_history, load_instruction_prompt, ingest_request
+from chat.services.group_crud import (
+    load_group_chat_history,
+    load_instruction_prompt,
+    ingest_request,
+)
 from chat.services.moderation import moderate_message
 from chat.services.send import send_message_to_participant_group, send_moderation_message
 
@@ -22,6 +26,7 @@ from ..models import (
     GroupSession,
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
+    User,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,12 +130,12 @@ def _clear_existing_and_schedule_group_action(
 
 
 def _compute_and_validate_message_to_send(
-    record: GroupPipelineRecord, session: GroupSession, next_strategy_phase: GroupStrategyPhase
+    record: GroupPipelineRecord, session: GroupSession, next_strategy_phase: GroupStrategyPhase, user: User = None
 ):
     # generate response
     # # load instruction prompt given strategy
     instruction_prompt = load_instruction_prompt(session, next_strategy_phase)
-    chat_history, message = load_group_chat_history(session)
+    chat_history, message = load_group_chat_history(session, user)
     response = generate_response(chat_history, instruction_prompt, message)
     record.instruction_prompt = instruction_prompt
     record.response = response
@@ -161,6 +166,27 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
     )
+
+
+def _handle_followup_phase(record: GroupPipelineRecord, session: GroupSession):
+    """
+    Generate, validate, save and send one follow-up per participant who has already responded.
+    """
+    # Identify who’s already replied
+    responded_users = User.objects.filter(
+        id__in=(
+            GroupChatTranscript.objects.filter(session=session, role=BaseChatTranscript.Role.USER)
+            .values_list("sender", flat=True)
+            .distinct()
+        )
+    )
+
+    for user in responded_users:
+        # Generate a personalized prompt + history
+        _compute_and_validate_message_to_send(record, session, GroupStrategyPhase.FOLLOWUP, user)
+
+        # Save to transcript + send
+        _save_and_send_message(record, session, GroupStrategyPhase.FOLLOWUP)
 
 
 # =============================================================================
@@ -263,6 +289,9 @@ def take_action_on_group(run_id: str, user_chat_transcript_id: int):
             # nothing to do
             record.status = GroupPipelineRecord.StageStatus.PROCESS_NOTHING_TO_DO
             record.save()
+        elif next_strategy_phase == GroupStrategyPhase.FOLLOWUP:
+            # hand off to multi-message follow-up handler
+            _handle_followup_phase(record, session)
         else:
             _compute_and_validate_message_to_send(record, session, next_strategy_phase)
             if _newer_user_messages_exist(record):
