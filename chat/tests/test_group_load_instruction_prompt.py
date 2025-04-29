@@ -2,7 +2,6 @@ import pytest
 from chat.models import (
     ControlConfig,
     MessageType,
-    GroupPrompt,
     User,
     Group,
     GroupSession,
@@ -36,10 +35,10 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="System X")
 
     # matching Prompt via factory
-    prompt = group_prompt_factory(
-        week=5,
-        strategy_type=GroupStrategyPhase.AUDIENCE,
-        activity="Discuss your goals for this week.",
+
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT,
+        value="Discuss your goals for this week.",
     )
 
     result = load_instruction_prompt(session, GroupStrategyPhase.AUDIENCE)
@@ -47,7 +46,7 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
         system="System X",
         persona="Persona Y",
         assistant_name=user.school_mascot,
-        strategy=prompt.activity,
+        strategy="Discuss your goals for this week.",
     )
     assert result == expected
 
@@ -73,10 +72,10 @@ def test_load_group_instruction_prompt_raises_when_no_prompt(control_config_fact
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="P")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="S")
 
-    with pytest.raises(GroupPrompt.DoesNotExist) as exc:
+    with pytest.raises(ValueError) as exc:
         load_instruction_prompt(session, GroupStrategyPhase.AUDIENCE)
 
-    assert "Prompt matching query does not exist." in str(exc.value)
+    assert "GROUP_AUDIENCE_STRATEGY_PROMPT not found in ControlConfig" in str(exc.value)
 
 
 def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user(

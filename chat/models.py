@@ -17,6 +17,11 @@ class MessageType(models.TextChoices):
     SUMMARY = "summary", "Summary"
 
 
+class GroupPromptMessageType(models.TextChoices):
+    INITIAL = MessageType.INITIAL
+    SUMMARY = MessageType.SUMMARY
+
+
 class GroupStrategyPhase(models.TextChoices):
     # At any point when we're executing the group pipeline, we are in one of these phases
     # When in a SCHEDULED_ACTION state, we are only in a "before" or "after" phase
@@ -39,6 +44,11 @@ class GroupStrategyPhasesThatAllowConfig(models.TextChoices):
     AFTER_AUDIENCE = GroupStrategyPhase.AFTER_AUDIENCE
     AFTER_REMINDER = GroupStrategyPhase.AFTER_REMINDER
     AFTER_FOLLOWUP = GroupStrategyPhase.AFTER_FOLLOWUP
+
+
+class GroupStrategyPhasesThatAllowPrompts(models.TextChoices):
+    FOLLOWUP = GroupStrategyPhase.FOLLOWUP
+    SUMMARY = GroupStrategyPhase.SUMMARY
 
 
 class ModelBase(models.Model):
@@ -211,14 +221,19 @@ class IndividualPrompt(BasePrompt):
 
 
 class GroupPrompt(BasePrompt):
+    message_type = models.CharField(
+        max_length=20, choices=GroupPromptMessageType.choices, default=GroupPromptMessageType.INITIAL
+    )
     strategy_type = models.CharField(
-        max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.AUDIENCE
+        max_length=20,
+        choices=GroupStrategyPhasesThatAllowPrompts.choices,
+        default=GroupStrategyPhasesThatAllowPrompts.FOLLOWUP,
     )
 
     class Meta:
-        unique_together = ["week", "strategy_type"]
+        unique_together = ["week", "message_type", "strategy_type"]
         verbose_name_plural = "Weekly Group Prompts"
-        ordering = ["week", "strategy_type", "-created_at"]
+        ordering = ["week", "message_type", "strategy_type"]
 
 
 class ControlConfig(ModelBaseWithUuidId):
@@ -226,14 +241,18 @@ class ControlConfig(ModelBaseWithUuidId):
         PERSONA_PROMPT = "persona_prompt"
         SYSTEM_PROMPT = "system_prompt"
         GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
+        SCHOOL_SUMMARY_PROMPT = "school_summary_prompt"
+        GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
+        GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
+        GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
 
     @classmethod
-    def retrieve(cls, key: ControlConfigKey):
+    def retrieve(cls, key: ControlConfigKey | str):
         try:
-            return cls.objects.get(key=key).value
+            return cls.objects.get(key=str(key)).value
         except cls.DoesNotExist:
             logger.warning(f"ControlConfigKey key '{key}' requested but not found.")
             return None

@@ -18,7 +18,6 @@ from chat.models import (
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
     MessageType,
-    GroupPrompt,
     User,
 )
 from chat.serializers import GroupIncomingMessageSerializer
@@ -66,11 +65,7 @@ def _inbound_call(control_config_factory):
         },
     }
 
-    GroupPrompt.objects.create(
-        week=inbound_payload["context"]["week_number"],
-        strategy_type=GroupStrategyPhase.AUDIENCE,
-        activity="base activity",
-    )
+    control_config_factory(key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT, value="base activity")
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
