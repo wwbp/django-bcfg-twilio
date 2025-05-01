@@ -3,6 +3,7 @@ import re
 import asyncio
 
 from django.conf import settings
+from chat.models import BasePipelineRecord
 from openai import OpenAI
 
 from kani import Kani, ChatMessage
@@ -42,7 +43,8 @@ def chat_completion(instructions: str) -> str:
     return response or ""
 
 
-def ensure_within_character_limit(current_text: str) -> str:
+def ensure_within_character_limit(record: BasePipelineRecord) -> str:
+    current_text = record.response
     if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
         return current_text
     for _ in range(2):
@@ -53,6 +55,7 @@ def ensure_within_character_limit(current_text: str) -> str:
             )
             shortened = chat_completion(instructions)
             current_text = shortened
+            record.shorten_count += 1
 
     if len(current_text) > MAX_RESPONSE_CHARACTER_LENGTH:
         sentences = re.split(r"(?<=\.)\s+", current_text)

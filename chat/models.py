@@ -1,3 +1,4 @@
+from datetime import timedelta
 import logging
 import uuid
 from django.db import models
@@ -302,6 +303,8 @@ class BasePipelineRecord(ModelBase):
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    latency = models.DurationField(default=timedelta(0))
+    shorten_count = models.IntegerField(default=0)
 
     class Meta:
         abstract = True
