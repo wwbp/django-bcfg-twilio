@@ -1,5 +1,6 @@
 import logging
 from celery import shared_task
+from django.utils import timezone
 from chat.serializers import IndividualIncomingMessage, IndividualIncomingMessageSerializer
 from .moderation import moderate_message
 from .individual_crud import (
@@ -88,8 +89,7 @@ def individual_validate(record: IndividualPipelineRecord):
     """
     Stage 4: Validate the outgoing response before sending.
     """
-    response = record.response
-    record.validated_message = ensure_within_character_limit(response)
+    record.validated_message = ensure_within_character_limit(record)
     record.status = IndividualPipelineRecord.StageStatus.VALIDATE_PASSED
     record.save()
     logger.info(f"Individual validate pipeline complete for participant {record.user.id}, run_id {record.run_id}")
@@ -108,6 +108,7 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
         send_message_to_participant(participant_id, response)
         # Update the pipeline record for the sending stage
         record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
+    record.latency = timezone.now() - record.created_at
     record.save()
     logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
 

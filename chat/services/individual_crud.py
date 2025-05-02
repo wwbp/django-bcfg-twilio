@@ -197,6 +197,7 @@ INSTRUCTION_PROMPT_TEMPLATE = (
     "System Prompt: {system}\n\n"
     "Assigned Persona: {persona}\n\n"
     "Assistant Name: {assistant_name}\n\n"
+    "User's School: {school_name}\n\n"
     "Activity: {activity}\n\n"
 )
 
@@ -208,6 +209,7 @@ def load_instruction_prompt_for_direct_messaging(user: User):
     week = session.week_number
     message_type = session.message_type
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
+    school_name = user.school_name
 
     # Load the most recent controls record
     persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT)  # type: ignore[arg-type]
@@ -226,6 +228,7 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         system=system,
         persona=persona,
         assistant_name=assistant_name,
+        school_name=school_name,
         activity=activity,
     )
     return instruction_prompt
@@ -237,6 +240,7 @@ def load_instruction_prompt(user: User):
     week = session.week_number
     message_type = session.message_type
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
+    school_name = user.school_name
 
     # Load the most recent controls record
     persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
@@ -255,6 +259,7 @@ def load_instruction_prompt(user: User):
         system=system,
         persona=persona,
         assistant_name=assistant_name,
+        school_name=school_name,
         activity=activity,
     )
     return instruction_prompt

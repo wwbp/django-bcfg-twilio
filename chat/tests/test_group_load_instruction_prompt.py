@@ -46,6 +46,7 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
         system="System X",
         persona="Persona Y",
         assistant_name=user.school_mascot,
+        school_name=user.school_name,
         strategy="Discuss your goals for this week.",
     )
     assert result == expected
@@ -106,6 +107,7 @@ def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user
         system="Sys1",
         persona="Pers1",
         assistant_name=BaseChatTranscript.Role.ASSISTANT,
+        school_name="",
         strategy="Reflect on your wins.",
     )
     assert result == expected

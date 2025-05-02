@@ -141,7 +141,7 @@ def _compute_and_validate_message_to_send(
     record.response = response
     # validate response
     # ensure 320 characters or less
-    record.validated_message = ensure_within_character_limit(response)
+    record.validated_message = ensure_within_character_limit(record)
 
     record.status = GroupPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
@@ -162,7 +162,8 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
     if not record.is_test:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
-        record.save()
+    record.latency = timezone.now() - record.created_at
+    record.save()
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
     )
