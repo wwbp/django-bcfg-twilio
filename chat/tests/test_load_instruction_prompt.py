@@ -13,7 +13,7 @@ def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_fa
     the function should use the Prompt's activity.
     """
     # Create a user with a valid week and a non-empty school mascot.
-    user = User.objects.create(school_mascot="Hawks")
+    user = User.objects.create(school_mascot="Hawks", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=3,
@@ -40,6 +40,7 @@ def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_fa
         system=system.value,
         persona=persona.value,
         assistant_name=user.school_mascot,
+        school_name=user.school_name,
         activity=prompt.activity,
     )
     assert result == expected
@@ -50,7 +51,7 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
     When a user exists and a Prompt for the user's session is unavailable,
     the function should raise a DoesNotExist.
     """
-    user = User.objects.create(school_mascot="Hawks")
+    user = User.objects.create(school_mascot="Hawks", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=3,
@@ -74,7 +75,7 @@ def test_load_instruction_prompt_with_existing_user_no_prompt(control_config_fac
     When a user exists but there is no matching Prompt for their week,
     the function should raise DoesNotExist.
     """
-    user = User.objects.create(school_mascot="Lions")
+    user = User.objects.create(school_mascot="Lions", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=2,
@@ -92,7 +93,7 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
     When a user has an empty school mascot, the function should fall back to
     the default assistant name ("Assistant") in the prompt.
     """
-    user = User.objects.create(school_mascot="")
+    user = User.objects.create(school_mascot="", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=1,
@@ -117,6 +118,7 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
         system=system.value,
         persona=persona.value,
         assistant_name="Assistant",
+        school_name=user.school_name,
         activity=prompt.activity,
     )
     assert result == expected
@@ -130,7 +132,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_pro
     the function should use the GROUP_DIRECT_MESSAGE_PERSONA_PROMPT config.
     """
     # Create a user with a valid week and a non-empty school mascot.
-    user = User.objects.create(school_mascot="Falcons")
+    user = User.objects.create(school_mascot="Falcons", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=5,
@@ -157,6 +159,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_pro
         system=system.value,
         persona=persona.value,
         assistant_name=user.school_mascot,
+        school_name=user.school_name,
         activity=prompt.activity,
     )
     assert result == expected
@@ -166,7 +169,7 @@ def test_load_instruction_prompt_for_direct_messaging_missing_control_config(con
     """
     When persona or system config is missing, the function should raise ValueError.
     """
-    user = User.objects.create(school_mascot="Falcons")
+    user = User.objects.create(school_mascot="Falcons", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=5,
@@ -188,7 +191,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_no_prompt(control_con
     """
     When there is no IndividualPrompt for the user's session, the function should raise DoesNotExist.
     """
-    user = User.objects.create(school_mascot="Falcons")
+    user = User.objects.create(school_mascot="Falcons", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=6,
@@ -213,7 +216,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_empty_school_mascot(c
     When a user has an empty school mascot, the function should fall back to
     the default assistant name ("Assistant") in the direct messaging prompt.
     """
-    user = User.objects.create(school_mascot="")
+    user = User.objects.create(school_mascot="", school_name="Nest")
     session = IndividualSession.objects.create(
         user=user,
         week_number=2,
@@ -238,6 +241,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_empty_school_mascot(c
         system=system.value,
         persona=persona.value,
         assistant_name="Assistant",
+        school_name=user.school_name,
         activity=prompt.activity,
     )
     assert result == expected

@@ -147,6 +147,7 @@ GROUP_INSTRUCTION_PROMPT_TEMPLATE = (
     "System Prompt: {system}\n\n"
     "Assigned Persona: {persona}\n\n"
     "Assistant Name: {assistant_name}\n\n"
+    "Group's School: {school_name}\n\n"
     "Strategy: {strategy}\n\n"
 )
 
@@ -155,6 +156,7 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
     week = session.week_number
     user = User.objects.filter(group=session.group).first()
     assistant_name = user.school_mascot if user else BaseChatTranscript.Role.ASSISTANT
+    school_name = user.school_name if user else ""
 
     # We use a different persona prompt for the strategy phase
     if strategy_phase == GroupStrategyPhase.SUMMARY:
@@ -191,6 +193,7 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
         system=system,
         persona=persona,
         assistant_name=assistant_name,
+        school_name=school_name,
         strategy=activity,
     )
     return instruction_prompt
