@@ -6,6 +6,7 @@ from django.db.models.query import QuerySet
 
 from chat.services.summaries import handle_summaries_selected_change
 from .models import (
+    BaseChatTranscript,
     ControlConfig,
     GroupPrompt,
     GroupSession,
@@ -23,6 +24,7 @@ from .models import (
 from admin.models import AuthGroupName
 from simple_history.admin import SimpleHistoryAdmin
 from import_export.admin import ImportExportModelAdmin
+from django.utils.html import format_html
 
 log = logging.getLogger(__name__)
 
@@ -96,8 +98,15 @@ class IndividualChatTranscriptInline(ReadonlyTabularInline):
 
 
 class GroupChatTranscriptInline(ReadonlyTabularInline):
+    @admin.display(description="Sender")
+    def combined_sender(self, obj):
+        if obj.role == BaseChatTranscript.Role.USER:
+            return format_html('<a href="/admin/chat/user/{}">{}</a>', obj.sender.id, obj.sender)
+        else:
+            return obj.get_role_display()
+
     model = GroupChatTranscript
-    fields = ("sender", "role", "content", "moderation_status", "assistant_strategy_phase", "created_at")
+    fields = ("combined_sender", "assistant_strategy_phase", "content", "moderation_status", "created_at")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -113,7 +122,7 @@ class UserAdmin(ReadonlyAdmin):
 
 @admin.register(Group)
 class GroupAdmin(ReadonlyAdmin):
-    list_display = ("id", "get_user_count", "is_test")
+    list_display = ("__str__", "id", "get_user_count", "is_test")
     search_fields = ("id",)
     list_filter = ("is_test",)
 
@@ -133,14 +142,19 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
 
 @admin.register(GroupChatTranscript)
 class GroupChatTranscriptAdmin(ReadonlyAdmin):
+    @admin.display(description="Sender")
+    def combined_sender(self, obj):
+        if obj.role == BaseChatTranscript.Role.USER:
+            return format_html('<a href="/admin/chat/user/{}">{}</a>', obj.sender.id, obj.sender)
+        else:
+            return obj.get_role_display()
+
     list_display = (
         "session",
-        "session__group",
-        "sender",
-        "role",
+        "combined_sender",
+        "assistant_strategy_phase",
         "content",
         "moderation_status",
-        "assistant_strategy_phase",
         "created_at",
     )
     search_fields = ("content",)

@@ -81,8 +81,8 @@ class Group(ModelBase):
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        member_count = self.users.count()
-        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+        result = ", ".join([u.name for u in self.users.all()])  # type: ignore
+        return result if result else self.id
 
     class Meta:
         ordering = ["-created_at"]
@@ -199,7 +199,7 @@ class IndividualChatTranscript(BaseChatTranscript):
 
 class GroupChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
