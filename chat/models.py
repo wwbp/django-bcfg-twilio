@@ -115,7 +115,12 @@ class BaseSession(ModelBase):
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("created_at").first().content
+        """
+        Returns the content of the very first transcript for this session,
+        or None if no transcripts exist.
+        """
+        first = self.transcripts.order_by("created_at").values_list("content", flat=True).first()
+        return first
 
     class Meta:
         abstract = True

@@ -26,7 +26,6 @@ from .models import (
 from admin.models import AuthGroupName
 from simple_history.admin import SimpleHistoryAdmin
 from import_export.admin import ImportExportModelAdmin
-from django.utils.html import format_html
 
 log = logging.getLogger(__name__)
 
