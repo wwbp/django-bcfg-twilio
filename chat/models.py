@@ -90,7 +90,7 @@ class Group(ModelBase):
 
 class User(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="users", null=True, blank=True)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="users", null=True, blank=True)
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
@@ -123,7 +123,7 @@ class BaseSession(ModelBase):
 
 
 class IndividualSession(BaseSession):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sessions")
 
     class Meta(BaseSession.Meta):
         unique_together = ["user", "week_number", "message_type"]
@@ -133,7 +133,7 @@ class IndividualSession(BaseSession):
 
 
 class GroupSession(BaseSession):
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="sessions")
     current_strategy_phase = models.CharField(
         max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.BEFORE_AUDIENCE
     )
@@ -194,12 +194,12 @@ class BaseChatTranscript(ModelBase):
 
 
 class IndividualChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
+    session = models.ForeignKey(IndividualSession, on_delete=models.CASCADE, related_name="transcripts")
 
 
 class GroupChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
-    sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
+    session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
