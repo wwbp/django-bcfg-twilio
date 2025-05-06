@@ -199,7 +199,7 @@ class IndividualChatTranscript(BaseChatTranscript):
 
 class GroupChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
