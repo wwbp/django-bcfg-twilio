@@ -113,7 +113,7 @@ class UserAdmin(ReadonlyAdmin):
 
 @admin.register(Group)
 class GroupAdmin(ReadonlyAdmin):
-    list_display = ("id", "get_user_count", "is_test")
+    list_display = ("__str__", "id", "get_user_count", "is_test")
     search_fields = ("id",)
     list_filter = ("is_test",)
 

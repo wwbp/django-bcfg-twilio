@@ -81,8 +81,8 @@ class Group(ModelBase):
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        member_count = self.users.count()
-        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+        result = ", ".join([u.name for u in self.users.all()])  # type: ignore
+        return result if result else self.id
 
     class Meta:
         ordering = ["-created_at"]
