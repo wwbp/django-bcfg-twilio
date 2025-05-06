@@ -3,6 +3,8 @@ from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.query import QuerySet
+from django.urls import reverse
+from django.utils.html import format_html
 
 from chat.services.summaries import handle_summaries_selected_change
 from .models import (
@@ -24,7 +26,6 @@ from .models import (
 from admin.models import AuthGroupName
 from simple_history.admin import SimpleHistoryAdmin
 from import_export.admin import ImportExportModelAdmin
-from django.utils.html import format_html
 
 log = logging.getLogger(__name__)
 
@@ -133,11 +134,47 @@ class GroupAdmin(ReadonlyAdmin):
     inlines = [UsersInline, GroupSessionsInline]
 
 
+class IndividualPipelineRecordInline(ReadonlyTabularInline):
+    model = IndividualPipelineRecord
+    fields = ("run_id", "status", "instruction_prompt", "updated_at")
+    readonly_fields = fields
+    ordering = ("-created_at",)
+    extra = 0
+    max_num = 1
+    can_delete = False
+
+
+class GroupPipelineRecordInline(ReadonlyTabularInline):
+    model = GroupPipelineRecord
+    fields = ("run_id", "status", "instruction_prompt", "updated_at")
+    readonly_fields = fields
+    ordering = ("-created_at",)
+    extra = 0
+    max_num = 1
+    can_delete = False
+
+
 @admin.register(IndividualChatTranscript)
 class IndividualChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("session", "session__user", "role", "content", "moderation_status", "created_at")
+    list_display = (
+        "session",
+        "session__user",
+        "role",
+        "content",
+        "moderation_status",
+        "created_at",
+        "pipeline_record_link",
+    )
     search_fields = ("content",)
     list_filter = ("role",)
+    inlines = [IndividualPipelineRecordInline]
+
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_individualpipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">{}</a>', url, rec.run_id)
 
 
 @admin.register(GroupChatTranscript)
@@ -156,9 +193,18 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
         "content",
         "moderation_status",
         "created_at",
+        "pipeline_record_link",
     )
     search_fields = ("content",)
     list_filter = ("role",)
+    inlines = [GroupPipelineRecordInline]
+
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">{}</a>', url, rec.run_id)
 
 
 @admin.register(IndividualPrompt)
@@ -237,6 +283,7 @@ class GroupStrategyPhaseConfigAdmin(EditableAdmin):
 class IndividualPipelineRecordAdmin(ReadonlyAdmin):
     list_display = (
         "user",
+        "transcript",
         "status",
         "is_for_group_direct_messaging",
         "message",
@@ -250,7 +297,7 @@ class IndividualPipelineRecordAdmin(ReadonlyAdmin):
 
 @admin.register(GroupPipelineRecord)
 class GroupPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
+    list_display = ("user", "transcript", "status", "message", "validated_message", "error_log", "updated_at")
     search_fields = ("message", "validated_message", "error_log")
     list_filter = ("status",)
 

@@ -177,14 +177,15 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
         if not activity:
             raise ValueError("GROUP_REMINDER_STRATEGY_PROMPT not found in ControlConfig.")
     else:
+        # Treat initial and reminder as the same for the purpose of loading the prompt
+        message_type = MessageType.INITIAL if session.message_type == MessageType.REMINDER else session.message_type
         try:
             activity = GroupPrompt.objects.get(
-                week=week, message_type=session.message_type, strategy_type=strategy_phase
+                week=week, message_type=message_type, strategy_type=strategy_phase
             ).activity
         except GroupPrompt.DoesNotExist as err:
             logger.error(
-                f"Prompt not found for week {week}, message_type {session.message_type} "
-                f"and type {strategy_phase}: {err}"
+                f"Prompt not found for week {week}, message_type {message_type} and type {strategy_phase}: {err}"
             )
             raise err
 
@@ -242,6 +243,3 @@ def load_group_chat_history(session: GroupSession, user: User = None) -> tuple[l
         )
     latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
     return history, latest_sender_message
-
-
-

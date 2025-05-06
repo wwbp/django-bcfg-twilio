@@ -59,7 +59,7 @@ def ingest_request(participant_id: str, individual_incoming_message: IndividualI
                     logger.error(
                         f"Got new initial_message for existing individual session {session}. "
                         f"New message: '{individual_incoming_message.context.initial_message}'."
-                        +" Not updating existing initial_message."
+                        + " Not updating existing initial_message."
                     )
 
         # in either case, we need to add the user message to the transcript
@@ -187,8 +187,11 @@ def load_individual_chat_history(user: User):
 
 def save_assistant_response(user: User, response: str, session: IndividualSession):
     logger.info(f"Saving assistant response for participant: {user.id}")
-    IndividualChatTranscript.objects.create(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response)
+    assistant_chat_transcript = IndividualChatTranscript.objects.create(
+        session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response
+    )
     logger.info("Assistant Response saved successfully.")
+    return assistant_chat_transcript
 
 
 INSTRUCTION_PROMPT_TEMPLATE = (

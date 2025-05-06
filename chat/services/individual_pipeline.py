@@ -102,7 +102,8 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
     participant_id = record.user.id
     response = record.validated_message
     # save the assistant response to the database
-    save_assistant_response(record.user, record.validated_message, session)
+    assistant_chat_transcript = save_assistant_response(record.user, record.validated_message, session)
+    record.transcript = assistant_chat_transcript
     # Send the message via the external endpoint
     if not record.user.is_test:
         send_message_to_participant(participant_id, response)

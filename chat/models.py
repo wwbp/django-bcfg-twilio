@@ -115,7 +115,12 @@ class BaseSession(ModelBase):
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("created_at").first().content
+        """
+        Returns the content of the very first transcript for this session,
+        or None if no transcripts exist.
+        """
+        first = self.transcripts.order_by("created_at").values_list("content", flat=True).first()
+        return first
 
     class Meta:
         abstract = True
@@ -324,6 +329,9 @@ class IndividualPipelineRecord(BasePipelineRecord):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        IndividualChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     # note that we could use a derived property for this, but we would lose history if the user
     # is removed from the group
@@ -348,6 +356,9 @@ class GroupPipelineRecord(BasePipelineRecord):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        GroupChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     @property
     def is_test(self):

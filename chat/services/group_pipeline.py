@@ -153,7 +153,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
     """
     group_id = record.group.id
     response = record.validated_message
-    GroupChatTranscript.objects.create(
+    record.transcript = GroupChatTranscript.objects.create(
         session=session,
         role=BaseChatTranscript.Role.ASSISTANT,
         content=response,
