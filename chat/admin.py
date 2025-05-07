@@ -106,8 +106,23 @@ class GroupChatTranscriptInline(ReadonlyTabularInline):
         else:
             return obj.get_role_display()
 
+    @admin.display(description="Pipeline Details")
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">Link</a>', url)
+
     model = GroupChatTranscript
-    fields = ("combined_sender", "assistant_strategy_phase", "content", "moderation_status", "created_at")
+    fields = (
+        "combined_sender",
+        "assistant_strategy_phase",
+        "content",
+        "pipeline_record_link",
+        "moderation_status",
+        "created_at",
+    )
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -186,6 +201,14 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
         else:
             return obj.get_role_display()
 
+    @admin.display(description="Pipeline Details")
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">Link</a>', url)
+
     list_display = (
         "session",
         "combined_sender",
@@ -198,13 +221,6 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
     search_fields = ("content",)
     list_filter = ("role",)
     inlines = [GroupPipelineRecordInline]
-
-    def pipeline_record_link(self, obj):
-        rec = obj.pipeline_records.first()
-        if not rec:
-            return "-"
-        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
-        return format_html('<a href="{}">{}</a>', url, rec.run_id)
 
 
 @admin.register(IndividualPrompt)
