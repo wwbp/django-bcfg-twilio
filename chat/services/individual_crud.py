@@ -8,6 +8,7 @@ from ..models import (
     BaseChatTranscript,
     GroupChatTranscript,
     GroupSession,
+    IndividualPipelineRecord,
     IndividualSession,
     User,
     IndividualChatTranscript,
@@ -17,6 +18,24 @@ from ..models import (
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
+
+def format_chat_history(chat_history, delimiter="\n"):
+    """
+    Turn a list of message dicts into one human-readable string.
+
+    Each message becomes:
+        [role | name] : content
+    and messages are joined by the given delimiter.
+    """
+    parts = []
+    for msg in chat_history:
+        role = msg.get("role", "")
+        name = msg.get("name", "")
+        # Build “[role | name]” (or just “[role]” if name is blank)
+        header = f"[{role}" + (f" | {name}]" if name else "]")
+        content = msg.get("content", "")
+        parts.append(f"{header} : {content}")
+    return delimiter.join(parts)
 
 
 def ingest_request(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
@@ -185,10 +204,17 @@ def load_individual_chat_history(user: User):
     return history, latest_user_message_content
 
 
-def save_assistant_response(user: User, response: str, session: IndividualSession):
-    logger.info(f"Saving assistant response for participant: {user.id}")
+def save_assistant_response(record: IndividualPipelineRecord, session: IndividualSession):
+    logger.info(f"Saving assistant response for participant: {record.user.id}")
     assistant_chat_transcript = IndividualChatTranscript.objects.create(
-        session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response
+        session=session, 
+        role=BaseChatTranscript.Role.ASSISTANT, 
+        content=record.validated_message, 
+        instruction_prompt=record.instruction_prompt,
+        chat_history=record.chat_history,
+        latency=record.latency,
+        shorten_count=record.shorten_count,
+        user_message=record.message,
     )
     logger.info("Assistant Response saved successfully.")
     return assistant_chat_transcript

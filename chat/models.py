@@ -192,6 +192,11 @@ class BaseChatTranscript(ModelBase):
     moderation_status = models.CharField(
         max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
     )
+    instruction_prompt = models.TextField(blank=True, null=True)
+    chat_history = models.TextField(blank=True, null=True)
+    latency = models.DurationField(default=timedelta(0))
+    shorten_count = models.IntegerField(default=0)
+    user_message = models.TextField(blank=True, null=True)
 
     class Meta:
         abstract = True
@@ -310,6 +315,7 @@ class BasePipelineRecord(ModelBase):
     updated_at = models.DateTimeField(auto_now=True)
     latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
+    chat_history = models.TextField(blank=True, null=True)
 
     class Meta:
         abstract = True
