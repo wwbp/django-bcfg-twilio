@@ -194,8 +194,8 @@ class BaseChatTranscript(ModelBase):
     )
     instruction_prompt = models.TextField(blank=True, null=True)
     chat_history = models.TextField(blank=True, null=True)
-    latency = models.DurationField(default=timedelta(0))
-    shorten_count = models.IntegerField(default=0)
+    latency = models.DurationField(default=timedelta(0), null=True)
+    shorten_count = models.IntegerField(default=0, null=True)
     user_message = models.TextField(blank=True, null=True)
 
     class Meta:
