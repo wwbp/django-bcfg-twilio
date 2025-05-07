@@ -188,15 +188,20 @@ class BaseChatTranscript(ModelBase):
         NOT_FLAGGED = "not_flagged"
 
     role = models.CharField(max_length=255, choices=Role.choices)
-    content = models.TextField()
+    content = models.TextField(help_text="The content of the message sent by the Sender")
     moderation_status = models.CharField(
         max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
     )
     instruction_prompt = models.TextField(blank=True, null=True)
     chat_history = models.TextField(blank=True, null=True)
-    latency = models.DurationField(default=timedelta(0))
-    shorten_count = models.IntegerField(default=0)
-    user_message = models.TextField(blank=True, null=True)
+    latency = models.DurationField(default=timedelta(0), null=True)
+    shorten_count = models.IntegerField(default=0, null=True)
+    user_message = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Message from Participant",
+        help_text="For chatbot responses, the message from a Participant which triggered the response",
+    )
 
     class Meta:
         abstract = True
