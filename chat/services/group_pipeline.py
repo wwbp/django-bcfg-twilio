@@ -3,6 +3,7 @@ import json
 import logging
 import random
 from celery import shared_task
+from chat.services.individual_crud import format_chat_history
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction
 from django.utils import timezone
@@ -136,8 +137,11 @@ def _compute_and_validate_message_to_send(
     # # load instruction prompt given strategy
     instruction_prompt = load_instruction_prompt(session, next_strategy_phase)
     chat_history, message = load_group_chat_history(session, user)
+    start_timer = timezone.now()
     response = generate_response(chat_history, instruction_prompt, message)
+    record.latency = timezone.now()-start_timer
     record.instruction_prompt = instruction_prompt
+    record.chat_history = format_chat_history(chat_history)
     record.response = response
     # validate response
     # ensure 320 characters or less
@@ -156,13 +160,17 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
     record.transcript = GroupChatTranscript.objects.create(
         session=session,
         role=BaseChatTranscript.Role.ASSISTANT,
-        content=response,
+        content=response, 
+        instruction_prompt=record.instruction_prompt,
+        chat_history=record.chat_history,
+        latency=record.latency,
+        shorten_count=record.shorten_count,
+        user_message=record.message,
         assistant_strategy_phase=next_strategy_phase,
     )
     if not record.is_test:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
-    record.latency = timezone.now() - record.created_at
     record.save()
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
