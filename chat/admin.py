@@ -223,9 +223,39 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
         "created_at",
         "pipeline_record_link",
     )
+
+    fieldsets = (
+        (
+            "Basic Information",
+            {
+                "fields": (
+                    "role",
+                    "sender",
+                    "content",
+                    "user_message",
+                    "session",
+                    "moderation_status",
+                    "created_at",
+                ),
+            },
+        ),
+        (
+            "Prompt Information",
+            {
+                "fields": (
+                    "assistant_strategy_phase",
+                    "latency",
+                    "chat_history",
+                    "instruction_prompt",
+                    "pipeline_record_link",
+                ),
+            },
+        ),
+    )
+
     search_fields = ("content",)
     list_filter = ("role",)
-    inlines = [GroupPipelineRecordInline]
+    # inlines = [GroupPipelineRecordInline]
 
 
 @admin.register(IndividualPrompt)
