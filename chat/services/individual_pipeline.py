@@ -80,6 +80,7 @@ def individual_process(record: IndividualPipelineRecord):
 
     start_timer = timezone.now()
     response = generate_response(chat_history, instructions, message)
+    record.processed_message = message
     record.latency = timezone.now()-start_timer
     record.instruction_prompt = instructions
     record.chat_history = format_chat_history(chat_history)

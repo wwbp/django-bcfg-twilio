@@ -27,7 +27,7 @@ def test_only_initial_message_and_user_message_excluded(
         created_at=now,
         assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
     )
-    group_chat_transcript_factory(
+    latest_transcript = group_chat_transcript_factory(
         session=session,
         role=BaseChatTranscript.Role.USER,
         content="Hi group",
@@ -45,7 +45,7 @@ def test_only_initial_message_and_user_message_excluded(
             "name": "Eagle",
         }
     ]
-    assert latest == "Hi group"
+    assert latest == f"[Sender: {latest_transcript.sender.name}]: " + "Hi group"
 
 
 def test_history_with_moderation_flagged(
@@ -71,7 +71,9 @@ def test_history_with_moderation_flagged(
         moderation_status=BaseChatTranscript.ModerationStatus.FLAGGED,
     )
     group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content="Reply1")
-    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.USER, content="Final", sender=u2)
+    latest_transcript = group_chat_transcript_factory(
+        session=session, role=BaseChatTranscript.Role.USER, content="Final", sender=u2
+    )
 
     history, latest = load_group_chat_history(session)
 
@@ -84,4 +86,4 @@ def test_history_with_moderation_flagged(
 
     assert history[1]["name"] == "Alce-1"
     assert history[2]["name"] == "Eagle"
-    assert latest == "Final"
+    assert latest == f"[Sender: {latest_transcript.sender.name}]: " + "Final"

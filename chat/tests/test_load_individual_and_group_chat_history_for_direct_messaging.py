@@ -84,7 +84,7 @@ def test_individual_history_only(user_factory, individual_session_factory):
         created_at=now + timedelta(seconds=20),
     )
     # latest user message (should be returned as latest only)
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session2,
         role=BaseChatTranscript.Role.USER,
         content="Latest",
@@ -92,7 +92,7 @@ def test_individual_history_only(user_factory, individual_session_factory):
     )
 
     history, latest_message = load_individual_and_group_chat_history_for_direct_messaging(user)
-    assert latest_message == "Latest"
+    assert latest_message == f"[Sender: {latest_transcript.session.user.name}]: " + "Latest"
     expected = [
         {
             "role": BaseChatTranscript.Role.USER,
@@ -156,7 +156,7 @@ def test_sanitization_combined(user_factory, individual_session_factory, group_c
         created_at=now + timedelta(seconds=3),
     )
     # individual latest user transcript (should be returned as latest only)
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session1,
         role=BaseChatTranscript.Role.USER,
         content="User latest",
@@ -164,7 +164,7 @@ def test_sanitization_combined(user_factory, individual_session_factory, group_c
     )
 
     history, latest_message = load_individual_and_group_chat_history_for_direct_messaging(user)
-    assert latest_message == "User latest"
+    assert latest_message == f"[Sender: {latest_transcript.session.user.name}]: " + "User latest"
     expected = [
         {
             "role": BaseChatTranscript.Role.USER,

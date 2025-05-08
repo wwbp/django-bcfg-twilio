@@ -239,5 +239,9 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
                 "name": sender_name,
             }
         )
-    latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
+    latest_sender_message = (
+        f"[Sender: {latest_user_transcript.sender.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
     return history, latest_sender_message
