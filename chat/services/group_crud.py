@@ -235,8 +235,8 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
         history.append(
             {
                 "role": t.role,
-                "content": t.content,
-                "sender_name": sender_name,
+                "content": f"[Timestamp: {t.created_at}| Strategy Type: {t.assistant_strategy_phase}]: " + t.content,
+                "name": sender_name,
             }
         )
     latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""

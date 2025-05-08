@@ -19,6 +19,7 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+
 def format_chat_history(chat_history, delimiter="\n"):
     """
     Turn a list of message dicts into one human-readable string.
@@ -31,8 +32,7 @@ def format_chat_history(chat_history, delimiter="\n"):
     for msg in chat_history:
         role = msg.get("role", "")
         name = msg.get("name", "")
-        # Build “[role | name]” (or just “[role]” if name is blank)
-        header = f"[{role}" + (f" | {name}]" if name else "]")
+        header = f"[{role}" + (f" | {name}]")
         content = msg.get("content", "")
         parts.append(f"{header} : {content}")
     return delimiter.join(parts)
@@ -120,7 +120,8 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
             history.append(
                 {
                     "role": t.role,
-                    "content": t.content,
+                    "content": f"[Timestamp: {t.created_at}| Strategy Type: {t.assistant_strategy_phase}]: "
+                    + t.content,
                     "name": sender_name,
                 }
             )
@@ -149,7 +150,7 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         history.append(
             {
                 "role": t.role,
-                "content": t.content,
+                "content": f"[Timestamp: {t.created_at}| Message Type: {t.session.message_type}]: " + t.content,
                 "name": sender_name,
             }
         )
@@ -193,23 +194,22 @@ def load_individual_chat_history(user: User):
         history.append(
             {
                 "role": t.role,
-                "content": t.content,
+                "content": f"[Timestamp: {t.created_at}| Message Type: {t.session.message_type}]: " + t.content,
                 "name": sender_name,
             }
         )
 
     # Extract only the message content for the latest user message
     latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
-
     return history, latest_user_message_content
 
 
 def save_assistant_response(record: IndividualPipelineRecord, session: IndividualSession):
     logger.info(f"Saving assistant response for participant: {record.user.id}")
     assistant_chat_transcript = IndividualChatTranscript.objects.create(
-        session=session, 
-        role=BaseChatTranscript.Role.ASSISTANT, 
-        content=record.validated_message, 
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content=record.validated_message,
         instruction_prompt=record.instruction_prompt,
         chat_history=record.chat_history,
         latency=record.latency,
