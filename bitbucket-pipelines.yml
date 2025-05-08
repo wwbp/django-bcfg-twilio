@@ -78,13 +78,13 @@ pipelines:
     - parallel:
         - <<: *testStep
         - <<: *lintStep
-        # - <<: *securityStep
+        - <<: *securityStep
   branches:
     develop:
       - parallel:
           - <<: *testStep
           - <<: *lintStep
-          # - <<: *securityStep
+          - <<: *securityStep
       - parallel:
           - step:
               <<: *deployStepCommon
@@ -109,7 +109,7 @@ pipelines:
       - parallel:
           - <<: *testStep
           - <<: *lintStep
-          # - <<: *securityStep
+          - <<: *securityStep
       - parallel:
           - step:
               <<: *deployStepCommon
@@ -134,7 +134,7 @@ pipelines:
       - parallel:
           - <<: *testStep
           - <<: *lintStep
-          # - <<: *securityStep
+          - <<: *securityStep
       - parallel:
           - step:
               <<: *deployStepCommon
