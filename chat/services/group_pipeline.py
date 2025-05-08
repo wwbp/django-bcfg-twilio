@@ -134,7 +134,6 @@ def _compute_and_validate_message_to_send(
     chat_history, message = load_group_chat_history(session)
     start_timer = timezone.now()
     response = generate_response(chat_history, instruction_prompt, message)
-    record.processed_message = message
     record.latency = timezone.now() - start_timer
     record.instruction_prompt = instruction_prompt
     record.chat_history = format_chat_history(chat_history)
@@ -161,7 +160,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         chat_history=record.chat_history,
         latency=record.latency,
         shorten_count=record.shorten_count,
-        user_message=record.processed_message,
+        user_message=record.message,
         assistant_strategy_phase=next_strategy_phase,
     )
     if not record.is_test:

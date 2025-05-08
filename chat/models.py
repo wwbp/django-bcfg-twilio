@@ -313,7 +313,6 @@ class Summary(ModelBase):
 class BasePipelineRecord(ModelBase):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     message = models.TextField(blank=True, null=True)
-    processed_message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
     instruction_prompt = models.TextField(blank=True, null=True)
     validated_message = models.TextField(blank=True, null=True)

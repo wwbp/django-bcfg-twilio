@@ -155,11 +155,7 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
             }
         )
 
-    latest_user_message_content = (
-        f"[Sender: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
-        if latest_user_transcript
-        else ""
-    )
+    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
 
     return history, latest_user_message_content
 
@@ -204,11 +200,7 @@ def load_individual_chat_history(user: User):
         )
 
     # Extract only the message content for the latest user message
-    latest_user_message_content = (
-        f"[Sender: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
-        if latest_user_transcript
-        else ""
-    )
+    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
     return history, latest_user_message_content
 
 
@@ -222,7 +214,7 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
         chat_history=record.chat_history,
         latency=record.latency,
         shorten_count=record.shorten_count,
-        user_message=record.processed_message,
+        user_message=record.message,
     )
     logger.info("Assistant Response saved successfully.")
     return assistant_chat_transcript
