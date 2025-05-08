@@ -1,4 +1,5 @@
-from chat.models import BaseChatTranscript, MessageType
+from django.utils import timezone
+from chat.models import BaseChatTranscript, GroupStrategyPhase, MessageType
 from chat.services.group_crud import load_group_chat_history
 
 
@@ -18,8 +19,21 @@ def test_only_initial_message_and_user_message_excluded(
     u1 = user_factory(id="u1", name="Max", group=group, school_mascot="Eagle")
     u2 = user_factory(id="u2", name="Bob", group=group, school_mascot="Eagle")
     session = group_session_factory(group=group, week_number=1, message_type=MessageType.INITIAL)
-    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content="Hello")
-    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.USER, content="Hi group", sender=u1)
+    now = timezone.now()
+    group_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="Hello",
+        created_at=now,
+        assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+    )
+    group_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.USER,
+        content="Hi group",
+        sender=u1,
+        created_at=now + timezone.timedelta(seconds=10),
+    )
     # load history should exclude that last user message from history and return it as `latest_sender_message`
     history, latest = load_group_chat_history(session)
 
@@ -27,8 +41,8 @@ def test_only_initial_message_and_user_message_excluded(
     assert history == [
         {
             "role": BaseChatTranscript.Role.ASSISTANT,
-            "content": "Hello",
-            "sender_name": "Eagle",
+            "content": f"[Timestamp: {now}| Strategy Type: {GroupStrategyPhase.AUDIENCE}]: " + "Hello",
+            "name": "Eagle",
         }
     ]
     assert latest == "Hi group"
@@ -68,6 +82,6 @@ def test_history_with_moderation_flagged(
     ]
     assert [h["role"] for h in history] == expected_roles
 
-    assert history[1]["sender_name"] == "Alce-1"
-    assert history[2]["sender_name"] == "Eagle"
+    assert history[1]["name"] == "Alce-1"
+    assert history[2]["name"] == "Eagle"
     assert latest == "Final"
