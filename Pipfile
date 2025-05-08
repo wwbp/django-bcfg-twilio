@@ -25,6 +25,7 @@ pyyaml = "*"
 djangorestframework-dataclasses = "*"
 freezegun = "*"
 django-import-export = "*"
+cryptography = "<44.0"
 
 [dev-packages]
 ruff = "*"
