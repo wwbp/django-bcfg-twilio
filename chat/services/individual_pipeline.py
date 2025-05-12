@@ -11,6 +11,7 @@ from .individual_crud import (
     ingest_request,
     load_instruction_prompt_for_direct_messaging,
     save_assistant_response,
+    strip_meta,
 )
 from .completion import ensure_within_character_limit, generate_response
 from .send import send_moderation_message, send_message_to_participant
@@ -80,6 +81,8 @@ def individual_process(record: IndividualPipelineRecord):
 
     start_timer = timezone.now()
     response = generate_response(chat_history, instructions, message)
+    response = strip_meta(response)
+    record.processed_message = message
     record.latency = timezone.now()-start_timer
     record.instruction_prompt = instructions
     record.chat_history = format_chat_history(chat_history)
