@@ -4,8 +4,6 @@ from django.utils import timezone
 
 from chat.models import (
     BaseChatTranscript,
-    ControlConfig,
-    GroupChatTranscript,
     GroupPipelineRecord,
     GroupPromptMessageType,
     GroupScheduledTaskAssociation,
@@ -114,14 +112,6 @@ def test_group_pipeline_take_action_on_group(
     group_prompt_factory(week=1, activity="activity", strategy_type=GroupStrategyPhase.SUMMARY)
     take_action_on_group(group_pipeline_record.run_id, most_recent_chat_transcript.id)
 
-    responded_users = User.objects.filter(
-        id__in=(
-            GroupChatTranscript.objects.filter(session=session, role=BaseChatTranscript.Role.USER)
-            .values_list("sender", flat=True)
-            .distinct()
-        )
-    )
-
     session.refresh_from_db()
     group_pipeline_record.refresh_from_db()
     most_recent_chat_transcript = session.transcripts.order_by("-created_at").first()
@@ -132,12 +122,8 @@ def test_group_pipeline_take_action_on_group(
             # for these cases, we always send a message and schedule another action
             assert group_pipeline_record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
             assert GroupScheduledTaskAssociation.objects.count() == 1
-            if session.current_strategy_phase == GroupStrategyPhase.AFTER_FOLLOWUP:
-                assert session.transcripts.count() == starting_transcript_count + len(responded_users)
-                assert mock_send_message_to_participant.call_count == len(responded_users)
-            else:
-                assert session.transcripts.count() == starting_transcript_count + 1
-                assert mock_send_message_to_participant.call_count == 1
+            assert session.transcripts.count() == starting_transcript_count + 1
+            assert mock_send_message_to_participant.call_count == 1
 
             # we can do this here because we assert that session.current_strategy_phase is correct below
             config = GroupStrategyPhaseConfig.objects.get(group_strategy_phase=session.current_strategy_phase)
@@ -280,7 +266,7 @@ def test_audience_action_loads_instruction_prompt_and_schedules(
 
 
 def test_followup_action_assistant_after_audience_no_reminder(
-    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, group_chat_transcript_factory, control_prompts
 ):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
@@ -289,14 +275,6 @@ def test_followup_action_assistant_after_audience_no_reminder(
         role=BaseChatTranscript.Role.ASSISTANT,
         content="user_message",
         assistant_strategy_phase=GroupStrategyPhase.REMINDER,
-    )
-    ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
     )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
@@ -316,17 +294,11 @@ def test_followup_action_assistant_after_audience_no_reminder(
     assert "<<INSTRUCTION FOR FOLLOWUP>>" in record.instruction_prompt
 
 
-def test_followup_action_assistant_after_reminder(_mocks, group_with_initial_message_interaction, group_prompt_factory):
+def test_followup_action_assistant_after_reminder(
+    _mocks, group_with_initial_message_interaction, group_prompt_factory, control_prompts
+):
     mock_send, _ = _mocks
     group, session, record, _ = group_with_initial_message_interaction
-    ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
-        value="<<PERSONA PROMPT>>",
-    )
-    ControlConfig.objects.create(
-        key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
-        value="<<SYSTEM PROMPT>>",
-    )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE
     session.current_strategy_phase = GroupStrategyPhase.AFTER_REMINDER

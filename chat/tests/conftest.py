@@ -181,6 +181,18 @@ def control_prompts(control_config_factory):
     control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT, value="<<GROUP SUMMARY PERSONA PROMPT>>"
     )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=(
+            "Using the below system prompt as your guide, engage with the group as a participant in a "
+            "manner that reflects your assigned persona and follows the conversation stategy instructions"
+            "System Prompt: {system}\n\n"
+            "Assigned Persona: {persona}\n\n"
+            "Assistant Name: {assistant_name}\n\n"
+            "Group's School: {school_name}\n\n"
+            "Strategy: {strategy}\n\n"
+        ),
+    )
 
 
 class UserFactory(factory.django.DjangoModelFactory):

@@ -124,7 +124,7 @@ def test_select_weekly_summaries_exceed_limit_for_school(
     assert response.status_code == 200
     assert (
         "Selecting these options would result in the following schools having more than 3 for a given week: "
-        in response.text
+        in response.content.decode("utf-8")
     )
     seleced_summaries = Summary.objects.filter(selected=True).all()
     assert len(seleced_summaries) == 0

@@ -4,12 +4,14 @@ from django.utils import timezone
 from chat.serializers import IndividualIncomingMessage, IndividualIncomingMessageSerializer
 from .moderation import moderate_message
 from .individual_crud import (
+    format_chat_history,
     load_individual_and_group_chat_history_for_direct_messaging,
     load_individual_chat_history,
     load_instruction_prompt,
     ingest_request,
     load_instruction_prompt_for_direct_messaging,
     save_assistant_response,
+    strip_meta,
 )
 from .completion import ensure_within_character_limit, generate_response
 from .send import send_moderation_message, send_message_to_participant
@@ -77,8 +79,13 @@ def individual_process(record: IndividualPipelineRecord):
         chat_history, message = load_individual_chat_history(record.user)
         instructions = load_instruction_prompt(record.user)
 
+    start_timer = timezone.now()
     response = generate_response(chat_history, instructions, message)
+    response = strip_meta(response)
+    record.processed_message = message
+    record.latency = timezone.now()-start_timer
     record.instruction_prompt = instructions
+    record.chat_history = format_chat_history(chat_history)
     record.response = response
     record.status = IndividualPipelineRecord.StageStatus.PROCESS_PASSED
     record.save()
@@ -102,13 +109,13 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
     participant_id = record.user.id
     response = record.validated_message
     # save the assistant response to the database
-    save_assistant_response(record.user, record.validated_message, session)
+    assistant_chat_transcript = save_assistant_response(record, session)
+    record.transcript = assistant_chat_transcript
     # Send the message via the external endpoint
     if not record.user.is_test:
         send_message_to_participant(participant_id, response)
         # Update the pipeline record for the sending stage
         record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
-    record.latency = timezone.now() - record.created_at
     record.save()
     logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
 

@@ -2,7 +2,7 @@ import pytest
 from django.utils import timezone
 from datetime import timedelta
 
-from chat.models import BaseChatTranscript, IndividualChatTranscript, GroupStrategyPhase
+from chat.models import BaseChatTranscript, IndividualChatTranscript, GroupStrategyPhase, MessageType
 from chat.services.individual_crud import load_individual_and_group_chat_history_for_direct_messaging
 
 
@@ -45,7 +45,11 @@ def test_group_history_only(user_factory, group_chat_transcript_factory):
     history, latest_message = load_individual_and_group_chat_history_for_direct_messaging(user)
     assert latest_message == ""
     expected = [
-        {"role": BaseChatTranscript.Role.USER, "content": "Valid group message", "name": user.name},
+        {
+            "role": BaseChatTranscript.Role.USER,
+            "content": f"[Timestamp: {now + timedelta(seconds=1)}| Strategy Type: {None}]: " + "Valid group message",
+            "name": user.name,
+        },
     ]
     assert history == expected
 
@@ -80,7 +84,7 @@ def test_individual_history_only(user_factory, individual_session_factory):
         created_at=now + timedelta(seconds=20),
     )
     # latest user message (should be returned as latest only)
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session2,
         role=BaseChatTranscript.Role.USER,
         content="Latest",
@@ -88,10 +92,18 @@ def test_individual_history_only(user_factory, individual_session_factory):
     )
 
     history, latest_message = load_individual_and_group_chat_history_for_direct_messaging(user)
-    assert latest_message == "Latest"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "Latest"
     expected = [
-        {"role": BaseChatTranscript.Role.USER, "content": "First", "name": user.name},
-        {"role": BaseChatTranscript.Role.ASSISTANT, "content": "Assist", "name": user.school_mascot},
+        {
+            "role": BaseChatTranscript.Role.USER,
+            "content": f"[Timestamp: {now}| Message Type: {MessageType.INITIAL}]: " + "First",
+            "name": user.name,
+        },
+        {
+            "role": BaseChatTranscript.Role.ASSISTANT,
+            "content": f"[Timestamp: {now + timedelta(seconds=10)}| Message Type: {MessageType.INITIAL}]: " + "Assist",
+            "name": user.school_mascot,
+        },
     ]
     assert history == expected
 
@@ -144,7 +156,7 @@ def test_sanitization_combined(user_factory, individual_session_factory, group_c
         created_at=now + timedelta(seconds=3),
     )
     # individual latest user transcript (should be returned as latest only)
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session1,
         role=BaseChatTranscript.Role.USER,
         content="User latest",
@@ -152,10 +164,24 @@ def test_sanitization_combined(user_factory, individual_session_factory, group_c
     )
 
     history, latest_message = load_individual_and_group_chat_history_for_direct_messaging(user)
-    assert latest_message == "User latest"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "User latest"
     expected = [
-        {"role": BaseChatTranscript.Role.USER, "content": "Group says hi", "name": "JohnDoe"},
-        {"role": BaseChatTranscript.Role.ASSISTANT, "content": "Group welcome", "name": "Wolf-Pack"},
-        {"role": BaseChatTranscript.Role.ASSISTANT, "content": "Assist reply", "name": "Wolf-Pack"},
+        {
+            "role": BaseChatTranscript.Role.USER,
+            "content": f"[Timestamp: {now + timedelta(seconds=1)}| Strategy Type: {None}]: " + "Group says hi",
+            "name": "JohnDoe",
+        },
+        {
+            "role": BaseChatTranscript.Role.ASSISTANT,
+            "content": f"[Timestamp: {now + timedelta(seconds=2)}| Strategy Type: {GroupStrategyPhase.AUDIENCE}]: "
+            + "Group welcome",
+            "name": "Wolf-Pack",
+        },
+        {
+            "role": BaseChatTranscript.Role.ASSISTANT,
+            "content": f"[Timestamp: {now + timedelta(seconds=3)}| Message Type: {MessageType.INITIAL}]: "
+            + "Assist reply",
+            "name": "Wolf-Pack",
+        },
     ]
     assert history == expected

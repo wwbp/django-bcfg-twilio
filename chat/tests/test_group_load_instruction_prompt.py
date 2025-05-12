@@ -8,7 +8,17 @@ from chat.models import (
     GroupStrategyPhase,
     BaseChatTranscript,
 )
-from chat.services.group_crud import load_instruction_prompt, GROUP_INSTRUCTION_PROMPT_TEMPLATE
+from chat.services.group_crud import load_instruction_prompt
+
+GROUP_INSTRUCTION_PROMPT_TEMPLATE = (
+    "Using the below system prompt as your guide, engage with the group as a participant in a "
+    "manner that reflects your assigned persona and follows the conversation stategy instructions"
+    "System Prompt: {system}\n\n"
+    "Assigned Persona: {persona}\n\n"
+    "Assistant Name: {assistant_name}\n\n"
+    "Group's School: {school_name}\n\n"
+    "Strategy: {strategy}\n\n"
+)
 
 
 def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_prompt_factory, control_config_factory):
@@ -33,6 +43,10 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
     # latest Control via factory
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Persona Y")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="System X")
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+    )
 
     # matching Prompt via factory
 
@@ -42,7 +56,7 @@ def test_load_group_instruction_prompt_with_existing_user_and_prompt(group_promp
     )
 
     result = load_instruction_prompt(session, GroupStrategyPhase.AUDIENCE)
-    expected = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system="System X",
         persona="Persona Y",
         assistant_name=user.school_mascot,
@@ -72,6 +86,10 @@ def test_load_group_instruction_prompt_raises_when_no_prompt(control_config_fact
 
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="P")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="S")
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+    )
 
     with pytest.raises(ValueError) as exc:
         load_instruction_prompt(session, GroupStrategyPhase.AUDIENCE)
@@ -95,6 +113,10 @@ def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user
 
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="Sys1")
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="Pers1")
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+    )
 
     group_prompt_factory(
         week=1,
@@ -103,7 +125,7 @@ def test_load_group_instruction_prompt_falls_back_to_assistant_name_when_no_user
     )
 
     result = load_instruction_prompt(session, GroupStrategyPhase.FOLLOWUP)
-    expected = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system="Sys1",
         persona="Pers1",
         assistant_name=BaseChatTranscript.Role.ASSISTANT,

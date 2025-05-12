@@ -8,6 +8,7 @@ from ..models import (
     BaseChatTranscript,
     GroupChatTranscript,
     GroupSession,
+    IndividualPipelineRecord,
     IndividualSession,
     User,
     IndividualChatTranscript,
@@ -17,6 +18,28 @@ from ..models import (
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
+
+
+def strip_meta(txt):
+    return re.sub(r"^\[[^\]]+\]:\s*", "", txt, flags=re.M)
+
+
+def format_chat_history(chat_history, delimiter="\n"):
+    """
+    Turn a list of message dicts into one human-readable string.
+
+    Each message becomes:
+        [role | name] : content
+    and messages are joined by the given delimiter.
+    """
+    parts = []
+    for msg in chat_history:
+        role = msg.get("role", "")
+        name = msg.get("name", "")
+        header = f"[{role}" + (f" | {name}]")
+        content = msg.get("content", "")
+        parts.append(f"{header} : {content}")
+    return delimiter.join(parts)
 
 
 def ingest_request(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
@@ -59,7 +82,7 @@ def ingest_request(participant_id: str, individual_incoming_message: IndividualI
                     logger.error(
                         f"Got new initial_message for existing individual session {session}. "
                         f"New message: '{individual_incoming_message.context.initial_message}'."
-                        +" Not updating existing initial_message."
+                        + " Not updating existing initial_message."
                     )
 
         # in either case, we need to add the user message to the transcript
@@ -101,7 +124,8 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
             history.append(
                 {
                     "role": t.role,
-                    "content": t.content,
+                    "content": f"[Timestamp: {t.created_at}| Strategy Type: {t.assistant_strategy_phase}]: "
+                    + t.content,
                     "name": sender_name,
                 }
             )
@@ -130,12 +154,16 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         history.append(
             {
                 "role": t.role,
-                "content": t.content,
+                "content": f"[Timestamp: {t.created_at}| Message Type: {t.session.message_type}]: " + t.content,
                 "name": sender_name,
             }
         )
 
-    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
+    latest_user_message_content = (
+        f"[Sender/User Name: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
 
     return history, latest_user_message_content
 
@@ -174,32 +202,34 @@ def load_individual_chat_history(user: User):
         history.append(
             {
                 "role": t.role,
-                "content": t.content,
+                "content": f"[Timestamp: {t.created_at}| Message Type: {t.session.message_type}]: " + t.content,
                 "name": sender_name,
             }
         )
 
     # Extract only the message content for the latest user message
-    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
-
+    latest_user_message_content = (
+        f"[Sender/User Name: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
     return history, latest_user_message_content
 
 
-def save_assistant_response(user: User, response: str, session: IndividualSession):
-    logger.info(f"Saving assistant response for participant: {user.id}")
-    IndividualChatTranscript.objects.create(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=response)
+def save_assistant_response(record: IndividualPipelineRecord, session: IndividualSession):
+    logger.info(f"Saving assistant response for participant: {record.user.id}")
+    assistant_chat_transcript = IndividualChatTranscript.objects.create(
+        session=session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content=record.validated_message,
+        instruction_prompt=record.instruction_prompt,
+        chat_history=record.chat_history,
+        latency=record.latency,
+        shorten_count=record.shorten_count,
+        user_message=record.processed_message,
+    )
     logger.info("Assistant Response saved successfully.")
-
-
-INSTRUCTION_PROMPT_TEMPLATE = (
-    "Using the below system prompt as your guide, engage with the user in a "
-    "manner that reflects your assigned persona and follows the activity instructions"
-    "System Prompt: {system}\n\n"
-    "Assigned Persona: {persona}\n\n"
-    "Assistant Name: {assistant_name}\n\n"
-    "User's School: {school_name}\n\n"
-    "Activity: {activity}\n\n"
-)
+    return assistant_chat_transcript
 
 
 def load_instruction_prompt_for_direct_messaging(user: User):
@@ -223,8 +253,13 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
         raise
 
+    # Pull the template out of ControlConfig (fallback to the constant if missing)
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    if not template:
+        raise ValueError("instruction-prompt template not found in ControlConfig.")
+
     # Format the final prompt using the template
-    instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
+    instruction_prompt = template.format(
         system=system,
         persona=persona,
         assistant_name=assistant_name,
@@ -254,8 +289,13 @@ def load_instruction_prompt(user: User):
         logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
         raise
 
+    # Pull the template out of ControlConfig (fallback to the constant if missing)
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    if not template:
+        raise ValueError("instruction-prompt template not found in ControlConfig.")
+
     # Format the final prompt using the template
-    instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
+    instruction_prompt = template.format(
         system=system,
         persona=persona,
         assistant_name=assistant_name,

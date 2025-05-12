@@ -3,7 +3,16 @@ from chat.models import ControlConfig, MessageType, User, IndividualPrompt, Indi
 from chat.services.individual_crud import (
     load_instruction_prompt,
     load_instruction_prompt_for_direct_messaging,
-    INSTRUCTION_PROMPT_TEMPLATE,
+)
+
+INSTRUCTION_PROMPT_TEMPLATE = (
+    "Using the below system prompt as your guide, engage with the user in a "
+    "manner that reflects your assigned persona and follows the activity instructions"
+    "System Prompt: {system}\n\n"
+    "Assigned Persona: {persona}\n\n"
+    "Assistant Name: {assistant_name}\n\n"
+    "User's School: {school_name}\n\n"
+    "Activity: {activity}\n\n"
 )
 
 
@@ -28,6 +37,10 @@ def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_fa
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="test system prompt",
     )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
     # Create a Prompt for the user's week.
     prompt = IndividualPrompt.objects.create(
         week=3,
@@ -36,7 +49,7 @@ def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_fa
     )
 
     result = load_instruction_prompt(user)
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system=system.value,
         persona=persona.value,
         assistant_name=user.school_mascot,
@@ -59,6 +72,10 @@ def test_load_instruction_prompt_with_existing_user_and_no_matching_type_prompt(
     )
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
 
     IndividualPrompt.objects.create(
         week=3,
@@ -83,6 +100,10 @@ def test_load_instruction_prompt_with_existing_user_no_prompt(control_config_fac
     )
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
 
     with pytest.raises(IndividualPrompt.DoesNotExist):
         load_instruction_prompt(user)
@@ -107,6 +128,10 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="test system prompt",
     )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
     prompt = IndividualPrompt.objects.create(
         week=1,
         message_type=MessageType.INITIAL,
@@ -114,7 +139,7 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
     )
 
     result = load_instruction_prompt(user)
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system=system.value,
         persona=persona.value,
         assistant_name="Assistant",
@@ -125,6 +150,7 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
 
 
 # Tests for load_instruction_prompt_for_direct_messaging
+
 
 def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_prompt(control_config_factory):
     """
@@ -147,6 +173,10 @@ def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_pro
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
     # Create a Prompt for the user's week and type
     prompt = IndividualPrompt.objects.create(
         week=5,
@@ -155,7 +185,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_pro
     )
 
     result = load_instruction_prompt_for_direct_messaging(user)
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system=system.value,
         persona=persona.value,
         assistant_name=user.school_mascot,
@@ -179,6 +209,10 @@ def test_load_instruction_prompt_for_direct_messaging_missing_control_config(con
     control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
         value="dm persona prompt",
+    )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
     )
     # Missing SYSTEM_PROMPT
 
@@ -205,6 +239,10 @@ def test_load_instruction_prompt_for_direct_messaging_with_no_prompt(control_con
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
     # No IndividualPrompt for week 6 and SUMMARY
 
     with pytest.raises(IndividualPrompt.DoesNotExist):
@@ -230,6 +268,10 @@ def test_load_instruction_prompt_for_direct_messaging_with_empty_school_mascot(c
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
+    instruction_prompt = control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value=INSTRUCTION_PROMPT_TEMPLATE,
+    )
     prompt = IndividualPrompt.objects.create(
         week=2,
         message_type=MessageType.INITIAL,
@@ -237,7 +279,7 @@ def test_load_instruction_prompt_for_direct_messaging_with_empty_school_mascot(c
     )
 
     result = load_instruction_prompt_for_direct_messaging(user)
-    expected = INSTRUCTION_PROMPT_TEMPLATE.format(
+    expected = instruction_prompt.value.format(
         system=system.value,
         persona=persona.value,
         assistant_name="Assistant",

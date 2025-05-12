@@ -81,8 +81,8 @@ class Group(ModelBase):
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        member_count = self.users.count()
-        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+        result = ", ".join([u.name for u in self.users.all()])  # type: ignore
+        return result if result else self.id
 
     class Meta:
         ordering = ["-created_at"]
@@ -90,7 +90,7 @@ class Group(ModelBase):
 
 class User(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="users", null=True, blank=True)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="users", null=True, blank=True)
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
@@ -115,7 +115,12 @@ class BaseSession(ModelBase):
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("created_at").first().content
+        """
+        Returns the content of the very first transcript for this session,
+        or None if no transcripts exist.
+        """
+        first = self.transcripts.order_by("created_at").values_list("content", flat=True).first()
+        return first
 
     class Meta:
         abstract = True
@@ -123,7 +128,7 @@ class BaseSession(ModelBase):
 
 
 class IndividualSession(BaseSession):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sessions")
 
     class Meta(BaseSession.Meta):
         unique_together = ["user", "week_number", "message_type"]
@@ -133,7 +138,7 @@ class IndividualSession(BaseSession):
 
 
 class GroupSession(BaseSession):
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="sessions")
     current_strategy_phase = models.CharField(
         max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.BEFORE_AUDIENCE
     )
@@ -183,9 +188,19 @@ class BaseChatTranscript(ModelBase):
         NOT_FLAGGED = "not_flagged"
 
     role = models.CharField(max_length=255, choices=Role.choices)
-    content = models.TextField()
+    content = models.TextField(help_text="The content of the message sent by the Sender")
     moderation_status = models.CharField(
         max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
+    )
+    instruction_prompt = models.TextField(blank=True, null=True)
+    chat_history = models.TextField(blank=True, null=True)
+    latency = models.DurationField(default=timedelta(0), null=True)
+    shorten_count = models.IntegerField(default=0, null=True)
+    user_message = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Message from Participant",
+        help_text="For chatbot responses, the message from a Participant which triggered the response",
     )
 
     class Meta:
@@ -194,12 +209,12 @@ class BaseChatTranscript(ModelBase):
 
 
 class IndividualChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
+    session = models.ForeignKey(IndividualSession, on_delete=models.CASCADE, related_name="transcripts")
 
 
 class GroupChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
-    sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
+    session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
 
@@ -246,6 +261,8 @@ class ControlConfig(ModelBaseWithUuidId):
         GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
         GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
+        INSTRUCTION_PROMPT_TEMPLATE = "instruction_prompt_template"
+        GROUP_INSTRUCTION_PROMPT_TEMPLATE = "group_instruction_prompt_template"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
@@ -298,6 +315,7 @@ class Summary(ModelBase):
 class BasePipelineRecord(ModelBase):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     message = models.TextField(blank=True, null=True)
+    processed_message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
     instruction_prompt = models.TextField(blank=True, null=True)
     validated_message = models.TextField(blank=True, null=True)
@@ -305,6 +323,7 @@ class BasePipelineRecord(ModelBase):
     updated_at = models.DateTimeField(auto_now=True)
     latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
+    chat_history = models.TextField(blank=True, null=True)
 
     class Meta:
         abstract = True
@@ -324,6 +343,9 @@ class IndividualPipelineRecord(BasePipelineRecord):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        IndividualChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     # note that we could use a derived property for this, but we would lose history if the user
     # is removed from the group
@@ -348,6 +370,9 @@ class GroupPipelineRecord(BasePipelineRecord):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        GroupChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     @property
     def is_test(self):

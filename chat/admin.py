@@ -3,9 +3,12 @@ from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.query import QuerySet
+from django.urls import reverse
+from django.utils.html import format_html
 
 from chat.services.summaries import handle_summaries_selected_change
 from .models import (
+    BaseChatTranscript,
     ControlConfig,
     GroupPrompt,
     GroupSession,
@@ -96,8 +99,30 @@ class IndividualChatTranscriptInline(ReadonlyTabularInline):
 
 
 class GroupChatTranscriptInline(ReadonlyTabularInline):
+    @admin.display(description="Sender")
+    def combined_sender(self, obj):
+        if obj.role == BaseChatTranscript.Role.USER:
+            return format_html('<a href="/admin/chat/user/{}">{}</a>', obj.sender.id, obj.sender)
+        else:
+            return obj.get_role_display()
+
+    @admin.display(description="Pipeline Details")
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">Link</a>', url)
+
     model = GroupChatTranscript
-    fields = ("sender", "role", "content", "moderation_status", "assistant_strategy_phase", "created_at")
+    fields = (
+        "combined_sender",
+        "assistant_strategy_phase",
+        "content",
+        "pipeline_record_link",
+        "moderation_status",
+        "created_at",
+    )
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -113,7 +138,7 @@ class UserAdmin(ReadonlyAdmin):
 
 @admin.register(Group)
 class GroupAdmin(ReadonlyAdmin):
-    list_display = ("id", "get_user_count", "is_test")
+    list_display = ("__str__", "id", "get_user_count", "is_test")
     search_fields = ("id",)
     list_filter = ("is_test",)
 
@@ -124,27 +149,113 @@ class GroupAdmin(ReadonlyAdmin):
     inlines = [UsersInline, GroupSessionsInline]
 
 
+class IndividualPipelineRecordInline(ReadonlyTabularInline):
+    model = IndividualPipelineRecord
+    fields = ("run_id", "status", "instruction_prompt", "updated_at")
+    readonly_fields = fields
+    ordering = ("-created_at",)
+    extra = 0
+    max_num = 1
+    can_delete = False
+
+
+class GroupPipelineRecordInline(ReadonlyTabularInline):
+    model = GroupPipelineRecord
+    fields = ("run_id", "status", "instruction_prompt", "updated_at")
+    readonly_fields = fields
+    ordering = ("-created_at",)
+    extra = 0
+    max_num = 1
+    can_delete = False
+
+
 @admin.register(IndividualChatTranscript)
 class IndividualChatTranscriptAdmin(ReadonlyAdmin):
-    list_display = ("session", "session__user", "role", "content", "moderation_status", "created_at")
+    list_display = (
+        "session",
+        "session__user",
+        "role",
+        "content",
+        "instruction_prompt",
+        "chat_history",
+        "user_message",
+        "latency",
+        "shorten_count",
+        "moderation_status",
+        "created_at",
+        "pipeline_record_link",
+    )
     search_fields = ("content",)
     list_filter = ("role",)
+    inlines = [IndividualPipelineRecordInline]
+
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_individualpipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">{}</a>', url, rec.run_id)
 
 
 @admin.register(GroupChatTranscript)
 class GroupChatTranscriptAdmin(ReadonlyAdmin):
+    @admin.display(description="Sender")
+    def combined_sender(self, obj):
+        if obj.role == BaseChatTranscript.Role.USER:
+            return format_html('<a href="/admin/chat/user/{}">{}</a>', obj.sender.id, obj.sender)
+        else:
+            return obj.get_role_display()
+
+    @admin.display(description="Pipeline Details")
+    def pipeline_record_link(self, obj):
+        rec = obj.pipeline_records.first()
+        if not rec:
+            return "-"
+        url = reverse("admin:chat_grouppipelinerecord_change", args=[rec.id])
+        return format_html('<a href="{}">Link</a>', url)
+
     list_display = (
         "session",
-        "session__group",
-        "sender",
-        "role",
+        "combined_sender",
+        "assistant_strategy_phase",
         "content",
         "moderation_status",
-        "assistant_strategy_phase",
         "created_at",
+        "pipeline_record_link",
     )
+
+    fieldsets = (
+        (
+            "Basic Information",
+            {
+                "fields": (
+                    "role",
+                    "sender",
+                    "content",
+                    "user_message",
+                    "session",
+                    "moderation_status",
+                    "created_at",
+                ),
+            },
+        ),
+        (
+            "Prompt Information",
+            {
+                "fields": (
+                    "assistant_strategy_phase",
+                    "latency",
+                    "chat_history",
+                    "instruction_prompt",
+                    "pipeline_record_link",
+                ),
+            },
+        ),
+    )
+
     search_fields = ("content",)
     list_filter = ("role",)
+    # inlines = [GroupPipelineRecordInline]
 
 
 @admin.register(IndividualPrompt)
@@ -223,6 +334,7 @@ class GroupStrategyPhaseConfigAdmin(EditableAdmin):
 class IndividualPipelineRecordAdmin(ReadonlyAdmin):
     list_display = (
         "user",
+        "transcript",
         "status",
         "is_for_group_direct_messaging",
         "message",
@@ -236,7 +348,7 @@ class IndividualPipelineRecordAdmin(ReadonlyAdmin):
 
 @admin.register(GroupPipelineRecord)
 class GroupPipelineRecordAdmin(ReadonlyAdmin):
-    list_display = ("user", "status", "message", "validated_message", "error_log", "updated_at")
+    list_display = ("user", "transcript", "status", "message", "validated_message", "error_log", "updated_at")
     search_fields = ("message", "validated_message", "error_log")
     list_filter = ("status",)
 

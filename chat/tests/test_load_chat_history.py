@@ -1,5 +1,5 @@
 from django.utils import timezone
-from chat.models import BaseChatTranscript, IndividualChatTranscript
+from chat.models import BaseChatTranscript, IndividualChatTranscript, MessageType
 from chat.services.individual_crud import load_individual_chat_history
 
 
@@ -14,12 +14,12 @@ def test_single_user_transcript(user_factory, individual_session_factory):
     user = user_factory()
     session = individual_session_factory(user=user)
     now = timezone.now()
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session, role=BaseChatTranscript.Role.USER, content="Hello", created_at=now
     )
     history, latest_message = load_individual_chat_history(user)
     assert history == []
-    assert latest_message == "Hello"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "Hello"
 
 
 def test_multiple_transcripts(user_factory, individual_session_factory):
@@ -36,7 +36,7 @@ def test_multiple_transcripts(user_factory, individual_session_factory):
         content="Hi, how can I help?",
         created_at=now + timezone.timedelta(seconds=10),
     )
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session2,
         role=BaseChatTranscript.Role.USER,
         content="I need assistance",
@@ -47,17 +47,18 @@ def test_multiple_transcripts(user_factory, individual_session_factory):
     expected_history = [
         {
             "role": BaseChatTranscript.Role.USER,
-            "content": "Hello",
+            "content": f"[Timestamp: {now}| Message Type: {MessageType.INITIAL}]: " + "Hello",
             "name": user.name,
         },
         {
             "role": BaseChatTranscript.Role.ASSISTANT,
-            "content": "Hi, how can I help?",
+            "content": f"[Timestamp: {now + timezone.timedelta(seconds=10)}| Message Type: {MessageType.INITIAL}]: "
+            + "Hi, how can I help?",
             "name": user.school_mascot,
         },
     ]
     assert history == expected_history
-    assert latest_message == "I need assistance"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "I need assistance"
 
 
 def test_assistant_without_mascot(user_factory, individual_session_factory):
@@ -67,7 +68,7 @@ def test_assistant_without_mascot(user_factory, individual_session_factory):
     IndividualChatTranscript.objects.create(
         session=session, role=BaseChatTranscript.Role.ASSISTANT, content="Welcome", created_at=now
     )
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session,
         role=BaseChatTranscript.Role.USER,
         content="Thank you",
@@ -78,12 +79,12 @@ def test_assistant_without_mascot(user_factory, individual_session_factory):
     expected_history = [
         {
             "role": BaseChatTranscript.Role.ASSISTANT,
-            "content": "Welcome",
+            "content": f"[Timestamp: {now}| Message Type: {MessageType.INITIAL}]: " + "Welcome",
             "name": BaseChatTranscript.Role.ASSISTANT,  # Fallback when school_mascot is empty
         },
     ]
     assert history == expected_history
-    assert latest_message == "Thank you"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "Thank you"
 
 
 def test_flagged_moderation_message_ignored(user_factory, individual_session_factory):
@@ -104,7 +105,7 @@ def test_flagged_moderation_message_ignored(user_factory, individual_session_fac
         created_at=now + timezone.timedelta(seconds=10),
     )
     # latest message
-    IndividualChatTranscript.objects.create(
+    latest_transcript = IndividualChatTranscript.objects.create(
         session=session,
         role=BaseChatTranscript.Role.USER,
         content="Hello",
@@ -115,9 +116,9 @@ def test_flagged_moderation_message_ignored(user_factory, individual_session_fac
     expected_history = [
         {
             "role": BaseChatTranscript.Role.ASSISTANT,
-            "content": "Hi, how can I help?",
+            "content": f"[Timestamp: {now}| Message Type: {MessageType.INITIAL}]: " + "Hi, how can I help?",
             "name": user.school_mascot,
         },
     ]
     assert history == expected_history
-    assert latest_message == "Hello"
+    assert latest_message == f"[Sender/User Name: {latest_transcript.session.user.name}]: " + "Hello"
