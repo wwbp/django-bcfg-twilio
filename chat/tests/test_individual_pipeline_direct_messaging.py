@@ -38,6 +38,10 @@ def test_individual_pipeline_for_direct_messaging(
     )
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
     individual_pipeline.run(user.id, data)
 
     record = IndividualPipelineRecord.objects.get(user=user)

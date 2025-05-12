@@ -68,6 +68,18 @@ def _inbound_call(control_config_factory):
     control_config_factory(key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT, value="base activity")
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=(
+            "Using the below system prompt as your guide, engage with the group as a participant in a "
+            "manner that reflects your assigned persona and follows the conversation stategy instructions"
+            "System Prompt: {system}\n\n"
+            "Assigned Persona: {persona}\n\n"
+            "Assistant Name: {assistant_name}\n\n"
+            "Group's School: {school_name}\n\n"
+            "Strategy: {strategy}\n\n"
+        ),
+    )
 
     yield group_id, sender_id, inbound_payload, other_user1_id, other_user2_id, other_user3_id
 
