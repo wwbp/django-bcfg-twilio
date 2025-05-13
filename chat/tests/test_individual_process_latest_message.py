@@ -45,6 +45,10 @@ def inbound_call_and_mocks(
     )
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
 
     mock_all_individual_external_calls.mock_generate_response.return_value = _GENERATED_LLM_RESPONSE
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = _SHORTENED_LLM_RESPONSE

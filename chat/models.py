@@ -261,6 +261,8 @@ class ControlConfig(ModelBaseWithUuidId):
         GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
         GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
+        INSTRUCTION_PROMPT_TEMPLATE = "instruction_prompt_template"
+        GROUP_INSTRUCTION_PROMPT_TEMPLATE = "group_instruction_prompt_template"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
@@ -313,6 +315,7 @@ class Summary(ModelBase):
 class BasePipelineRecord(ModelBase):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     message = models.TextField(blank=True, null=True)
+    processed_message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
     instruction_prompt = models.TextField(blank=True, null=True)
     validated_message = models.TextField(blank=True, null=True)

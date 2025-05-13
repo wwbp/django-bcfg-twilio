@@ -141,16 +141,6 @@ def ingest_request(group_id: str, group_incoming_message: GroupIncomingMessage):
     return group, user_chat_transcript
 
 
-GROUP_INSTRUCTION_PROMPT_TEMPLATE = (
-    "Using the below system prompt as your guide, engage with the group as a participant in a "
-    "manner that reflects your assigned persona and follows the conversation stategy instructions"
-    "System Prompt: {system}\n\n"
-    "Assigned Persona: {persona}\n\n"
-    "Assistant Name: {assistant_name}\n\n"
-    "Group's School: {school_name}\n\n"
-    "Strategy: {strategy}\n\n"
-)
-
 
 def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategyPhase) -> str:
     week = session.week_number
@@ -189,8 +179,13 @@ def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategy
             )
             raise err
 
+    # Pull the template out of ControlConfig (fallback to the constant if missing)
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    if not template:
+        raise ValueError("group-prompt template not found in ControlConfig.")
+
     # Format the final prompt using the template
-    instruction_prompt = GROUP_INSTRUCTION_PROMPT_TEMPLATE.format(
+    instruction_prompt = template.format(
         system=system,
         persona=persona,
         assistant_name=assistant_name,
@@ -239,5 +234,9 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
                 "name": sender_name,
             }
         )
-    latest_sender_message = latest_user_transcript.content if latest_user_transcript else ""
+    latest_sender_message = (
+        f"[Sender/User Name: {latest_user_transcript.sender.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
     return history, latest_sender_message

@@ -127,6 +127,10 @@ def test_individual_pipeline_parametrized(
     )
     control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
     control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
     mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]

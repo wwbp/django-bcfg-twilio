@@ -20,6 +20,10 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
+def strip_meta(txt):
+    return re.sub(r"^\[[^\]]+\]:\s*", "", txt, flags=re.M)
+
+
 def format_chat_history(chat_history, delimiter="\n"):
     """
     Turn a list of message dicts into one human-readable string.
@@ -155,7 +159,11 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
             }
         )
 
-    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
+    latest_user_message_content = (
+        f"[Sender/User Name: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
 
     return history, latest_user_message_content
 
@@ -200,7 +208,11 @@ def load_individual_chat_history(user: User):
         )
 
     # Extract only the message content for the latest user message
-    latest_user_message_content = latest_user_transcript.content if latest_user_transcript else ""
+    latest_user_message_content = (
+        f"[Sender/User Name: {latest_user_transcript.session.user.name}]: " + latest_user_transcript.content
+        if latest_user_transcript
+        else ""
+    )
     return history, latest_user_message_content
 
 
@@ -214,21 +226,10 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
         chat_history=record.chat_history,
         latency=record.latency,
         shorten_count=record.shorten_count,
-        user_message=record.message,
+        user_message=record.processed_message,
     )
     logger.info("Assistant Response saved successfully.")
     return assistant_chat_transcript
-
-
-INSTRUCTION_PROMPT_TEMPLATE = (
-    "Using the below system prompt as your guide, engage with the user in a "
-    "manner that reflects your assigned persona and follows the activity instructions"
-    "System Prompt: {system}\n\n"
-    "Assigned Persona: {persona}\n\n"
-    "Assistant Name: {assistant_name}\n\n"
-    "User's School: {school_name}\n\n"
-    "Activity: {activity}\n\n"
-)
 
 
 def load_instruction_prompt_for_direct_messaging(user: User):
@@ -252,8 +253,13 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
         raise
 
+    # Pull the template out of ControlConfig (fallback to the constant if missing)
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    if not template:
+        raise ValueError("instruction-prompt template not found in ControlConfig.")
+
     # Format the final prompt using the template
-    instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
+    instruction_prompt = template.format(
         system=system,
         persona=persona,
         assistant_name=assistant_name,
@@ -283,8 +289,13 @@ def load_instruction_prompt(user: User):
         logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
         raise
 
+    # Pull the template out of ControlConfig (fallback to the constant if missing)
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    if not template:
+        raise ValueError("instruction-prompt template not found in ControlConfig.")
+
     # Format the final prompt using the template
-    instruction_prompt = INSTRUCTION_PROMPT_TEMPLATE.format(
+    instruction_prompt = template.format(
         system=system,
         persona=persona,
         assistant_name=assistant_name,
