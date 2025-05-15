@@ -81,7 +81,7 @@ def individual_process(record: IndividualPipelineRecord):
 
     start_timer = timezone.now()
     response = generate_response(chat_history, instructions, message)
-    response = strip_meta(response)
+    response = strip_meta(response, record.user.school_mascot)
     record.processed_message = message
     record.latency = timezone.now()-start_timer
     record.instruction_prompt = instructions
