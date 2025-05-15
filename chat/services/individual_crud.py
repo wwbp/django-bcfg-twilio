@@ -30,10 +30,6 @@ def strip_meta(txt, assistant_name=None):
     return out
 
 
-def strip_meta(txt):
-    return re.sub(r"^\[[^\]]+\]:\s*", "", txt, flags=re.M)
-
-
 def format_chat_history(chat_history, delimiter="\n"):
     """
     Turn a list of message dicts into one human-readable string.
