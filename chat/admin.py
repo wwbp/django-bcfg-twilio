@@ -13,6 +13,7 @@ from .models import (
     GroupPrompt,
     GroupSession,
     GroupStrategyPhaseConfig,
+    SundaySummaryPrompt,
     User,
     Group,
     IndividualChatTranscript,
@@ -270,6 +271,12 @@ class GroupPromptAdmin(EditableAdmin):
     list_display = ("week", "activity", "message_type", "strategy_type")
     search_fields = ("activity",)
     list_filter = ("week", "message_type", "strategy_type")
+
+
+@admin.register(SundaySummaryPrompt)
+class SundaySummaryPromptAdmin(EditableAdmin):
+    list_display = ("week", "activity")
+    search_fields = ("activity",)
 
 
 @admin.register(ControlConfig)

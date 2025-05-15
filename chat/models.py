@@ -251,13 +251,17 @@ class GroupPrompt(BasePrompt):
         verbose_name_plural = "Weekly Group Prompts"
         ordering = ["week", "message_type", "strategy_type"]
 
+class SundaySummaryPrompt(BasePrompt):
+
+    class Meta:
+        verbose_name_plural = "Sunday Summary Prompts"
+        ordering = ["week"]
 
 class ControlConfig(ModelBaseWithUuidId):
     class ControlConfigKey(models.TextChoices):
         PERSONA_PROMPT = "persona_prompt"
         SYSTEM_PROMPT = "system_prompt"
         GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
-        SCHOOL_SUMMARY_PROMPT = "school_summary_prompt"
         GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
         GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
