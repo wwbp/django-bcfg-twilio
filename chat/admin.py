@@ -1,7 +1,7 @@
 import logging
 from django.contrib import admin, messages
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django.db.models.query import QuerySet
 from django.urls import reverse
 from django.utils.html import format_html
@@ -13,6 +13,8 @@ from .models import (
     GroupPrompt,
     GroupSession,
     GroupStrategyPhaseConfig,
+    MessageType,
+    SundaySummaryPrompt,
     User,
     Group,
     IndividualChatTranscript,
@@ -169,6 +171,64 @@ class GroupPipelineRecordInline(ReadonlyTabularInline):
     can_delete = False
 
 
+class ChatTranscriptWeekNumberFilter(admin.SimpleListFilter):
+    title = "week_number"
+    parameter_name = "week_number"
+
+    def lookups(self, request, model_admin):
+        vals = list(
+            model_admin.get_queryset(request)
+            .distinct("session__week_number")
+            .order_by("session__week_number")
+            .values_list("session__week_number", flat=True)
+            .all()
+        )
+        return [(val, str(val)) for val in vals]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value is None:
+            return queryset
+        return queryset.filter(session__week_number=value)
+
+
+class IndividualChatTranscriptSchoolNameFilter(admin.SimpleListFilter):
+    title = "school_name"
+    parameter_name = "school_name"
+
+    def lookups(self, request, model_admin):
+        school_names = list(
+            User.objects.distinct("school_name").order_by("school_name").values_list("school_name", flat=True).all()
+        )
+        return [(val, str(val)) for val in school_names]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value is None:
+            return queryset
+        return queryset.filter(session__user__school_name=value)
+
+
+class GroupChatTranscriptSchoolNameFilter(admin.SimpleListFilter):
+    title = "school_name"
+    parameter_name = "school_name"
+
+    def lookups(self, request, model_admin):
+        school_names = list(
+            User.objects.distinct("school_name").order_by("school_name").values_list("school_name", flat=True).all()
+        )
+        return [(val, str(val)) for val in school_names]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value is None:
+            return queryset
+        first_users = User.objects.filter(group=OuterRef("session__group_id")).order_by("created_at")
+        return queryset.annotate(first_user_school=Subquery(first_users.values("school_name")[:1])).filter(
+            first_user_school=value
+        )
+
+
 @admin.register(IndividualChatTranscript)
 class IndividualChatTranscriptAdmin(ReadonlyAdmin):
     list_display = (
@@ -184,9 +244,11 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
         "moderation_status",
         "created_at",
         "pipeline_record_link",
+        "week_number",
+        "school_name",
     )
     search_fields = ("content",)
-    list_filter = ("role",)
+    list_filter = ("role", ChatTranscriptWeekNumberFilter, IndividualChatTranscriptSchoolNameFilter)
     inlines = [IndividualPipelineRecordInline]
 
     def pipeline_record_link(self, obj):
@@ -222,6 +284,8 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
         "moderation_status",
         "created_at",
         "pipeline_record_link",
+        "week_number",
+        "school_name",
     )
 
     fieldsets = (
@@ -254,7 +318,7 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
     )
 
     search_fields = ("content",)
-    list_filter = ("role",)
+    list_filter = ("role", ChatTranscriptWeekNumberFilter, GroupChatTranscriptSchoolNameFilter)
     # inlines = [GroupPipelineRecordInline]
 
 
@@ -272,6 +336,12 @@ class GroupPromptAdmin(EditableAdmin):
     list_filter = ("week", "message_type", "strategy_type")
 
 
+@admin.register(SundaySummaryPrompt)
+class SundaySummaryPromptAdmin(EditableAdmin):
+    list_display = ("week", "activity")
+    search_fields = ("activity",)
+
+
 @admin.register(ControlConfig)
 class ControlConfigAdmin(EditableAdmin):
     list_display = ("key", "value", "created_at")
@@ -279,9 +349,58 @@ class ControlConfigAdmin(EditableAdmin):
 
 @admin.register(Summary)
 class SummaryAdmin(BaseAdmin):
-    list_display = ("school_name", "week_number", "summary", "selected", "updated_at")
+    list_display = (
+        "school_name",
+        "week_number",
+        "summary",
+        "selected",
+        "get_associated_question",
+        "get_chat_transcripts_link",
+        "updated_at",
+    )
     search_fields = ("summary",)
     list_filter = ("school_name", "week_number", "selected")
+
+    @admin.display(description="Question Asked")
+    def get_associated_question(self, obj: Summary):
+        # the question asked is the initial message of the message type "initial"
+        # sent at the beginning of the week for that school
+        some_individual_chat_transcript = IndividualChatTranscript.objects.filter(
+            session__week_number=obj.week_number,
+            session__user__school_name=obj.school_name,
+            session__message_type=MessageType.INITIAL,
+        ).first()
+        if some_individual_chat_transcript:
+            return some_individual_chat_transcript.session.initial_message
+        some_group_chat_transcript = GroupChatTranscript.objects.filter(
+            session__week_number=obj.week_number,
+            session__group__users__school_name=obj.school_name,
+            session__message_type=MessageType.INITIAL,
+        ).first()
+        if some_group_chat_transcript:
+            return some_group_chat_transcript.session.initial_message
+        return "-"
+
+    @admin.display(description="Chat Transcripts")
+    def get_chat_transcripts_link(self, obj):
+        individual_url = reverse("admin:chat_individualchattranscript_changelist")
+        group_url = reverse("admin:chat_groupchattranscript_changelist")
+        return format_html(
+            f'''
+            <div>
+                <div>
+                    <a href="{individual_url}?school_name={obj.school_name}&week_number={obj.week_number}">
+                        Individual
+                    </a>
+                </div>
+                <div>
+                    <a href="{group_url}?school_name={obj.school_name}&week_number={obj.week_number}">
+                        Group
+                    </a>
+                </div>
+            </div>
+            ''',
+        )
 
     @admin.action(description="Add selections to summary messages")
     def select_summaries(self, request, queryset: QuerySet[Summary]):

@@ -134,7 +134,7 @@ def _compute_and_validate_message_to_send(
     chat_history, message = load_group_chat_history(session)
     start_timer = timezone.now()
     response = generate_response(chat_history, instruction_prompt, message)
-    response = strip_meta(response)
+    response = strip_meta(response, record.user.school_mascot)
     record.processed_message = message
     record.latency = timezone.now() - start_timer
     record.instruction_prompt = instruction_prompt

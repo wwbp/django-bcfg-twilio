@@ -15,6 +15,7 @@ from chat.models import (
     GroupStrategyPhase,
     IndividualSession,
     MessageType,
+    SundaySummaryPrompt,
     User,
     IndividualChatTranscript,
     GroupChatTranscript,
@@ -266,6 +267,14 @@ class GroupPromptFactory(factory.django.DjangoModelFactory):
     strategy_type = GroupStrategyPhase.AUDIENCE
 
 
+class SundaySummaryPromptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SundaySummaryPrompt
+
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
+
+
 class SummaryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Summary
@@ -330,3 +339,4 @@ register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
 register(GroupSessionFactory)
 register(ControlConfigFactory)
+register(SundaySummaryPromptFactory)

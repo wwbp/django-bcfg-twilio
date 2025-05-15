@@ -35,3 +35,16 @@ def test_strip_meta_empty():
 def test_strip_meta_spaces():
     raw = "[tag]:    Content starts with spaces"
     assert strip_meta(raw) == "Content starts with spaces"
+
+
+def test_strip_meta_assistant_name_colon_suffix():
+    raw = "bot: Hello there"
+    assert strip_meta(raw, "bot") == "Hello there"
+
+def test_strip_meta_assistant_name_colon_prefix():
+    raw = ": bot Hello there"
+    assert strip_meta(raw, "bot") == "Hello there"
+
+def test_strip_meta_assistant_name_both_colons():
+    raw = ": bot : Hello there"
+    assert strip_meta(raw, "bot") == "Hello there"

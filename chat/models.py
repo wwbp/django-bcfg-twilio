@@ -81,7 +81,7 @@ class Group(ModelBase):
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        result = ", ".join([u.name for u in self.users.all()])  # type: ignore
+        result = ", ".join([u.name for u in self.users.all()])
         return result if result else self.id
 
     class Meta:
@@ -211,11 +211,31 @@ class BaseChatTranscript(ModelBase):
 class IndividualChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(IndividualSession, on_delete=models.CASCADE, related_name="transcripts")
 
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
+
+    @property
+    def school_name(self) -> int:
+        return self.session.user.school_name
+
 
 class GroupChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
+
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
+
+    @property
+    def school_name(self) -> str | None:
+        # all users in the group should have the same school name
+        first_user: User | None = self.session.group.users.first()
+        if not first_user:
+            return None
+        return first_user.school_name
 
 
 class BasePrompt(ModelBase):
@@ -251,13 +271,17 @@ class GroupPrompt(BasePrompt):
         verbose_name_plural = "Weekly Group Prompts"
         ordering = ["week", "message_type", "strategy_type"]
 
+class SundaySummaryPrompt(BasePrompt):
+
+    class Meta:
+        verbose_name_plural = "Sunday Summary Prompts"
+        ordering = ["week"]
 
 class ControlConfig(ModelBaseWithUuidId):
     class ControlConfigKey(models.TextChoices):
         PERSONA_PROMPT = "persona_prompt"
         SYSTEM_PROMPT = "system_prompt"
         GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
-        SCHOOL_SUMMARY_PROMPT = "school_summary_prompt"
         GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
         GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
