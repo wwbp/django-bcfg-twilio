@@ -442,6 +442,8 @@ def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
     assert transcripts[2].content == "some message from user during first moderation"
+    assert all(t.week_number == 1 for t in transcripts)
+    assert all(t.school_name == "Test School" for t in transcripts)
 
 
 @pytest.mark.parametrize(

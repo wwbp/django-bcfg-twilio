@@ -59,6 +59,25 @@ def test_view_individualtranscript_list(admin_client, individual_chat_transcript
         assert str(transcript.id) in response.content.decode("utf-8")
 
 
+def test_view_individualtranscript_list_filters(admin_client, individual_chat_transcript_factory):
+    filtered_in_transcripts = individual_chat_transcript_factory.create_batch(
+        2, session__week_number=1, session__user__school_name="test-school"
+    )
+    filtered_out_transcripts1 = individual_chat_transcript_factory.create_batch(
+        2, session__week_number=2, session__user__school_name="test-school"
+    )
+    filtered_out_transcripts2 = individual_chat_transcript_factory.create_batch(
+        2, session__week_number=1, session__user__school_name="other-school"
+    )
+    url = f"{reverse('admin:chat_individualchattranscript_changelist')}?week_number=1&school_name=test-school"
+    response = admin_client.get(url)
+    assert response.status_code == 200
+    for transcript in filtered_in_transcripts:
+        assert f"/admin/chat/individualchattranscript/{transcript.id}" in response.content.decode("utf-8")
+    for transcript in [*filtered_out_transcripts1, *filtered_out_transcripts2]:
+        assert f"/admin/chat/individualchattranscript/{transcript.id}" not in response.content.decode("utf-8")
+
+
 def test_view_individualtranscript_detail(admin_client, individual_chat_transcript_factory):
     transcript = individual_chat_transcript_factory()
     response = admin_client.get(reverse("admin:chat_individualchattranscript_change", args=(transcript.id,)))
@@ -71,6 +90,26 @@ def test_view_group_transcript_list(admin_client, group_chat_transcript_factory)
     assert response.status_code == 200
     for transcript in transcripts:
         assert str(transcript.id) in response.content.decode("utf-8")
+
+
+def test_view_group_transcript_list_filters(admin_client, group_chat_transcript_factory, user_factory):
+    filtered_in_transcripts = group_chat_transcript_factory.create_batch(2, session__week_number=1)
+    for transcript in filtered_in_transcripts:
+        user_factory.create_batch(2, group=transcript.session.group, school_name="test-school")
+    filtered_out_transcripts1 = group_chat_transcript_factory.create_batch(2, session__week_number=2)
+    for transcript in filtered_in_transcripts:
+        user_factory.create_batch(2, group=transcript.session.group, school_name="test-school")
+    filtered_out_transcripts2 = group_chat_transcript_factory.create_batch(2, session__week_number=1)
+    for transcript in filtered_in_transcripts:
+        user_factory.create_batch(2, group=transcript.session.group, school_name="other-school")
+
+    url = f"{reverse('admin:chat_groupchattranscript_changelist')}?week_number=1&school_name=test-school"
+    response = admin_client.get(url)
+    assert response.status_code == 200
+    for transcript in filtered_in_transcripts:
+        assert f"/admin/chat/groupchattranscript/{transcript.id}" in response.content.decode("utf-8")
+    for transcript in [*filtered_out_transcripts1, *filtered_out_transcripts2]:
+        assert f"/admin/chat/groupchattranscript/{transcript.id}" not in response.content.decode("utf-8")
 
 
 def test_view_prompt_list(admin_client, individual_prompt_factory):

@@ -81,7 +81,7 @@ class Group(ModelBase):
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        result = ", ".join([u.name for u in self.users.all()])  # type: ignore
+        result = ", ".join([u.name for u in self.users.all()])
         return result if result else self.id
 
     class Meta:
@@ -211,11 +211,31 @@ class BaseChatTranscript(ModelBase):
 class IndividualChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(IndividualSession, on_delete=models.CASCADE, related_name="transcripts")
 
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
+
+    @property
+    def school_name(self) -> int:
+        return self.session.user.school_name
+
 
 class GroupChatTranscript(BaseChatTranscript):
     session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
+
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
+
+    @property
+    def school_name(self) -> str | None:
+        # all users in the group should have the same school name
+        first_user: User | None = self.session.group.users.first()
+        if not first_user:
+            return None
+        return first_user.school_name
 
 
 class BasePrompt(ModelBase):
