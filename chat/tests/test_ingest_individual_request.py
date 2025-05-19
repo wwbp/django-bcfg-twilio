@@ -61,6 +61,10 @@ def test_new_user_creation(make_input_data):
     assert transcripts[0].content == "Hello, world!"
     assert transcripts[1].role == BaseChatTranscript.Role.USER
     assert transcripts[1].content == "I would like to enroll."
+    assert transcripts.first().week_number == 1
+    assert transcripts.last().week_number == 1
+    assert transcripts.first().school_name == "Test High"
+    assert transcripts.last().school_name == "Test High"
 
 
 @pytest.fixture

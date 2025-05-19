@@ -5,7 +5,14 @@ from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
-from chat.models import BaseChatTranscript, ControlConfig, GroupChatTranscript, IndividualChatTranscript, Summary, User
+from chat.models import (
+    BaseChatTranscript,
+    GroupChatTranscript,
+    IndividualChatTranscript,
+    Summary,
+    SundaySummaryPrompt,
+    User,
+)
 from chat.services.send import send_school_summaries_to_hub_for_week
 from chat.services.completion import generate_response
 
@@ -105,7 +112,11 @@ def _generate_top_10_summaries_for_school(
     Generate top 10 summaries for a given school via an LLM.
     """
     # assemble prompt
-    instructions = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SCHOOL_SUMMARY_PROMPT)
+    try:
+        instructions = SundaySummaryPrompt.objects.get(week=school_week_number).activity
+    except SundaySummaryPrompt.DoesNotExist as err:
+        logger.error(f"Error retrieving Sunday Summary Prompt for week '{school_week_number}': {err}")
+        raise
     transcript: list[dict] = []
     for t in all_group_school_chats:
         transcript.append(

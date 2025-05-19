@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 
-from chat.services.summaries import _generate_top_10_summaries_for_school, ControlConfig
+from chat.services.summaries import _generate_top_10_summaries_for_school
 
 
 @pytest.mark.parametrize(
@@ -70,12 +70,12 @@ from chat.services.summaries import _generate_top_10_summaries_for_school, Contr
 @patch("chat.services.summaries.generate_response")
 def test_generate_top_10_summaries_parsing(
     mock_generate_response,
-    control_config_factory,
+    sunday_summary_prompt_factory,
     response,
     expected,
 ):
     # Prepare a dummy prompt in ControlConfig
-    control_config_factory(key=ControlConfig.ControlConfigKey.SCHOOL_SUMMARY_PROMPT, value="test_value")
+    sunday_summary_prompt_factory(week=42, activity="test_value")
     # Stub out the LLM output
     mock_generate_response.return_value = response
 
