@@ -19,13 +19,15 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+
 def strip_meta(txt, assistant_name=None):
-    # 1) remove [tag]: … from start of each line
-    out = re.sub(r"^\[[^\]]+\]:\s*", "", txt, flags=re.M)
-    # 2) then, if given, strip leading ": name", "name:", or ": name :" 
+    # 1) remove [tag] (with or without “:”) from start of each line
+    out = re.sub(r"^\[[^\]]+\]\s*:?\s*", "", txt, flags=re.M)
+
+    # 2) then, if given, strip leading ": name", "name:", or ": name :"
     if assistant_name:
         esc = re.escape(assistant_name)
-        assistant_pattern = rf"^(?::\s*{esc}\s*:?\s*|{esc}:\s*)"
+        assistant_pattern = rf"^(?::\s*{esc}\s*:?\s*|{esc}\s*:?\s*)"
         out = re.sub(assistant_pattern, "", out, flags=re.M)
     return out
 
