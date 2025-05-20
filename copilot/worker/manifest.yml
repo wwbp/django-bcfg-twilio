@@ -46,14 +46,17 @@ environments:
     variables:
       DJANGO_ENV: dev
       BCFG_DOMAIN: https://dev-2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://dev.wwbp-bcfg-chatbot.org/
   test:
     deployment: # The deployment strategy for the "test" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
       DJANGO_ENV: test
       BCFG_DOMAIN: https://test-2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://test.wwbp-bcfg-chatbot.org/
   prod:
     count: 2
     variables:
       DJANGO_ENV: prod
       BCFG_DOMAIN: https://2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://app.wwbp-bcfg-chatbot.org/

@@ -271,11 +271,13 @@ class GroupPrompt(BasePrompt):
         verbose_name_plural = "Weekly Group Prompts"
         ordering = ["week", "message_type", "strategy_type"]
 
-class SundaySummaryPrompt(BasePrompt):
 
+class SundaySummaryPrompt(BasePrompt):
     class Meta:
+        unique_together = ["week"]
         verbose_name_plural = "Sunday Summary Prompts"
         ordering = ["week"]
+
 
 class ControlConfig(ModelBaseWithUuidId):
     class ControlConfigKey(models.TextChoices):

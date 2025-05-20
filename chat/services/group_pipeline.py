@@ -120,7 +120,9 @@ def _clear_existing_and_schedule_group_action(
         record.status = GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
         record.save()
     logger.info(
-        f"Scheduled response for group {record.group.id}, sender {record.user.id}, run_id {record.run_id} "
+        f"Scheduled response for group {record.group.id} "
+        f"(phase {last_user_chat_transcript.session.current_strategy_phase}), "
+        f"sender {record.user.id}, run_id {record.run_id} "
         f"after {delay_sec} seconds"
     )
 
