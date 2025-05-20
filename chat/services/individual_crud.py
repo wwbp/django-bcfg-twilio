@@ -148,7 +148,7 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         .first()
     )
     for t in individual_transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if latest_user_transcript and t.id == latest_user_transcript.id:  # type: ignore[attrib]
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
@@ -196,7 +196,7 @@ def load_individual_chat_history(user: User):
     # Build chat history, excluding the latest user message
     history = []
     for t in transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if latest_user_transcript and t.id == latest_user_transcript.id:  # type: ignore[attrib]
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
@@ -240,18 +240,17 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
     return assistant_chat_transcript
 
 
-def load_instruction_prompt_for_direct_messaging(user: User):
-    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+def _load_instruction_prompt(user: User, personal_prompt_key: str):
     # get latest session for the user
-    session = user.sessions.order_by("-created_at").first()
+    session = user.sessions.order_by("-created_at").first()  # type: ignore[attrib]
     week = session.week_number
     message_type = session.message_type
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
     school_name = user.school_name
 
     # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    persona = ControlConfig.retrieve(personal_prompt_key)
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
@@ -262,7 +261,7 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         raise
 
     # Pull the template out of ControlConfig (fallback to the constant if missing)
-    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)
     if not template:
         raise ValueError("instruction-prompt template not found in ControlConfig.")
 
@@ -275,39 +274,13 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         activity=activity,
     )
     return instruction_prompt
+
+
+def load_instruction_prompt_for_direct_messaging(user: User):
+    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+    return _load_instruction_prompt(user, ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT)
 
 
 def load_instruction_prompt(user: User):
-    # get latest session for the user
-    session = user.sessions.order_by("-created_at").first()
-    week = session.week_number
-    message_type = session.message_type
-    assistant_name = user.school_mascot if user.school_mascot else "Assistant"
-    school_name = user.school_name
-
-    # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
-    if not persona or not system:
-        raise ValueError("System or Persona prompt not found in ControlConfig.")
-
-    try:
-        activity = IndividualPrompt.objects.get(week=week, message_type=message_type).activity
-    except IndividualPrompt.DoesNotExist as err:
-        logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
-        raise
-
-    # Pull the template out of ControlConfig (fallback to the constant if missing)
-    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
-    if not template:
-        raise ValueError("instruction-prompt template not found in ControlConfig.")
-
-    # Format the final prompt using the template
-    instruction_prompt = template.format(
-        system=system,
-        persona=persona,
-        assistant_name=assistant_name,
-        school_name=school_name,
-        activity=activity,
-    )
-    return instruction_prompt
+    logger.info(f"Loading instruction prompt for individual participant: {user.id}")
+    return _load_instruction_prompt(user, ControlConfig.ControlConfigKey.PERSONA_PROMPT)
