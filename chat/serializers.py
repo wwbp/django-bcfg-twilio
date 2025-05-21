@@ -43,8 +43,14 @@ class GroupIncomingMessage:
 class IndividualIncomingMessageSerializer(DataclassSerializer):
     class Meta:
         dataclass = IndividualIncomingMessage
+        extra_kwargs = {
+            "message": {"allow_blank": True},
+        }
 
 
 class GroupIncomingMessageSerializer(DataclassSerializer):
     class Meta:
         dataclass = GroupIncomingMessage
+        extra_kwargs = {
+            "message": {"allow_blank": True},
+        }
