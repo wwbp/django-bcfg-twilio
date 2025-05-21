@@ -21,7 +21,7 @@ async def _generate_response_async(chat_history: list[ChatMessage], instructions
     return response
 
 
-def _generate_response(chat_history, instructions, message):
+def _generate_response(chat_history, instructions, message) -> str:
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(_generate_response_async(chat_history, instructions, message))
@@ -29,7 +29,7 @@ def _generate_response(chat_history, instructions, message):
         loop.close()
 
 
-def generate_response(history_json: list[dict], instructions: str, message: str) -> ChatMessage:
+def generate_response(history_json: list[dict], instructions: str, message: str) -> str:
     chat_history = [ChatMessage.model_validate(chat) for chat in history_json]
     response = _generate_response(chat_history, instructions, message)
     return response
@@ -48,6 +48,7 @@ def chat_completion(instructions: str) -> str:
 
 
 def ensure_within_character_limit(record: BasePipelineRecord) -> str:
+    assert record.response
     current_text = record.response
     if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
         return current_text

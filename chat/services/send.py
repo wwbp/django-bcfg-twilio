@@ -62,3 +62,13 @@ def send_school_summaries_to_hub_for_week(school_name: str, week_number: int, su
         response = client.post(url, json=payload, headers=headers)
         response.raise_for_status()
         return response.json()
+
+
+def send_missing_summary_notification(to_emails: list[str], config_link: str, missing_for: list[str]):
+    url = f"{settings.BCFG_DOMAIN}/ai/api/summary/missing-alert"
+    headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+    payload = {"to_emails": to_emails, "config_link": config_link, "missing_for": missing_for}
+    with httpx.Client() as client:
+        response = client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
