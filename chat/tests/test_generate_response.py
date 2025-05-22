@@ -22,7 +22,7 @@ def test__generate_response_param(mock_openai, mock_kani, chat_history, instruct
     # Configure the mocked Kani instance.
     mock_kani.return_value.chat_round_str.side_effect = dummy_chat_round_str
 
-    result = _generate_response(chat_history, instructions, message)
+    result = _generate_response(chat_history, instructions, message, "gpt-4o-mini")
     assert result == expected_response
     mock_kani.return_value.chat_round_str.assert_called_once_with(message)
 
@@ -47,7 +47,7 @@ def test_generate_response_param(
 
     mock_chatmessage.model_validate.side_effect = dummy_model_validate
 
-    result = generate_response(history_json, "Test instructions", "Test message")
+    result = generate_response(history_json, "Test instructions", "Test message", "gpt-4o-mini")
     # Verify model_validate was called once for each dict in history_json.
     assert mock_chatmessage.model_validate.call_count == expected_call_count
     assert result == expected_result

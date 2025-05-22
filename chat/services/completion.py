@@ -14,24 +14,26 @@ logger = logging.getLogger(__name__)
 MAX_RESPONSE_CHARACTER_LENGTH = 320
 
 
-async def _generate_response_async(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
-    engine = OpenAIEngine(settings.OPENAI_API_KEY, model=settings.OPENAI_MODEL)
+async def _generate_response_async(
+    chat_history: list[ChatMessage], instructions: str, message: str, gpt_model: str
+) -> str:
+    engine = OpenAIEngine(settings.OPENAI_API_KEY, model=gpt_model)
     assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
     response = await assistant.chat_round_str(message)
     return response
 
 
-def _generate_response(chat_history, instructions, message) -> str:
+def _generate_response(chat_history, instructions, message, gpt_model):
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message))
+        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message, gpt_model))
     finally:
         loop.close()
 
 
-def generate_response(history_json: list[dict], instructions: str, message: str) -> str:
+def generate_response(history_json: list[dict], instructions: str, message: str, gpt_model: str) -> ChatMessage:
     chat_history = [ChatMessage.model_validate(chat) for chat in history_json]
-    response = _generate_response(chat_history, instructions, message)
+    response = _generate_response(chat_history, instructions, message, gpt_model)
     return response
 
 
