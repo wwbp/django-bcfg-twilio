@@ -1,7 +1,11 @@
 import logging
 from celery import shared_task
 from django.utils import timezone
-from chat.serializers import IndividualIncomingMessage, IndividualIncomingMessageSerializer
+from django.conf import settings
+from chat.serializers import (
+    IndividualIncomingMessage,
+    IndividualIncomingMessageSerializer,
+)
 from .moderation import moderate_message
 from .individual_crud import (
     format_chat_history,
@@ -15,7 +19,11 @@ from .individual_crud import (
 )
 from .completion import ensure_within_character_limit, generate_response
 from .send import send_moderation_message, send_message_to_participant
-from ..models import IndividualChatTranscript, IndividualPipelineRecord, IndividualSession
+from ..models import (
+    IndividualChatTranscript,
+    IndividualPipelineRecord,
+    IndividualSession,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +88,17 @@ def individual_process(record: IndividualPipelineRecord):
         instructions = load_instruction_prompt(record.user)
 
     start_timer = timezone.now()
-    response = generate_response(chat_history, instructions, message)
-    response = strip_meta(response, record.user.school_mascot)
+    gpt_model = record.user.gpt_model or settings.OPENAI_MODEL
+    response, prompt_tokens, completion_tokens = generate_response(chat_history, instructions, message, gpt_model)
+    # Strip metadata from the response if the user is not a test user
+    # for testing llm responses, we want to see the raw response
+    if not record.user.is_test:
+        response = strip_meta(response, record.user.school_mascot)
+    record.prompt_tokens = prompt_tokens
+    record.completion_tokens = completion_tokens
+    record.gpt_model = gpt_model
     record.processed_message = message
-    record.latency = timezone.now()-start_timer
+    record.latency = timezone.now() - start_timer
     record.instruction_prompt = instructions
     record.chat_history = format_chat_history(chat_history)
     record.response = response
@@ -112,7 +127,7 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
     assistant_chat_transcript = save_assistant_response(record, session)
     record.transcript = assistant_chat_transcript
     # Send the message via the external endpoint
-    if not record.user.is_test:
+    if not record.user.is_test and response:
         send_message_to_participant(participant_id, response)
         # Update the pipeline record for the sending stage
         record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED

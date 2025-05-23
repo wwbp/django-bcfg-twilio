@@ -14,28 +14,35 @@ logger = logging.getLogger(__name__)
 MAX_RESPONSE_CHARACTER_LENGTH = 320
 
 
-async def _generate_response_async(chat_history: list[ChatMessage], instructions: str, message: str) -> str:
-    engine = OpenAIEngine(settings.OPENAI_API_KEY, model=settings.OPENAI_MODEL)
+async def _generate_response_async(
+    chat_history: list[ChatMessage], instructions: str, message: str, gpt_model: str
+) -> tuple[str, int, int]:
+    engine = OpenAIEngine(settings.OPENAI_API_KEY, model=gpt_model)
     assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
     response = await assistant.chat_round_str(message)
-    return response
+    completion = await assistant.get_model_completion()
+    prompt_tokens = completion.prompt_tokens or 0
+    completion_tokens = completion.completion_tokens or 0
+    return (response, prompt_tokens, completion_tokens)
 
 
-def _generate_response(chat_history, instructions, message) -> str:
+def _generate_response(chat_history, instructions, message, gpt_model):
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message))
+        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message, gpt_model))
     finally:
         loop.close()
 
 
-def generate_response(history_json: list[dict], instructions: str, message: str) -> str:
+def generate_response(
+    history_json: list[dict], instructions: str, message: str, gpt_model: str
+) -> tuple[str, int | None, int | None]:
     chat_history = [ChatMessage.model_validate(chat) for chat in history_json]
-    response = _generate_response(chat_history, instructions, message)
-    return response
+    response, prompt_tokens, completion_tokens = _generate_response(chat_history, instructions, message, gpt_model)
+    return (response, prompt_tokens, completion_tokens)
 
 
-def chat_completion(instructions: str) -> str:
+def chat_completion(instructions: str) -> tuple[str, int, int]:
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     completion = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
@@ -44,11 +51,17 @@ def chat_completion(instructions: str) -> str:
         ],
     )
     response = completion.choices[0].message.content
-    return response or ""
+    prompt_tokens = 0
+    completion_tokens = 0
+    if completion.usage is not None:
+        prompt_tokens = completion.usage.prompt_tokens
+        completion_tokens = completion.usage.completion_tokens
+    return (response or "", prompt_tokens, completion_tokens)
 
 
 def ensure_within_character_limit(record: BasePipelineRecord) -> str:
-    assert record.response
+    if not record.response:
+        return ""
     current_text = record.response
     if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
         return current_text
@@ -58,9 +71,11 @@ def ensure_within_character_limit(record: BasePipelineRecord) -> str:
                 f"Goal: Shorten the following text to under {MAX_RESPONSE_CHARACTER_LENGTH} characters. "
                 "Output format: just the shortened response text.\n\nText: " + current_text
             )
-            shortened = chat_completion(instructions)
+            shortened, prompt_tokens, completion_tokens = chat_completion(instructions)
             current_text = shortened
             record.shorten_count += 1
+            record.prompt_tokens = (record.prompt_tokens or 0) + (prompt_tokens or 0)
+            record.completion_tokens = (record.completion_tokens or 0) + (completion_tokens or 0)
 
     if len(current_text) > MAX_RESPONSE_CHARACTER_LENGTH:
         sentences = re.split(r"(?<=\.)\s+", current_text)

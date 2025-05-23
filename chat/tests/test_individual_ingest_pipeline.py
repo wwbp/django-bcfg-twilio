@@ -10,7 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 @patch("chat.views.individual_pipeline.delay")
-def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
+@pytest.mark.parametrize(
+    "message,initial_message",
+    [["Hello, world!", "Some initial message"], ["", "Some initial message"], ["Hello world!", ""]],
+)
+def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client, message, initial_message):
     # Configure the mock to return True
     mock_individual_pipeline_task_delay.return_value = True
 
@@ -19,12 +23,12 @@ def test_ingest_individual_valid(mock_individual_pipeline_task_delay, client):
         "context": {
             "school_name": "Test School",
             "school_mascot": "Tiger",
-            "initial_message": "Welcome!",
+            "initial_message": initial_message,
             "message_type": "initial",
             "week_number": 1,
             "name": "John Doe",
         },
-        "message": "Hello, world!",
+        "message": message,
     }
     test_api_key = "test-api-key"
     with override_settings(INBOUND_MESSAGE_API_KEY=test_api_key):

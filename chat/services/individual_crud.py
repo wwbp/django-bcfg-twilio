@@ -79,12 +79,13 @@ def ingest_request(participant_id: str, individual_incoming_message: IndividualI
             # if the user is in the group condition, we already captured the initial message in the
             # group session's transcript
             if created_session:
-                # if we created a new session, we need to add the initial message to it
-                IndividualChatTranscript.objects.create(
-                    session=session,
-                    role=BaseChatTranscript.Role.ASSISTANT,
-                    content=individual_incoming_message.context.initial_message,
-                )
+                if individual_incoming_message.context.initial_message:
+                    # if we created a new session, we need to add the initial message to it
+                    IndividualChatTranscript.objects.create(
+                        session=session,
+                        role=BaseChatTranscript.Role.ASSISTANT,
+                        content=individual_incoming_message.context.initial_message,
+                    )
             else:
                 if session.initial_message != individual_incoming_message.context.initial_message and not user.is_test:
                     logger.error(

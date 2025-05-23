@@ -133,7 +133,11 @@ def test_individual_pipeline_parametrized(
     )
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
-    mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]
+    mock_all_individual_external_calls.mock_generate_response.return_value = (
+        mocks["generate_response_return"],
+        None,
+        None,
+    )
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = mocks[
         "ensure_within_character_limit_return"
     ]

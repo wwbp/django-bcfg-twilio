@@ -7,7 +7,7 @@ from chat.services.individual_crud import format_chat_history, strip_meta
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction
 from django.utils import timezone
-
+from django.conf import settings
 from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
 from chat.services.completion import ensure_within_character_limit, generate_response
 from chat.services.group_crud import load_group_chat_history, load_instruction_prompt, ingest_request
@@ -135,8 +135,15 @@ def _compute_and_validate_message_to_send(
     instruction_prompt = load_instruction_prompt(session, next_strategy_phase)
     chat_history, message = load_group_chat_history(session)
     start_timer = timezone.now()
-    response = generate_response(chat_history, instruction_prompt, message)
-    response = strip_meta(response, record.user.school_mascot)
+    gpt_model = record.group.gpt_model or settings.OPENAI_MODEL
+    response, prompt_tokens, completion_tokens = generate_response(chat_history, instruction_prompt, message, gpt_model)
+    # Strip metadata from the response if the user is not a test user
+    # for testing llm responses, we want to see the raw response
+    if not record.is_test:
+        response = strip_meta(response, record.user.school_mascot)
+    record.prompt_tokens = prompt_tokens
+    record.completion_tokens = completion_tokens
+    record.gpt_model = gpt_model
     record.processed_message = message
     record.latency = timezone.now() - start_timer
     record.instruction_prompt = instruction_prompt
@@ -167,7 +174,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         user_message=record.processed_message,
         assistant_strategy_phase=next_strategy_phase,
     )
-    if not record.is_test:
+    if not record.is_test and response:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
     record.save()

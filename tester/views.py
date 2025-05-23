@@ -21,6 +21,17 @@ from django.urls import reverse
 import requests
 from tester.models import ChatResponse
 
+GPT_MODEL_OPTIONS = [
+    "o4-mini-2025-04-16",
+    "o3-2025-04-16",
+    "o3-mini-2025-01-31",
+    "gpt-4.1-2025-04-14",
+    "gpt-4o-2024-08-06",
+    "gpt-4.1-mini-2025-04-14",
+    "gpt-4.1-nano-2025-04-14",
+    "gpt-4o-mini-2024-07-18",
+]
+
 
 class ChatTestInterface(View, PermissionRequiredMixin):
     def get(self, request):
@@ -35,6 +46,7 @@ class ChatTestInterface(View, PermissionRequiredMixin):
                 "responses": responses,
                 "test_users": test_users,
                 "api_key": settings.INBOUND_MESSAGE_API_KEY,
+                "gpt_model_options": GPT_MODEL_OPTIONS,
             },
         )
 
@@ -97,6 +109,7 @@ def create_test_case(request):
     initial_message = data.get("initial_message")
     week_number = data.get("week_number")
     message_type = data.get("message_type")
+    chosen_model = data.get("gpt_model")
 
     if participant_id and name:
         try:
@@ -107,6 +120,7 @@ def create_test_case(request):
                     school_name=school_name,
                     school_mascot=school_mascot,
                     is_test=True,
+                    gpt_model=chosen_model,
                 )
         except IntegrityError:
             # Notify the user if the participant id already exists.
@@ -119,10 +133,11 @@ def create_test_case(request):
             week_number=week_number,
             message_type=message_type,
         )
-        # Insert the initial assistant message into the transcript.
-        IndividualChatTranscript.objects.create(
-            session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message
-        )
+        if initial_message:
+            # Insert the initial assistant message into the transcript.
+            IndividualChatTranscript.objects.create(
+                session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message
+            )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
@@ -179,7 +194,12 @@ class GroupChatTestInterface(View):
         return render(
             request,
             "tester/group_chat_interface.html",
-            {"test_groups_data": test_groups_data, "api_key": settings.INBOUND_MESSAGE_API_KEY, "has_permission": True},
+            {
+                "test_groups_data": test_groups_data,
+                "api_key": settings.INBOUND_MESSAGE_API_KEY,
+                "has_permission": True,
+                "gpt_model_options": GPT_MODEL_OPTIONS,
+            },
         )
 
 
@@ -193,10 +213,11 @@ def create_group_test_case(request):
     initial_message = data.get("initial_message")
     week_number = data.get("week_number")
     message_type = data.get("message_type")
+    chosen_model = data.get("gpt_model") 
 
     if group_id and participants_str:
         try:
-            group = Group.objects.create(id=group_id, is_test=True)
+            group = Group.objects.create(id=group_id, is_test=True, gpt_model=chosen_model)
             for pair in participants_str.split(","):
                 if ":" in pair:
                     uid, name = pair.split(":")
@@ -209,6 +230,7 @@ def create_group_test_case(request):
                         school_name=school_name,
                         school_mascot=school_mascot,
                         is_test=True,
+                        gpt_model=chosen_model,
                     )
         except IntegrityError:
             # Notify the user if the group ID already exists.
@@ -220,12 +242,13 @@ def create_group_test_case(request):
             week_number=week_number,
             message_type=message_type,
         )
-        GroupChatTranscript.objects.create(
-            session=session,
-            role=BaseChatTranscript.Role.ASSISTANT,
-            content=initial_message,
-            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
-        )
+        if initial_message:
+            GroupChatTranscript.objects.create(
+                session=session,
+                role=BaseChatTranscript.Role.ASSISTANT,
+                content=initial_message,
+                assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+            )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 

@@ -75,6 +75,7 @@ class ModelBaseWithUuidId(ModelBase):
 class Group(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
     is_test = models.BooleanField(default=False)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
 
     @property
     def current_session(self) -> "IndividualSession | None":
@@ -95,6 +96,7 @@ class User(ModelBase):
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
     is_test = models.BooleanField(default=False)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
 
     @property
     def current_session(self) -> "IndividualSession | None":
@@ -119,8 +121,13 @@ class BaseSession(ModelBase):
         Returns the content of the very first transcript for this session,
         or None if no transcripts exist.
         """
-        first = self.transcripts.order_by("created_at").values_list("content", flat=True).first()
-        return first
+        first: "BaseChatTranscript" = self.transcripts.order_by("created_at").first()
+        if not first or first.role == BaseChatTranscript.Role.USER:
+            # the hub didn't send an initial message if the first message was from the user
+            # this can happen in "reminder" sessions where everyone is responding so the
+            # hub has no reason to send a reminder
+            return ""
+        return first.content
 
     class Meta:
         abstract = True
@@ -350,6 +357,9 @@ class BasePipelineRecord(ModelBase):
     latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
+    prompt_tokens = models.IntegerField(blank=True, null=True)
+    completion_tokens = models.IntegerField(blank=True, null=True)
 
     class Meta:
         abstract = True
