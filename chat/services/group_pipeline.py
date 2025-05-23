@@ -174,7 +174,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         user_message=record.processed_message,
         assistant_strategy_phase=next_strategy_phase,
     )
-    if not record.is_test:
+    if not record.is_test and response:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
     record.save()

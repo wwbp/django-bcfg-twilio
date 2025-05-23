@@ -60,7 +60,8 @@ def chat_completion(instructions: str) -> tuple[str, int, int]:
 
 
 def ensure_within_character_limit(record: BasePipelineRecord) -> str:
-    assert record.response
+    if not record.response:
+        return ""
     current_text = record.response
     if len(current_text) <= MAX_RESPONSE_CHARACTER_LENGTH:
         return current_text
