@@ -133,10 +133,11 @@ def create_test_case(request):
             week_number=week_number,
             message_type=message_type,
         )
-        # Insert the initial assistant message into the transcript.
-        IndividualChatTranscript.objects.create(
-            session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message
-        )
+        if initial_message:
+            # Insert the initial assistant message into the transcript.
+            IndividualChatTranscript.objects.create(
+                session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message
+            )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
@@ -241,12 +242,13 @@ def create_group_test_case(request):
             week_number=week_number,
             message_type=message_type,
         )
-        GroupChatTranscript.objects.create(
-            session=session,
-            role=BaseChatTranscript.Role.ASSISTANT,
-            content=initial_message,
-            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
-        )
+        if initial_message:
+            GroupChatTranscript.objects.create(
+                session=session,
+                role=BaseChatTranscript.Role.ASSISTANT,
+                content=initial_message,
+                assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+            )
         return JsonResponse({"success": True})
     return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 

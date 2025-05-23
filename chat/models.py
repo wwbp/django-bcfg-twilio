@@ -121,8 +121,13 @@ class BaseSession(ModelBase):
         Returns the content of the very first transcript for this session,
         or None if no transcripts exist.
         """
-        first = self.transcripts.order_by("created_at").values_list("content", flat=True).first()
-        return first
+        first: "BaseChatTranscript" = self.transcripts.order_by("created_at").first()
+        if not first or first.role == BaseChatTranscript.Role.USER:
+            # the hub didn't send an initial message if the first message was from the user
+            # this can happen in "reminder" sessions where everyone is responding so the
+            # hub has no reason to send a reminder
+            return ""
+        return first.content
 
     class Meta:
         abstract = True

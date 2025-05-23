@@ -32,13 +32,14 @@ def _get_or_create_session(group: Group, week_number: int, message_type: str, in
     )
 
     if created_session:
-        # if we created a new session, we need to add the initial message to it
-        GroupChatTranscript.objects.create(
-            session=session,
-            role=BaseChatTranscript.Role.ASSISTANT,
-            content=initial_message,
-            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
-        )
+        if initial_message:
+            # if we created a new session, we need to add the initial message to it
+            GroupChatTranscript.objects.create(
+                session=session,
+                role=BaseChatTranscript.Role.ASSISTANT,
+                content=initial_message,
+                assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+            )
     else:
         if session.initial_message != initial_message and not group.is_test:
             logger.error(

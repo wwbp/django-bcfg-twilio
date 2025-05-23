@@ -45,6 +45,7 @@ class IndividualIncomingMessageSerializer(DataclassSerializer):
         dataclass = IndividualIncomingMessage
         extra_kwargs = {
             "message": {"allow_blank": True},
+            "context": {"extra_kwargs": {"initial_message": {"allow_blank": True}}},
         }
 
 
@@ -53,4 +54,5 @@ class GroupIncomingMessageSerializer(DataclassSerializer):
         dataclass = GroupIncomingMessage
         extra_kwargs = {
             "message": {"allow_blank": True},
+            "context": {"extra_kwargs": {"initial_message": {"allow_blank": True}}},
         }

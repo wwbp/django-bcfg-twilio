@@ -349,6 +349,27 @@ def test_group_pipeline_handle_inbound_message_changed_initial_message(
     assert "Got new initial_message for existing group session" in caplog.text
 
 
+def test_group_pipeline_handle_inbound_message_changed_empty_initial_message(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
+    group_id, _, data, _, _, _ = _inbound_call
+    url = reverse("chat:ingest-group", args=[group_id])
+
+    # send initial message as before
+    data["context"]["initial_message"] = ""
+    response = message_client.post(
+        url,
+        data,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    session = GroupSession.objects.get()
+    assert session.initial_message == ""
+    transcripts = session.transcripts
+    assert transcripts.count() == 1
+    assert transcripts.first().content == _FIRST_USER_MESSAGE
+
+
 def test_group_pipeline_handle_inbound_message_throws_exception_after_ingest(
     _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
 ):
