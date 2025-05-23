@@ -358,6 +358,8 @@ class BasePipelineRecord(ModelBase):
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)
     gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
+    prompt_tokens = models.IntegerField(blank=True, null=True)
+    completion_tokens = models.IntegerField(blank=True, null=True)
 
     class Meta:
         abstract = True

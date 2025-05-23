@@ -89,11 +89,13 @@ def individual_process(record: IndividualPipelineRecord):
 
     start_timer = timezone.now()
     gpt_model = record.user.gpt_model or settings.OPENAI_MODEL
-    response = generate_response(chat_history, instructions, message, gpt_model)
+    response, prompt_tokens, completion_tokens = generate_response(chat_history, instructions, message, gpt_model)
     # Strip metadata from the response if the user is not a test user
     # for testing llm responses, we want to see the raw response
     if not record.user.is_test:
         response = strip_meta(response, record.user.school_mascot)
+    record.prompt_tokens = prompt_tokens
+    record.completion_tokens = completion_tokens
     record.gpt_model = gpt_model
     record.processed_message = message
     record.latency = timezone.now() - start_timer

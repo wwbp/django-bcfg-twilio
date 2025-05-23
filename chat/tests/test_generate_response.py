@@ -22,7 +22,16 @@ def test__generate_response_param(mock_openai, mock_kani, chat_history, instruct
     # Configure the mocked Kani instance.
     mock_kani.return_value.chat_round_str.side_effect = dummy_chat_round_str
 
-    result = _generate_response(chat_history, instructions, message, "gpt-4o-mini")
+    async def dummy_get_model_completion():
+        class Dummy:
+            prompt_tokens = None
+            completion_tokens = None
+
+        return Dummy()
+
+    mock_kani.return_value.get_model_completion.side_effect = dummy_get_model_completion
+
+    result, _, _ = _generate_response(chat_history, instructions, message, "gpt-4o-mini")
     assert result == expected_response
     mock_kani.return_value.chat_round_str.assert_called_once_with(message)
 
@@ -36,7 +45,7 @@ def test__generate_response_param(mock_openai, mock_kani, chat_history, instruct
         ([], 0, "mocked response"),
     ],
 )
-@patch("chat.services.completion._generate_response", return_value="mocked response")
+@patch("chat.services.completion._generate_response", return_value=("mocked response", None, None))
 @patch("chat.services.completion.ChatMessage")
 def test_generate_response_param(
     mock_chatmessage, mock_generate_response, history_json, expected_call_count, expected_result
@@ -47,7 +56,7 @@ def test_generate_response_param(
 
     mock_chatmessage.model_validate.side_effect = dummy_model_validate
 
-    result = generate_response(history_json, "Test instructions", "Test message", "gpt-4o-mini")
+    result, _, _ = generate_response(history_json, "Test instructions", "Test message", "gpt-4o-mini")
     # Verify model_validate was called once for each dict in history_json.
     assert mock_chatmessage.model_validate.call_count == expected_call_count
     assert result == expected_result

@@ -95,7 +95,7 @@ def _mocks():
             "chat.services.group_pipeline.send_message_to_participant_group", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
         patch(
-            "chat.services.completion._generate_response", return_value="Some LLM response"
+            "chat.services.completion._generate_response", return_value=("Some LLM response", None, None)
         ) as mock_generate_response,
     ):
         yield (

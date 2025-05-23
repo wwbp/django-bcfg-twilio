@@ -98,7 +98,7 @@ def mock_all_individual_external_calls():
     with (
         patch("chat.services.individual_pipeline.moderate_message", return_value="") as mock_moderate_message,
         patch(
-            "chat.services.individual_pipeline.generate_response", return_value="Some LLM response"
+            "chat.services.individual_pipeline.generate_response", return_value=("Some LLM response", None, None)
         ) as mock_generate_response,
         patch(
             "chat.services.individual_pipeline.ensure_within_character_limit",
