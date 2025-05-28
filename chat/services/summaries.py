@@ -221,7 +221,7 @@ def notify_on_missing_summaries():
 
     if missing_for:
         to_emails: list[str] = list(
-            Group.objects.get(name=AuthGroupName.StandardUser.value).user_set.values_list("email", flat=True).all()
+            Group.objects.get(name=AuthGroupName.ResearcherUser.value).user_set.values_list("email", flat=True).all()
         )
         config_link = f"{settings.BASE_ADMIN_URI}admin/chat/summary/"
         send_missing_summary_notification(
