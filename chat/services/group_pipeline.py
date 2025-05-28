@@ -8,9 +8,19 @@ from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
-from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
+from chat.serializers import (
+    GroupIncomingInitialMessage,
+    GroupIncomingMessage,
+    GroupIncomingMessageSerializer,
+    GroupIncomingInitialMessageSerializer,
+)
 from chat.services.completion import ensure_within_character_limit, generate_response
-from chat.services.group_crud import load_group_chat_history, load_instruction_prompt, ingest_request
+from chat.services.group_crud import (
+    ingest_initial_message,
+    load_group_chat_history,
+    load_instruction_prompt,
+    ingest_request,
+)
 from chat.services.moderation import moderate_message
 from chat.services.send import send_message_to_participant_group, send_moderation_message
 
@@ -186,6 +196,14 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
 # =============================================================================
 # Celery Tasks: Tie the Stages Together
 # =============================================================================
+
+
+@shared_task
+def handle_inbound_group_initial_message(group_id: str, data: dict):
+    serializer = GroupIncomingInitialMessageSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    group_incoming_initial_message: GroupIncomingInitialMessage = serializer.validated_data
+    ingest_initial_message(group_id, group_incoming_initial_message)
 
 
 @shared_task

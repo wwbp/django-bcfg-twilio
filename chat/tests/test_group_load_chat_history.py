@@ -29,6 +29,7 @@ def test_only_initial_message_and_user_message_excluded(
         content="Some older message",
         created_at=now - timezone.timedelta(days=1),
         assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+        hub_initiated=True,
     )
     group_chat_transcript_factory(
         session=current_session,
@@ -80,6 +81,7 @@ def test_only_reminder_session_includes_initial(
         content="Some older message",
         created_at=now - timezone.timedelta(days=1),
         assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+        hub_initiated=True,
     )
     group_chat_transcript_factory(
         session=current_week_initial_session,
@@ -146,9 +148,7 @@ def test_history_with_moderation_flagged(
     session = group_session_factory(group=group, week_number=2, message_type=MessageType.INITIAL)
 
     group_chat_transcript_factory(
-        session=session,
-        role=BaseChatTranscript.Role.ASSISTANT,
-        content="Initial assistant message",
+        session=session, role=BaseChatTranscript.Role.ASSISTANT, content="Initial assistant message", hub_initiated=True
     )
     group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.USER, content="First", sender=u1)
     group_chat_transcript_factory(

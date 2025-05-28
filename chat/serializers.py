@@ -6,7 +6,7 @@ from rest_framework_dataclasses.serializers import DataclassSerializer
 class _BaseContext:
     school_name: str
     school_mascot: str
-    initial_message: str
+    initial_message: str | None
     week_number: int
     message_type: str
 
@@ -40,12 +40,34 @@ class GroupIncomingMessage:
     message: str
 
 
+@dataclass
+class GroupIncomingInitialMessage:
+    context: GroupContext
+    message: str
+
+
 class IndividualIncomingMessageSerializer(DataclassSerializer):
     class Meta:
         dataclass = IndividualIncomingMessage
         extra_kwargs = {
             "message": {"allow_blank": True},
-            "context": {"extra_kwargs": {"initial_message": {"allow_blank": True}}},
+            "context": {
+                "extra_kwargs": {
+                    "initial_message": {"allow_blank": True, "required": False, "default": None},
+                }
+            },
+        }
+
+
+class IndividualIncomingInitialMessageSerializer(DataclassSerializer):
+    class Meta:
+        dataclass = IndividualIncomingMessage
+        extra_kwargs = {
+            "context": {
+                "extra_kwargs": {
+                    "initial_message": {"allow_blank": True, "required": False, "default": None},
+                }
+            },
         }
 
 
@@ -54,5 +76,21 @@ class GroupIncomingMessageSerializer(DataclassSerializer):
         dataclass = GroupIncomingMessage
         extra_kwargs = {
             "message": {"allow_blank": True},
-            "context": {"extra_kwargs": {"initial_message": {"allow_blank": True}}},
+            "context": {
+                "extra_kwargs": {
+                    "initial_message": {"allow_blank": True, "required": False, "default": None},
+                }
+            },
+        }
+
+
+class GroupIncomingInitialMessageSerializer(DataclassSerializer):
+    class Meta:
+        dataclass = GroupIncomingInitialMessage
+        extra_kwargs = {
+            "context": {
+                "extra_kwargs": {
+                    "initial_message": {"allow_blank": True, "required": False, "default": None},
+                }
+            },
         }

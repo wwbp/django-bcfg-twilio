@@ -16,6 +16,7 @@ from .individual_crud import (
     load_instruction_prompt_for_direct_messaging,
     save_assistant_response,
     strip_meta,
+    ingest_initial_message,
 )
 from .completion import ensure_within_character_limit, generate_response
 from .send import send_moderation_message, send_message_to_participant
@@ -138,6 +139,14 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
 # =============================================================================
 # Celery Tasks: Tie the Stages Together
 # =============================================================================
+
+
+@shared_task
+def handle_inbound_individual_initial_message(group_id: str, data: dict):
+    serializer = IndividualIncomingMessageSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    group_incoming_initial_message: IndividualIncomingMessage = serializer.validated_data
+    ingest_initial_message(group_id, group_incoming_initial_message)
 
 
 @shared_task
