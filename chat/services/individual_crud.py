@@ -50,6 +50,24 @@ def format_chat_history(chat_history, delimiter="\n"):
     return delimiter.join(parts)
 
 
+def _create_user_and_get_or_create_session(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+    user, _ = User.objects.update_or_create(
+        id=participant_id,
+        defaults={
+            "created_at": timezone.now(),
+            "school_name": individual_incoming_message.context.school_name,
+            "school_mascot": individual_incoming_message.context.school_mascot,
+            "name": individual_incoming_message.context.name,
+        },
+    )
+    session, created_session = IndividualSession.objects.get_or_create(
+        user=user,
+        week_number=individual_incoming_message.context.week_number,
+        message_type=individual_incoming_message.context.message_type,
+    )
+    return user, session, created_session
+
+
 def ingest_request(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
     """
     Ingests an individual request by either creating a new user record or updating
@@ -58,48 +76,34 @@ def ingest_request(participant_id: str, individual_incoming_message: IndividualI
     logger.info("Processing request for participant ID: %s", participant_id)
 
     with transaction.atomic():
-        # Provide a default for created_at to avoid null value issues.
-        user, _ = User.objects.update_or_create(
-            id=participant_id,
-            defaults={
-                "created_at": timezone.now(),
-                "school_name": individual_incoming_message.context.school_name,
-                "school_mascot": individual_incoming_message.context.school_mascot,
-                "name": individual_incoming_message.context.name,
-            },
+        user, session, created_session = _create_user_and_get_or_create_session(
+            participant_id, individual_incoming_message
         )
-        session, created_session = IndividualSession.objects.get_or_create(
-            user=user,
-            week_number=individual_incoming_message.context.week_number,
-            message_type=individual_incoming_message.context.message_type,
+        IndividualChatTranscript.persist_initial_message_if_necessary(
+            user,
+            individual_incoming_message.context.initial_message,
+            session,
+            created_session,
         )
-
-        if not user.group:
-            # we only care about the initial message if the user is not in a group condition, because
-            # if the user is in the group condition, we already captured the initial message in the
-            # group session's transcript
-            if created_session:
-                if individual_incoming_message.context.initial_message:
-                    # if we created a new session, we need to add the initial message to it
-                    IndividualChatTranscript.objects.create(
-                        session=session,
-                        role=BaseChatTranscript.Role.ASSISTANT,
-                        content=individual_incoming_message.context.initial_message,
-                    )
-            else:
-                if session.initial_message != individual_incoming_message.context.initial_message and not user.is_test:
-                    logger.error(
-                        f"Got new initial_message for existing individual session {session}. "
-                        f"New message: '{individual_incoming_message.context.initial_message}'."
-                        + " Not updating existing initial_message."
-                    )
-
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
             session=session, role=BaseChatTranscript.Role.USER, content=individual_incoming_message.message
         )
 
     return user, session, user_chat_transcript
+
+
+def ingest_initial_message(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+    with transaction.atomic():
+        user, session, _ = _create_user_and_get_or_create_session(participant_id, individual_incoming_message)
+        assistant_chat_transcript = IndividualChatTranscript.objects.create(
+            session=session,
+            role=BaseChatTranscript.Role.ASSISTANT,
+            content=individual_incoming_message.message,
+            hub_initiated=True,
+        )
+
+    return user, session, assistant_chat_transcript
 
 
 def _sanitize_name(name: str) -> str:

@@ -137,7 +137,9 @@ def group_with_initial_message_interaction(
     group = group_factory()
     users = user_factory.create_batch(6, group=group, school_mascot=school_mascot, school_name=school_name)
     session = group_session_factory(group=group, week_number=1, message_type=MessageType.INITIAL)
-    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message)
+    group_chat_transcript_factory(
+        session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message, hub_initiated=True
+    )
     group_chat_transcript_factory(
         session=session, role=BaseChatTranscript.Role.USER, content=user_message, sender=users[0]
     )

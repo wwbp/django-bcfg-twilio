@@ -121,11 +121,11 @@ class BaseSession(ModelBase):
         Returns the content of the very first transcript for this session,
         or None if no transcripts exist.
         """
-        first: "BaseChatTranscript" = self.transcripts.order_by("created_at").first()
-        if not first or first.role == BaseChatTranscript.Role.USER:
+        first: "BaseChatTranscript" = self.transcripts.filter(hub_initiated=True).order_by("created_at").first()
+        if not first:
             # the hub didn't send an initial message if the first message was from the user
             # this can happen in "reminder" sessions where everyone is responding so the
-            # hub has no reason to send a reminder
+            # hub has no reason to send a reminder or early in the study
             return ""
         return first.content
 
@@ -209,6 +209,68 @@ class BaseChatTranscript(ModelBase):
         verbose_name="Message from Participant",
         help_text="For chatbot responses, the message from a Participant which triggered the response",
     )
+    sent_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Message Sent At",
+        help_text="Estimation of the time at which the message was sent based on information we have",
+    )
+    hub_initiated = models.BooleanField(
+        default=False,
+        help_text="Whether the message was initiated by the hub (e.g. an initial message)",
+    )
+
+    @classmethod
+    def initial_message_exists(cls, initial_message: str | None, audience: User | Group) -> bool:
+        if not initial_message:
+            return True
+        audience_kwarg = "session__user" if isinstance(audience, User) else "session__group"
+        try:
+            # NOTE might need an index on these fields for performance
+            cls.objects.get(
+                **{audience_kwarg: audience},
+                content=initial_message,
+                hub_initiated=True,
+            )
+            return True
+        except cls.DoesNotExist:
+            return False
+
+    @classmethod
+    def persist_initial_message_if_necessary(
+        cls,
+        audience: User | Group,
+        initial_message: str | None,
+        session: IndividualSession | GroupSession,
+        created_session: bool,
+    ):
+        if not initial_message:
+            # no initial message to persist
+            return
+
+        def _persist_initial_message():
+            additional_kwargs = {}
+            if isinstance(session, GroupSession):
+                additional_kwargs["assistant_strategy_phase"] = GroupStrategyPhase.AUDIENCE
+            cls.objects.create(
+                session=session,
+                role=BaseChatTranscript.Role.ASSISTANT,
+                content=initial_message,
+                hub_initiated=True,
+                **additional_kwargs,
+            )
+
+        if cls.initial_message_exists(initial_message, audience):
+            return
+        if not created_session and session.initial_message and session.initial_message != initial_message:
+            logger.error(
+                f"Unexpectedly got new initial_message for existing session {session}. "
+                f"New message: '{initial_message}'. Not persisting new initial_message."
+            )
+            return
+
+        # either the session is new for a new initial message
+        # or the initial message was sent after the session was created
+        _persist_initial_message()
 
     class Meta:
         abstract = True

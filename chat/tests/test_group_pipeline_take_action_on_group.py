@@ -81,6 +81,7 @@ def test_group_pipeline_take_action_on_group(
             assistant_strategy_phase=GroupStrategyPhase.REMINDER,
             role=BaseChatTranscript.Role.ASSISTANT,
             content="Reminder message",
+            hub_initiated=True,
         )
     if summary_message_sent:
         group_chat_transcript_factory(
@@ -89,6 +90,7 @@ def test_group_pipeline_take_action_on_group(
             assistant_strategy_phase=GroupStrategyPhase.SUMMARY,
             role=BaseChatTranscript.Role.ASSISTANT,
             content="Summary message",
+            hub_initiated=True,
         )
     group_users = group.users.all()
     if all_participants_responded:
@@ -480,6 +482,7 @@ def test_no_reminder_action_assistant_sent_one(
         role=BaseChatTranscript.Role.ASSISTANT,
         content="user_message",
         assistant_strategy_phase=GroupStrategyPhase.REMINDER,
+        hub_initiated=True,
     )
     group_prompt_factory(week=1, activity="<<INSTRUCTION FOR FOLLOWUP>>", strategy_type=GroupStrategyPhase.FOLLOWUP)
     # start at BEFORE_AUDIENCE

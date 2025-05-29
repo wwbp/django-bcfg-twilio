@@ -88,7 +88,10 @@ def existing_user():
 def existing_transcript(existing_user):
     user, _ = existing_user
     return IndividualChatTranscript.objects.create(
-        session=user.current_session, role=BaseChatTranscript.Role.ASSISTANT, content="Initial Hello"
+        session=user.current_session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="Initial Hello",
+        hub_initiated=True,
     )
 
 

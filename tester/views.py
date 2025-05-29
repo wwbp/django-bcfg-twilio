@@ -213,7 +213,7 @@ def create_group_test_case(request):
     initial_message = data.get("initial_message")
     week_number = data.get("week_number")
     message_type = data.get("message_type")
-    chosen_model = data.get("gpt_model") 
+    chosen_model = data.get("gpt_model")
 
     if group_id and participants_str:
         try:

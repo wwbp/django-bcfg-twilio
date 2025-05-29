@@ -319,7 +319,7 @@ def test_notify_on_missing_summaries(
 ):
     transcript_date = timezone.make_aware(datetime.datetime(2025, 4, 15, 15, 0))
     sunday_summary_prompt_factory(week=5, activity="test_value")
-    standard_user_group = AuthGroup.objects.get_or_create(name=AuthGroupName.StandardUser.value)
+    standard_user_group = AuthGroup.objects.get_or_create(name=AuthGroupName.ResearcherUser.value)
     standard_user1 = AuthUser.objects.create_user(
         username="standard_user1", password="password", email="standard_user1@example.net"
     )
