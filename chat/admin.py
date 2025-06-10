@@ -5,6 +5,7 @@ from django.db.models import Count, OuterRef, Subquery
 from django.db.models.query import QuerySet
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from chat.services.summaries import handle_summaries_selected_change
 from .models import (
@@ -388,7 +389,7 @@ class SummaryAdmin(BaseAdmin):
     def get_chat_transcripts_link(self, obj):
         individual_url = reverse("admin:chat_individualchattranscript_changelist")
         group_url = reverse("admin:chat_groupchattranscript_changelist")
-        return format_html(
+        return mark_safe(
             f'''
             <div>
                 <div>

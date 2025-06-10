@@ -20,6 +20,9 @@ from django.http import JsonResponse
 from django.urls import reverse
 import requests
 from tester.models import ChatResponse
+import requests.utils
+
+requests.utils.get_netrc_auth = lambda url: (None, None, None)
 
 GPT_MODEL_OPTIONS = [
     "o4-mini-2025-04-16",

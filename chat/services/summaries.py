@@ -133,7 +133,7 @@ def _generate_top_10_summaries_for_school(
             }
         )
     # call LLM
-    response = generate_response(transcript, instructions, "")
+    response = generate_response(transcript, instructions, "", settings.OPENAI_MODEL)
     # validate response
     summaries = _parse_top_10_summaries(response)
     return summaries
