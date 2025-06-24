@@ -46,12 +46,13 @@ def send_moderation_message(participant_id):
     Endpoint:
       POST /ai/api/participant/{id}/safety-plan/send
     """
-    url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
-    headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
-    with httpx.Client() as client:
-        response = client.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+    # url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
+    # headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+    # with httpx.Client() as client:
+    #     response = client.post(url, headers=headers)
+    #     response.raise_for_status()
+    #     return response.json()
+    pass
 
 
 def send_school_summaries_to_hub_for_week(school_name: str, week_number: int, summary_contents: list[str]):
