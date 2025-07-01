@@ -185,8 +185,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         assistant_strategy_phase=next_strategy_phase,
     )
     if not record.is_test and response:
-        # TODO: revert after load testing, do not merge to test or prod
-        # send_message_to_participant_group(group_id, response)
+        send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
     record.save()
     logger.info(
