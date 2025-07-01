@@ -92,19 +92,20 @@ pipelines:
               deployment: Development
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name web --env=dev
+                - ./copilot-bin svc deploy --name web --env=dev --debug
           - step:
               <<: *deployStepCommon
               name: Deploy worker to Development environment
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name worker --env=dev
+                - ./copilot-bin svc deploy --name worker --env=dev --debug
           - step:
               <<: *deployStepCommon
               name: Deploy scheduler to Development environment
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name scheduler --env=dev
+                - ./copilot-bin svc deploy --name scheduler --env=dev --debug
+
     staging:
       - parallel:
           - <<: *testStep
@@ -117,13 +118,13 @@ pipelines:
               deployment: Staging
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name web --env=test
+                - ./copilot-bin svc deploy --name web --env=test --debug
           - step:
               <<: *deployStepCommon
               name: Deploy worker to Staging environment
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name worker --env=test
+                - ./copilot-bin svc deploy --name worker --env=test --debug
           - step:
               <<: *deployStepCommon
               name: Deploy scheduler to Staging environment
@@ -143,19 +144,19 @@ pipelines:
               deployment: Production
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name web --env=prod
+                - ./copilot-bin svc deploy --name web --env=prod --debug
           - step:
               <<: *deployStepCommon
               name: Deploy worker to Production environment
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name worker --env=prod
+                - ./copilot-bin svc deploy --name worker --env=prod --debug
           - step:
               <<: *deployStepCommon
               name: Deploy scheduler to Production environment
               script:
                 - *deployScriptCommon
-                - ./copilot-bin svc deploy --name scheduler --env=prod
+                - ./copilot-bin svc deploy --name scheduler --env=prod --debug
 
 definitions:
   services:
