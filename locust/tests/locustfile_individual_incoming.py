@@ -7,7 +7,7 @@ from locust.exception import StopUser
 class IndividualUser(HttpUser):
     host = "https://dev.wwbp-bcfg-chatbot.org/"
     wait_time = between(0, 1)
-    api_key = "hutiFn9nUhnq0DAYLX98c6XaXwyDRWZarZFrmzb9-5w"
+    api_key = ""
 
     # how many messages **each** user should send
     messages_to_send = 10
