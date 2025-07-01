@@ -129,7 +129,8 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
     record.transcript = assistant_chat_transcript
     # Send the message via the external endpoint
     if not record.user.is_test and response:
-        send_message_to_participant(participant_id, response)
+        # TODO: revert after load testing, do not merge to test or prod
+        # send_message_to_participant(participant_id, response)
         # Update the pipeline record for the sending stage
         record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
     record.save()
