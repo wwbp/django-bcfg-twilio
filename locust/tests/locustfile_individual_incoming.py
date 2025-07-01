@@ -5,7 +5,7 @@ from locust.exception import StopUser
 
 
 class IndividualUser(HttpUser):
-    host = "http://localhost:8000"
+    host = "https://dev.wwbp-bcfg-chatbot.org/"
     wait_time = between(0, 1)
     api_key = ""
 
