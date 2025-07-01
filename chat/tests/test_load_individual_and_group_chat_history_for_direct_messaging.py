@@ -142,6 +142,7 @@ def test_sanitization_combined(user_factory, individual_session_factory, group_c
         assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
         content="Group welcome",
         created_at=now + timedelta(seconds=2),
+        hub_initiated=True,
     )
 
     # ensure the user is in the group

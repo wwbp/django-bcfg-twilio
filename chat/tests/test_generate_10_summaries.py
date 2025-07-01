@@ -75,15 +75,12 @@ def test_generate_top_10_summaries_parsing(
     expected,
 ):
     # Prepare a dummy prompt in ControlConfig
-    sunday_summary_prompt_factory(week=42, activity="test_value")
+    prompt = sunday_summary_prompt_factory(week=42, activity="test_value")
     # Stub out the LLM output
     mock_generate_response.return_value = response
 
     summaries = _generate_top_10_summaries_for_school(
-        school_name="TestSchool",
-        school_week_number=42,
-        all_individual_school_chats=[],
-        all_group_school_chats=[],
+        all_individual_school_chats=[], all_group_school_chats=[], prompt=prompt
     )
 
     assert isinstance(summaries, list)

@@ -2,12 +2,17 @@ from dataclasses import asdict
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
-from .services.group_pipeline import handle_inbound_group_message
-from .services.individual_pipeline import individual_pipeline
+from .services.group_pipeline import handle_inbound_group_initial_message, handle_inbound_group_message
+from .services.individual_pipeline import handle_inbound_individual_initial_message, individual_pipeline
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import IndividualIncomingMessageSerializer, GroupIncomingMessageSerializer
+from .serializers import (
+    GroupIncomingMessageSerializer,
+    IndividualIncomingMessageSerializer,
+    IndividualIncomingInitialMessageSerializer,
+    GroupIncomingInitialMessageSerializer,
+)
 
 
 class HealthCheckView(APIView):
@@ -38,5 +43,23 @@ class IngestGroupView(BaseIngestView):
         serializer = GroupIncomingMessageSerializer(data=request.data)
         if serializer.is_valid():
             handle_inbound_group_message.delay(id, asdict(serializer.validated_data))
+            return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IngestIndividualInitialMessageView(BaseIngestView):
+    def post(self, request, id):
+        serializer = IndividualIncomingInitialMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            handle_inbound_individual_initial_message.delay(id, asdict(serializer.validated_data))
+            return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IngestGroupInitialMessageView(BaseIngestView):
+    def post(self, request, id):
+        serializer = GroupIncomingInitialMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            handle_inbound_group_initial_message.delay(id, asdict(serializer.validated_data))
             return Response({"message": "Data received"}, status=status.HTTP_202_ACCEPTED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

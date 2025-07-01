@@ -50,7 +50,7 @@ def inbound_call_and_mocks(
         value="INSTRUCTION_PROMPT_TEMPLATE",
     )
 
-    mock_all_individual_external_calls.mock_generate_response.return_value = _GENERATED_LLM_RESPONSE
+    mock_all_individual_external_calls.mock_generate_response.return_value = (_GENERATED_LLM_RESPONSE, None, None)
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = _SHORTENED_LLM_RESPONSE
 
     return participant_id, inbound_payload, mock_all_individual_external_calls
@@ -58,7 +58,7 @@ def inbound_call_and_mocks(
 
 def test_individual_process_does_not_skip_if_one_message(inbound_call_and_mocks):
     participant_id, inbound_payload, mock_all_individual_external_calls = inbound_call_and_mocks
-    mock_all_individual_external_calls.mock_generate_response.return_value = _GENERATED_LLM_RESPONSE
+    mock_all_individual_external_calls.mock_generate_response.return_value = (_GENERATED_LLM_RESPONSE, None, None)
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = _SHORTENED_LLM_RESPONSE
 
     individual_pipeline.run(participant_id, inbound_payload)
@@ -117,7 +117,7 @@ def test_individual_process_skips_if_message_arrives_during_generate(inbound_cal
     def mock_generate_response(*args, **kwargs):
         # mock another message is ingested here
         individual_ingest(participant_id, second_payload)
-        return _GENERATED_LLM_RESPONSE
+        return (_GENERATED_LLM_RESPONSE, None, None)
 
     mock_all_individual_external_calls.mock_generate_response.side_effect = mock_generate_response
 

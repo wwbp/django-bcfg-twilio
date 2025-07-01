@@ -21,7 +21,8 @@
                     data-school_mascot="{{ group_data.school_mascot }}"
                     data-week_number="{{ group_data.group.current_session.week_number }}"
                     data-initial_message="{{ group_data.group.current_session.initial_message }}"
-                    data-message_type="{{ group_data.group.current_session.message_type }}">
+                    data-message_type="{{ group_data.group.current_session.message_type }}"
+                    data-gpt-model="{{ group_data.group.gpt_model }}">
                     Group: {{ group_data.group.id }}
                 </option>
                 {% endfor %}
@@ -47,6 +48,13 @@
 
                 <label for="new_week_number">Week Number:</label>
                 <input type="text" id="new_week_number"><br><br>
+
+                <label for="new_group_gpt_model">GPT Model:</label>
+                <select id="new_group_gpt_model">
+                  {% for m in gpt_model_options %}
+                    <option value="{{ m }}">{{ m }}</option>
+                  {% endfor %}
+                </select><br><br>
                 
                 {% comment %} message type options: initial, reminder, summary {% endcomment %}
                 <label for="message_type">Message Type:</label>
@@ -73,6 +81,7 @@
                 <p><strong>Week Number:</strong> <span id="group_meta_week_number"></span></p>
                 <p><strong>Initial Message:</strong> <span id="group_meta_initial_message_display"></span></p>
                 <p><strong>Message Type:</strong> <span id="group_meta_message_type_display"></span></p>
+                <p><strong>GPT Model:</strong> <span id="group_meta_gpt_model"></span></p>
 
                 <label for="group_message">Message:</label><br>
                 <textarea id="group_message" rows="3" cols="50"></textarea><br><br>
@@ -107,6 +116,7 @@
                 document.getElementById('group_meta_initial_message_display').innerText = selectedOption.getAttribute('data-initial_message');
                 document.getElementById('group_meta_message_type_display').innerText = selectedOption.getAttribute('data-message_type');
                 document.getElementById('group_meta_week_number').innerText = selectedOption.getAttribute('data-week_number');
+                document.getElementById('group_meta_gpt_model').innerText = selectedOption.getAttribute('data-gpt-model');
                 // Show metadata section
                 document.getElementById('group_test_case_metadata').style.display = 'block';
                 
@@ -236,6 +246,7 @@
             var initialMessage = document.getElementById('new_initial_message').value;
             var weekNumber = document.getElementById('new_week_number').value;
             var messageType = document.getElementById('message_type').value;
+            var gptModel = document.getElementById('new_group_gpt_model').value;
 
             fetch("{% url 'admin:tester:create-group-test-case' %}", {
                 method: "POST",
@@ -250,7 +261,8 @@
                     school_mascot: schoolMascot,
                     initial_message: initialMessage,
                     week_number: weekNumber,
-                    message_type: messageType
+                    message_type: messageType,
+                    gpt_model: gptModel
                 })
             }).then(response => response.json())
               .then(data => {

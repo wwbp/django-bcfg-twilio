@@ -5,6 +5,7 @@ from django.db.models import Count, OuterRef, Subquery
 from django.db.models.query import QuerySet
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from chat.services.summaries import handle_summaries_selected_change
 from .models import (
@@ -95,7 +96,7 @@ class UsersInline(ReadonlyTabularInline):
 
 class IndividualChatTranscriptInline(ReadonlyTabularInline):
     model = IndividualChatTranscript
-    fields = ("role", "content", "moderation_status", "created_at")
+    fields = ("role", "content", "sent_at", "hub_initiated", "moderation_status")
     readonly_fields = fields
     ordering = ("-created_at",)
 
@@ -121,9 +122,10 @@ class GroupChatTranscriptInline(ReadonlyTabularInline):
         "combined_sender",
         "assistant_strategy_phase",
         "content",
+        "sent_at",
+        "hub_initiated",
         "pipeline_record_link",
         "moderation_status",
-        "created_at",
     )
     readonly_fields = fields
     ordering = ("-created_at",)
@@ -242,7 +244,8 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
         "latency",
         "shorten_count",
         "moderation_status",
-        "created_at",
+        "sent_at",
+        "hub_initiated",
         "pipeline_record_link",
         "week_number",
         "school_name",
@@ -282,7 +285,8 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
         "assistant_strategy_phase",
         "content",
         "moderation_status",
-        "created_at",
+        "sent_at",
+        "hub_initiated",
         "pipeline_record_link",
         "week_number",
         "school_name",
@@ -385,7 +389,7 @@ class SummaryAdmin(BaseAdmin):
     def get_chat_transcripts_link(self, obj):
         individual_url = reverse("admin:chat_individualchattranscript_changelist")
         group_url = reverse("admin:chat_groupchattranscript_changelist")
-        return format_html(
+        return mark_safe(
             f'''
             <div>
                 <div>
@@ -474,7 +478,7 @@ class GroupPipelineRecordAdmin(ReadonlyAdmin):
 
 @admin.register(IndividualSession)
 class IndividualSessionAdmin(ReadonlyAdmin):
-    list_display = ("user", "week_number", "message_type")
+    list_display = ("user", "week_number", "message_type", "initial_message")
     list_filter = ("week_number", "message_type")
 
     inlines = [IndividualChatTranscriptInline]
@@ -482,7 +486,7 @@ class IndividualSessionAdmin(ReadonlyAdmin):
 
 @admin.register(GroupSession)
 class GroupSessionAdmin(ReadonlyAdmin):
-    list_display = ("group", "week_number", "message_type", "current_strategy_phase")
+    list_display = ("group", "week_number", "message_type", "current_strategy_phase", "initial_message")
     list_filter = ("week_number", "message_type")
 
     inlines = [GroupChatTranscriptInline]

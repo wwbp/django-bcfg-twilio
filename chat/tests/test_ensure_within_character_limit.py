@@ -17,7 +17,9 @@ def test_successful_shortening(individual_pipeline_record_factory):
     shortened_text = "B" * (MAX_RESPONSE_CHARACTER_LENGTH - 20)
     long_text = "A" * (MAX_RESPONSE_CHARACTER_LENGTH + 80)
     record = individual_pipeline_record_factory(response=long_text)
-    with patch("chat.services.completion.chat_completion", return_value=shortened_text) as mock_chat_completion:
+    with patch(
+        "chat.services.completion.chat_completion", return_value=(shortened_text, None, None)
+    ) as mock_chat_completion:
         result = ensure_within_character_limit(record)
         assert result == shortened_text
         assert record.shorten_count == 1
@@ -28,7 +30,9 @@ def test_successful_shortening(individual_pipeline_record_factory):
 def test_unsuccessful_shortening_no_periods(individual_pipeline_record_factory):
     long_text = "C" * (MAX_RESPONSE_CHARACTER_LENGTH + 80)
     record = individual_pipeline_record_factory(response=long_text)
-    with patch("chat.services.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+    with patch(
+        "chat.services.completion.chat_completion", return_value=(long_text, None, None)
+    ) as mock_chat_completion:
         result = ensure_within_character_limit(record)
         assert result == long_text[:MAX_RESPONSE_CHARACTER_LENGTH]
         assert record.shorten_count == 2
@@ -43,7 +47,9 @@ def test_unsuccessful_shortening_with_sentences(individual_pipeline_record_facto
     s3 = "C" * (sentence_length - 1) + "."
     long_text = f"{s1} {s2} {s3}"
     record = individual_pipeline_record_factory(response=long_text)
-    with patch("chat.services.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+    with patch(
+        "chat.services.completion.chat_completion", return_value=(long_text, None, None)
+    ) as mock_chat_completion:
         result = ensure_within_character_limit(record)
         # Expect the last sentence dropped, leaving s1 and s2.
         expected = f"{s1} {s2}"
@@ -56,7 +62,9 @@ def test_unsuccessful_shortening_with_sentences(individual_pipeline_record_facto
 def test_unsuccessful_shortening_empty_sentences(individual_pipeline_record_factory):
     long_text = "A1" * (MAX_RESPONSE_CHARACTER_LENGTH + 10)
     record = individual_pipeline_record_factory(response=long_text)
-    with patch("chat.services.completion.chat_completion", return_value=long_text) as mock_chat_completion:
+    with patch(
+        "chat.services.completion.chat_completion", return_value=(long_text, None, None)
+    ) as mock_chat_completion:
         result = ensure_within_character_limit(record)
         assert result == long_text[:MAX_RESPONSE_CHARACTER_LENGTH]
         assert record.shorten_count == 2

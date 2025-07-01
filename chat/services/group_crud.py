@@ -1,7 +1,8 @@
 import logging
 import re
+from django.db.models import Q
 
-from chat.serializers import GroupIncomingMessage
+from chat.serializers import GroupIncomingMessage, GroupIncomingInitialMessage
 
 
 from ..models import (
@@ -20,7 +21,7 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
-def _get_or_create_session(group: Group, week_number: int, message_type: str, initial_message: str):
+def _get_or_create_session(group: Group, week_number: int, message_type: str, initial_message: str | None):
     if message_type == MessageType.CHECK_IN:
         raise ValueError(f"Group session cannot be of type {MessageType.CHECK_IN}.")
 
@@ -29,41 +30,32 @@ def _get_or_create_session(group: Group, week_number: int, message_type: str, in
         week_number=week_number,
         message_type=message_type,
     )
-
-    if created_session:
-        # if we created a new session, we need to add the initial message to it
-        GroupChatTranscript.objects.create(
-            session=session,
-            role=BaseChatTranscript.Role.ASSISTANT,
-            content=initial_message,
-            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
-        )
-    else:
-        if session.initial_message != initial_message and not group.is_test:
-            logger.error(
-                f"Got new initial_message for existing group session {session}. "
-                f"New message: '{initial_message}'. Not updating existing initial_message."
-            )
+    GroupChatTranscript.persist_initial_message_if_necessary(group, initial_message, session, created_session)
 
     return session
 
 
-def _remove_deleted_group_participants(group: Group, group_incoming_message: GroupIncomingMessage):
-    existing_group_users: list[User] = list(group.users.all())
+def _remove_deleted_group_participants(
+    group: Group, group_incoming_message: GroupIncomingMessage | GroupIncomingInitialMessage
+):
+    existing_group_users: list[User] = list(group.users.all())  # type: ignore[attrib]
     inbound_participants = group_incoming_message.context.participants
     for user in existing_group_users:
         matching_inbound_participant = next((ip for ip in inbound_participants if ip.id == user.id), None)
         if not matching_inbound_participant:
             # this is a valid use case if a participant leaves the study
             logger.info(f"Removing user {user.id} from group {group.id}.")
-            group.users.remove(user)
+            group.users.remove(user)  # type: ignore[attrib]
 
 
 def _validate_create_and_update_group_participants(
-    group: Group, group_incoming_message: GroupIncomingMessage, sender_id: str, group_just_created: bool
+    group: Group,
+    group_incoming_message: GroupIncomingMessage | GroupIncomingInitialMessage,
+    sender_id: str | None,
+    group_just_created: bool,
 ):
     inbound_participants_payload = group_incoming_message.context.participants
-    found_sender = False
+    found_sender = False if sender_id else True  # if sender_id is None, the message is an initial message from the bot
 
     for participant in inbound_participants_payload:
         if participant.id == sender_id:
@@ -76,7 +68,8 @@ def _validate_create_and_update_group_participants(
             changed = False
             if existing_user.group != group:
                 logger.error(
-                    f"{group.id}: User {existing_user.id} is already in group {existing_user.group.id}. "
+                    f"{group.id}: User {existing_user.id} is already in group "
+                    f"{existing_user.group.id if existing_user.group else None}. "
                     f"Changing group association to {group.id}."
                 )
                 existing_user.group = group
@@ -140,6 +133,31 @@ def ingest_request(group_id: str, group_incoming_message: GroupIncomingMessage):
 
     return group, user_chat_transcript
 
+
+def ingest_initial_message(group_id: str, group_incoming_message: GroupIncomingInitialMessage):
+    with transaction.atomic():
+        group, group_created = Group.objects.get_or_create(
+            id=group_id,
+        )
+        _remove_deleted_group_participants(group, group_incoming_message)
+        _validate_create_and_update_group_participants(
+            group, group_incoming_message, sender_id=None, group_just_created=group_created
+        )
+        session = _get_or_create_session(
+            group,
+            week_number=group_incoming_message.context.week_number,
+            message_type=group_incoming_message.context.message_type,
+            initial_message=None,
+        )
+        assistant_chat_transcript = GroupChatTranscript.objects.create(
+            session=session,
+            role=BaseChatTranscript.Role.ASSISTANT,
+            content=group_incoming_message.message,
+            hub_initiated=True,
+            assistant_strategy_phase=GroupStrategyPhase.AUDIENCE,
+        )
+
+    return group, assistant_chat_transcript
 
 
 def load_instruction_prompt(session: GroupSession, strategy_phase: GroupStrategyPhase) -> str:
@@ -208,15 +226,30 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
     """
     Loads the chat history for a group session.
     """
-    transcripts = GroupChatTranscript.objects.filter(session=session).order_by("created_at")
+    if session.message_type == MessageType.REMINDER:
+        # if we are in a reminder session, we also need to load messages
+        # from the associated initial session, because the reminder is about the initial message
+        # and the chatbot should know about the full conversation
+        transcripts = GroupChatTranscript.objects.filter(
+            Q(
+                session__group=session.group,
+                session__week_number=session.week_number,
+                session__message_type=MessageType.INITIAL,
+            )
+            | Q(session=session)
+        ).order_by("created_at")
+    else:
+        transcripts = GroupChatTranscript.objects.filter(session=session).order_by("created_at")
     latest_user_transcript = transcripts.filter(role=BaseChatTranscript.Role.USER).last()
     assistant_name = (
-        latest_user_transcript.sender.school_mascot if latest_user_transcript else BaseChatTranscript.Role.ASSISTANT
+        latest_user_transcript.sender.school_mascot
+        if latest_user_transcript and latest_user_transcript.sender
+        else BaseChatTranscript.Role.ASSISTANT
     )
     history: list[dict] = []
     for t in transcripts:
         if (
-            latest_user_transcript and t.id == latest_user_transcript.id
+            latest_user_transcript and t.id == latest_user_transcript.id  # type: ignore[attrib]
         ) or t.moderation_status == BaseChatTranscript.ModerationStatus.FLAGGED:
             continue
 
@@ -236,7 +269,7 @@ def load_group_chat_history(session: GroupSession) -> tuple[list[dict], str]:
         )
     latest_sender_message = (
         f"[Sender/User Name: {latest_user_transcript.sender.name}]: " + latest_user_transcript.content
-        if latest_user_transcript
+        if latest_user_transcript and latest_user_transcript.sender
         else ""
     )
     return history, latest_sender_message

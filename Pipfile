@@ -16,7 +16,6 @@ openai = "*"
 asgiref = "*"
 django-celery-results = "*"
 django-celery-beat = "2.7.0"
-pytest-asyncio = "*"
 psycopg2-binary = "*"
 djangosaml2 = "*"
 django-csp = "<4.0" # https://github.com/IdentityPython/djangosaml2/issues/415
@@ -30,13 +29,14 @@ pyopenssl = ">=25.0"
 
 [dev-packages]
 ruff = "*"
-pytest = "*"
+pytest = "<8.0.0" # support pytest-factoryboy
 pytest-django = "*"
 pytest-cov = "*"
 pytest-xdist = "*"
 black = "*"
 factory-boy = "*"
 pytest-factoryboy = "*"
+pytest-asyncio = "*"
 
 [requires]
 python_version = "3.11"

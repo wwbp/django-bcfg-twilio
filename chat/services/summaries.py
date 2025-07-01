@@ -2,9 +2,12 @@ import datetime
 import logging
 import json
 from celery import shared_task
+from django.conf import settings
+from django.contrib.auth.models import Group
 from django.db import transaction
 from django.utils import timezone
 
+from admin.models import AuthGroupName
 from chat.models import (
     BaseChatTranscript,
     GroupChatTranscript,
@@ -13,7 +16,7 @@ from chat.models import (
     SundaySummaryPrompt,
     User,
 )
-from chat.services.send import send_school_summaries_to_hub_for_week
+from chat.services.send import send_missing_summary_notification, send_school_summaries_to_hub_for_week
 from chat.services.completion import generate_response
 
 logger = logging.getLogger(__name__)
@@ -103,20 +106,15 @@ def _parse_top_10_summaries(response: str) -> list[str]:
 
 
 def _generate_top_10_summaries_for_school(
-    school_name: str,
-    school_week_number: int,
     all_individual_school_chats: list[IndividualChatTranscript],
     all_group_school_chats: list[GroupChatTranscript],
+    prompt: SundaySummaryPrompt,
 ) -> list[str]:
     """
     Generate top 10 summaries for a given school via an LLM.
     """
     # assemble prompt
-    try:
-        instructions = SundaySummaryPrompt.objects.get(week=school_week_number).activity
-    except SundaySummaryPrompt.DoesNotExist as err:
-        logger.error(f"Error retrieving Sunday Summary Prompt for week '{school_week_number}': {err}")
-        raise
+    instructions = prompt.activity
     transcript: list[dict] = []
     for t in all_group_school_chats:
         transcript.append(
@@ -135,7 +133,7 @@ def _generate_top_10_summaries_for_school(
             }
         )
     # call LLM
-    response = generate_response(transcript, instructions, "")
+    response = generate_response(transcript, instructions, "", settings.OPENAI_MODEL)
     # validate response
     summaries = _parse_top_10_summaries(response)
     return summaries
@@ -171,11 +169,17 @@ def generate_weekly_summaries():
                 f"No chats found for {school_name} this week (since {filter_chats_since.isoformat()}), skipping."
             )
             continue
+        prompt = SundaySummaryPrompt.objects.filter(week=school_week_number).first()
+        if prompt is None:
+            # not all weeks have summary activities so this is expected
+            logger.info(
+                f"No summary prompt defined for week {school_week_number}. "
+                f"Not generating summaries for school {school_name}."
+            )
+            continue
         all_individual_school_chats, all_group_school_chats = _get_all_chats_for_school(school_name, school_week_number)
 
-        summaries = _generate_top_10_summaries_for_school(
-            school_name, school_week_number, all_individual_school_chats, all_group_school_chats
-        )
+        summaries = _generate_top_10_summaries_for_school(all_individual_school_chats, all_group_school_chats, prompt)
         _persist_summaries(school_name, school_week_number, summaries)
 
 
@@ -190,3 +194,38 @@ def handle_summaries_selected_change(changed_summary_ids: list[str]):
     for school_name, week_number in schools_and_weeks_included:
         summaries = list(Summary.objects.filter(school_name=school_name, week_number=week_number, selected=True))
         send_school_summaries_to_hub_for_week(school_name, week_number, [s.summary for s in summaries])
+
+
+@shared_task
+def notify_on_missing_summaries():
+    """
+    Notify admins if there are missing summaries for any schools, to be scheduled weekly.
+    """
+    all_unique_school_names = list(
+        User.objects.values_list("school_name", flat=True).distinct().order_by("school_name")
+    )
+    missing_for = []
+    for school_name in all_unique_school_names:
+        filter_chats_since = _get_chat_datetime_filter_to_determine_week_number()
+        school_week_number = _get_week_number_for_school(school_name, filter_chats_since)
+        if school_week_number is None:
+            continue
+        prompt = SundaySummaryPrompt.objects.filter(week=school_week_number).first()
+        if prompt is None:
+            continue
+        selected_summaries_exist = Summary.objects.filter(
+            school_name=school_name, week_number=school_week_number, selected=True
+        ).exists()
+        if not selected_summaries_exist:
+            missing_for.append(f"{school_name}, week {school_week_number}")
+
+    if missing_for:
+        to_emails: list[str] = list(
+            Group.objects.get(name=AuthGroupName.ResearcherUser.value).user_set.values_list("email", flat=True).all()
+        )
+        config_link = f"{settings.BASE_ADMIN_URI}admin/chat/summary/"
+        send_missing_summary_notification(
+            to_emails=to_emails,
+            config_link=config_link,
+            missing_for=missing_for,
+        )

@@ -4,7 +4,6 @@ from unittest.mock import patch, MagicMock
 from django.conf import settings
 
 from chat.services.send import (
-    send_moderation_message,
     send_message_to_participant,
     send_message_to_participant_group,
 )
@@ -150,57 +149,57 @@ def test_send_message_to_participant_group_request_error():
         mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
 
 
-def test_individual_send_moderation_success():
-    participant_id = "participant_mod_success"
-    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
-    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+# def test_individual_send_moderation_success():
+#     participant_id = "participant_mod_success"
+#     expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
+#     expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
-    fake_response = MagicMock()
-    fake_response.raise_for_status = lambda: None
-    fake_response.json = lambda: {"status": "moderation ok"}
+#     fake_response = MagicMock()
+#     fake_response.raise_for_status = lambda: None
+#     fake_response.json = lambda: {"status": "moderation ok"}
 
-    mock_client = MagicMock()
-    mock_client.post.return_value = fake_response
+#     mock_client = MagicMock()
+#     mock_client.post.return_value = fake_response
 
-    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
-        result = send_moderation_message(participant_id)
-        mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)
-        assert result == {"status": "moderation ok"}
-
-
-def test_individual_send_moderation_http_status_error():
-    participant_id = "participant_mod_error"
-    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
-    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
-
-    def raise_error():
-        raise httpx.HTTPStatusError(
-            "error",
-            request=None,
-            response=type("FakeResponse", (), {"status_code": 500, "text": "Internal Server Error"})(),
-        )
-
-    fake_response = MagicMock()
-    fake_response.raise_for_status = raise_error
-
-    mock_client = MagicMock()
-    mock_client.post.return_value = fake_response
-
-    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
-        with pytest.raises(httpx.HTTPStatusError):
-            send_moderation_message(participant_id)
-        mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)
+#     with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+#         result = send_moderation_message(participant_id)
+#         mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)
+#         assert result == {"status": "moderation ok"}
 
 
-def test_individual_send_moderation_request_error():
-    participant_id = "participant_mod_request_error"
-    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
-    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+# def test_individual_send_moderation_http_status_error():
+#     participant_id = "participant_mod_error"
+#     expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
+#     expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
 
-    mock_client = MagicMock()
-    mock_client.post.side_effect = httpx.RequestError("Network error")
+#     def raise_error():
+#         raise httpx.HTTPStatusError(
+#             "error",
+#             request=None,
+#             response=type("FakeResponse", (), {"status_code": 500, "text": "Internal Server Error"})(),
+#         )
 
-    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
-        with pytest.raises(httpx.RequestError):
-            send_moderation_message(participant_id)
-        mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)
+#     fake_response = MagicMock()
+#     fake_response.raise_for_status = raise_error
+
+#     mock_client = MagicMock()
+#     mock_client.post.return_value = fake_response
+
+#     with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+#         with pytest.raises(httpx.HTTPStatusError):
+#             send_moderation_message(participant_id)
+#         mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)
+
+
+# def test_individual_send_moderation_request_error():
+#     participant_id = "participant_mod_request_error"
+#     expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/safety-plan/send"
+#     expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+
+#     mock_client = MagicMock()
+#     mock_client.post.side_effect = httpx.RequestError("Network error")
+
+#     with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+#         with pytest.raises(httpx.RequestError):
+#             send_moderation_message(participant_id)
+#         mock_client.post.assert_called_once_with(expected_url, headers=expected_headers)

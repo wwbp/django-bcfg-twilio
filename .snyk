@@ -7,4 +7,9 @@ ignore:
         reason: Upgrading to latest version breaks things
         expires: 2025-05-08T12:00:00.000Z
         created: 2025-04-08T12:00:00.000Z
+
+  SNYK-PYTHON-REQUESTS-10305723:
+    - "*":
+        reason: "netrc not used in our environment"
+        expires: 2025-07-09T00:00:00.000Z
 patch: {}
