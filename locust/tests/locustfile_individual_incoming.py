@@ -7,10 +7,10 @@ from locust.exception import StopUser
 class IndividualUser(HttpUser):
     host = "http://localhost:8000"
     wait_time = between(0, 1)
-    api_key = "O8gYUkyDsulL7lcyF_v3pxAF2HL6KSsLWvJREtB_BdE"
+    api_key = ""
 
     # how many messages **each** user should send
-    messages_to_send = 1
+    messages_to_send = 10
 
     # global counter for deterministic user IDs
     user_id_counter = itertools.count(1)
