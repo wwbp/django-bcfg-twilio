@@ -2,7 +2,7 @@ import pytest
 import httpx
 from unittest.mock import patch, MagicMock
 from django.conf import settings
-
+import logging
 from chat.services.send import (
     send_message_to_participant,
     send_message_to_participant_group,
@@ -147,3 +147,117 @@ def test_send_message_to_participant_group_request_error():
         with pytest.raises(httpx.RequestError):
             send_message_to_participant_group(group_id, message)
         mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
+
+
+def test_send_message_to_participant_not_found_404(caplog):
+    participant_id = "participant404"
+    message = "Hello 404"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+
+    def raise_error():
+        req = httpx.Request("POST", expected_url)
+        resp = httpx.Response(status_code=404, request=req)
+        raise httpx.HTTPStatusError("404 Client Error", request=req, response=resp)
+
+    fake_response = MagicMock()
+    fake_response.raise_for_status = raise_error
+    mock_client = MagicMock()
+    mock_client.post.return_value = fake_response
+
+    caplog.set_level(logging.ERROR)
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        with pytest.raises(httpx.HTTPStatusError):
+            send_message_to_participant(participant_id, message)
+
+    mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
+    assert (
+        f"Failed to send message to participant {participant_id}: Participant {participant_id} not found (404)"
+    ) in caplog.text
+
+
+def test_send_message_to_participant_payload_too_large_413(caplog):
+    participant_id = "participant413"
+    message = "Hello 413"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participant/{participant_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+
+    def raise_error():
+        req = httpx.Request("POST", expected_url)
+        resp = httpx.Response(status_code=413, request=req)
+        raise httpx.HTTPStatusError("413 Payload Too Large", request=req, response=resp)
+
+    fake_response = MagicMock()
+    fake_response.raise_for_status = raise_error
+    mock_client = MagicMock()
+    mock_client.post.return_value = fake_response
+
+    caplog.set_level(logging.ERROR)
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        with pytest.raises(httpx.HTTPStatusError):
+            send_message_to_participant(participant_id, message)
+
+    mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
+    assert (
+        f"Failed to send message to participant {participant_id}: "
+        f"Payload too large for participant {participant_id} (413)"
+    ) in caplog.text
+
+
+def test_send_message_to_participant_group_not_found_404(caplog):
+    group_id = "group404"
+    message = "Group hello 404"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+
+    def raise_error():
+        req = httpx.Request("POST", expected_url)
+        resp = httpx.Response(status_code=404, request=req)
+        raise httpx.HTTPStatusError("404 Client Error", request=req, response=resp)
+
+    fake_response = MagicMock()
+    fake_response.raise_for_status = raise_error
+    mock_client = MagicMock()
+    mock_client.post.return_value = fake_response
+
+    caplog.set_level(logging.ERROR)
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        with pytest.raises(httpx.HTTPStatusError):
+            send_message_to_participant_group(group_id, message)
+
+    mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
+    assert (
+        f"Failed to send message to participant group {group_id}: Participant group {group_id} not found (404)"
+    ) in caplog.text
+
+
+def test_send_message_to_participant_group_payload_too_large_413(caplog):
+    group_id = "group413"
+    message = "Group hello 413"
+    expected_url = f"{settings.BCFG_DOMAIN}/ai/api/participantgroup/{group_id}/send"
+    expected_payload = {"message": message}
+    expected_headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
+
+    def raise_error():
+        req = httpx.Request("POST", expected_url)
+        resp = httpx.Response(status_code=413, request=req)
+        raise httpx.HTTPStatusError("413 Payload Too Large", request=req, response=resp)
+
+    fake_response = MagicMock()
+    fake_response.raise_for_status = raise_error
+    mock_client = MagicMock()
+    mock_client.post.return_value = fake_response
+
+    caplog.set_level(logging.ERROR)
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        with pytest.raises(httpx.HTTPStatusError):
+            send_message_to_participant_group(group_id, message)
+
+    mock_client.post.assert_called_once_with(expected_url, json=expected_payload, headers=expected_headers)
+    assert (
+        f"Failed to send message to participant group {group_id}: "
+        f"Payload too large for participant group {group_id} (413)"
+    ) in caplog.text
