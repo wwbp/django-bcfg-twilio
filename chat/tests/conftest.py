@@ -78,13 +78,11 @@ class IndividualPipelineMocks:
         mock_generate_response: MagicMock,
         mock_ensure_within_character_limit: MagicMock,
         mock_send_message_to_participant: MagicMock,
-        mock_send_moderation_message: MagicMock,
     ):
         self.mock_moderate_message = mock_moderate_message
         self.mock_generate_response = mock_generate_response
         self.mock_ensure_within_character_limit = mock_ensure_within_character_limit
         self.mock_send_message_to_participant = mock_send_message_to_participant
-        self.mock_send_moderation_message = mock_send_moderation_message
 
 
 @pytest.fixture
@@ -107,16 +105,12 @@ def mock_all_individual_external_calls():
         patch(
             "chat.services.individual_pipeline.send_message_to_participant", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
-        patch(
-            "chat.services.individual_pipeline.send_moderation_message", return_value={"status": "ok"}
-        ) as mock_send_moderation_message,
     ):
         yield IndividualPipelineMocks(
             mock_moderate_message=mock_moderate_message,
             mock_generate_response=mock_generate_response,
             mock_ensure_within_character_limit=mock_ensure_within_character_limit,
             mock_send_message_to_participant=mock_send_message_to_participant,
-            mock_send_moderation_message=mock_send_moderation_message,
         )
 
 
