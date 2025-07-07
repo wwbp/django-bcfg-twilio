@@ -22,7 +22,7 @@ from chat.services.group_crud import (
     ingest_request,
 )
 from chat.services.moderation import moderate_message
-from chat.services.send import send_message_to_participant_group, send_moderation_message
+from chat.services.send import send_message_to_participant_group
 
 from ..models import (
     BaseChatTranscript,
@@ -221,9 +221,6 @@ def handle_inbound_group_message(group_id: str, data: dict):
         # moderate
         _moderate(record, user_chat_transcript)
         if record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED:
-            # if blocked, we tell BCFG and stop here
-            if not record.is_test:
-                send_moderation_message(record.user.id)
             return
 
         # handle changing current session if necessary
