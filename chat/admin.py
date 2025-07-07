@@ -251,7 +251,7 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
         "school_name",
     )
     search_fields = ("content",)
-    list_filter = ("role", ChatTranscriptWeekNumberFilter, IndividualChatTranscriptSchoolNameFilter)
+    list_filter = ("role", "moderation_status", "created_at", ChatTranscriptWeekNumberFilter, IndividualChatTranscriptSchoolNameFilter)
     inlines = [IndividualPipelineRecordInline]
 
     def pipeline_record_link(self, obj):
@@ -322,7 +322,7 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
     )
 
     search_fields = ("content",)
-    list_filter = ("role", ChatTranscriptWeekNumberFilter, GroupChatTranscriptSchoolNameFilter)
+    list_filter = ("role", "moderation_status", "created_at", ChatTranscriptWeekNumberFilter, GroupChatTranscriptSchoolNameFilter)
     # inlines = [GroupPipelineRecordInline]
 
 
