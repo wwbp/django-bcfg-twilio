@@ -168,16 +168,6 @@ def test_individual_pipeline_parametrized(
         f"{mock_all_individual_external_calls.mock_generate_response.call_count}"
     )
 
-    # Asser moderation message send
-    # Call count should be 1 if moderation returned a blocking value.
-    expected_send_moderation_calls = 1 if mocks["moderation_return"] else 0
-    assert (
-        mock_all_individual_external_calls.mock_send_moderation_message.call_count == expected_send_moderation_calls
-    ), (
-        f"{description}: send_moderation_message call count expected {expected_send_moderation_calls} "
-        f"but got {mock_all_individual_external_calls.mock_send_moderation_message.call_count}"
-    )
-
     # Assert send_message_to_participant call count:
     # Should be 1 if not a test user and message not moderated.
     expected_send_calls = 1 if not (mocks["is_test_user"] or mocks["moderation_return"]) else 0

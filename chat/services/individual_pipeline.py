@@ -19,7 +19,7 @@ from .individual_crud import (
     ingest_initial_message,
 )
 from .completion import ensure_within_character_limit, generate_response
-from .send import send_moderation_message, send_message_to_participant
+from .send import send_message_to_participant
 from ..models import (
     IndividualChatTranscript,
     IndividualPipelineRecord,
@@ -164,9 +164,6 @@ def individual_pipeline(participant_id: str, data: IndividualIncomingMessage):
         # note that we moderate even if we got newer message since this message
         individual_moderation(record, user_chat_transcript)
         if record.status == IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED:
-            # if blocked, we tell BCFG and stop here
-            if not record.user.is_test:
-                send_moderation_message(record.user.id)
             return
 
         # Stage 3: Process via LLM called.
