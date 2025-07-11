@@ -65,6 +65,7 @@ def _ingest(
         group=group,
         message=group_incoming_message.message,
         status=GroupPipelineRecord.StageStatus.INGEST_PASSED,
+        request_recieved_at=timezone.now(),
     )
     logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
     return record, user_chat_transcript
@@ -187,6 +188,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
     if not record.is_test and response:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
+    record.response_sent_at = timezone.now()
     record.save()
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"

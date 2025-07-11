@@ -52,6 +52,7 @@ def individual_ingest(participant_id: str, individual_incoming_message: Individu
         message=individual_incoming_message.message,
         status=IndividualPipelineRecord.StageStatus.INGEST_PASSED,
         is_for_group_direct_messaging=user.group is not None,
+        request_recieved_at=timezone.now(),
     )
     logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
     if record.is_for_group_direct_messaging:
@@ -132,6 +133,7 @@ def individual_save_and_send(record: IndividualPipelineRecord, session: Individu
         send_message_to_participant(participant_id, response)
         # Update the pipeline record for the sending stage
         record.status = IndividualPipelineRecord.StageStatus.SEND_PASSED
+    record.response_sent_at = timezone.now()
     record.save()
     logger.info(f"Individual send pipeline complete for participant {participant_id}, run_id {record.run_id}")
 

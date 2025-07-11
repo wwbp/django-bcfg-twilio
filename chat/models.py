@@ -416,6 +416,8 @@ class BasePipelineRecord(ModelBase):
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    request_recieved_at = models.DateTimeField(blank=True, null=True)
+    response_sent_at = models.DateTimeField(blank=True, null=True)
     llm_latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)
