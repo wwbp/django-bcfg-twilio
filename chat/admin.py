@@ -241,7 +241,7 @@ class IndividualChatTranscriptAdmin(ReadonlyAdmin):
         "instruction_prompt",
         "chat_history",
         "user_message",
-        "latency",
+        "llm_latency",
         "shorten_count",
         "moderation_status",
         "sent_at",
@@ -318,7 +318,7 @@ class GroupChatTranscriptAdmin(ReadonlyAdmin):
             {
                 "fields": (
                     "assistant_strategy_phase",
-                    "latency",
+                    "llm_latency",
                     "chat_history",
                     "instruction_prompt",
                     "pipeline_record_link",

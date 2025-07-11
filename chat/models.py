@@ -201,7 +201,7 @@ class BaseChatTranscript(ModelBase):
     )
     instruction_prompt = models.TextField(blank=True, null=True)
     chat_history = models.TextField(blank=True, null=True)
-    latency = models.DurationField(default=timedelta(0), null=True)
+    llm_latency = models.DurationField(default=timedelta(0), null=True)
     shorten_count = models.IntegerField(default=0, null=True)
     user_message = models.TextField(
         blank=True,
@@ -416,7 +416,7 @@ class BasePipelineRecord(ModelBase):
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
-    latency = models.DurationField(default=timedelta(0))
+    llm_latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)
     gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")

@@ -99,7 +99,7 @@ def individual_process(record: IndividualPipelineRecord):
     record.completion_tokens = completion_tokens
     record.gpt_model = gpt_model
     record.processed_message = message
-    record.latency = timezone.now() - start_timer
+    record.llm_latency = timezone.now() - start_timer
     record.instruction_prompt = instructions
     record.chat_history = format_chat_history(chat_history)
     record.response = response

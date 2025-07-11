@@ -237,7 +237,7 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
         content=record.validated_message,
         instruction_prompt=record.instruction_prompt,
         chat_history=record.chat_history,
-        latency=record.latency,
+        llm_latency=record.llm_latency,
         shorten_count=record.shorten_count,
         user_message=record.processed_message,
     )

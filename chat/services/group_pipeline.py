@@ -155,7 +155,7 @@ def _compute_and_validate_message_to_send(
     record.completion_tokens = completion_tokens
     record.gpt_model = gpt_model
     record.processed_message = message
-    record.latency = timezone.now() - start_timer
+    record.llm_latency = timezone.now() - start_timer
     record.instruction_prompt = instruction_prompt
     record.chat_history = format_chat_history(chat_history)
     record.response = response
@@ -179,7 +179,7 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         content=response,
         instruction_prompt=record.instruction_prompt,
         chat_history=record.chat_history,
-        latency=record.latency,
+        llm_latency=record.llm_latency,
         shorten_count=record.shorten_count,
         user_message=record.processed_message,
         assistant_strategy_phase=next_strategy_phase,
