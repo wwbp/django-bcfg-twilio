@@ -42,7 +42,11 @@ def _newer_user_messages_exist(record: IndividualPipelineRecord):
     return newer_message_exists
 
 
-def individual_ingest(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+def individual_ingest(
+    participant_id: str,
+    individual_incoming_message: IndividualIncomingMessage,
+    request_recieved_at: timezone.datetime | None = None,
+):
     """
     Stage 1: Validate and store incoming data, then create a new run record.
     """
@@ -52,7 +56,7 @@ def individual_ingest(participant_id: str, individual_incoming_message: Individu
         message=individual_incoming_message.message,
         status=IndividualPipelineRecord.StageStatus.INGEST_PASSED,
         is_for_group_direct_messaging=user.group is not None,
-        request_recieved_at=timezone.now(),
+        request_recieved_at=request_recieved_at,
     )
     logger.info(f"Individual ingest pipeline complete for participant {participant_id}, run_id {record.run_id}")
     if record.is_for_group_direct_messaging:
@@ -152,14 +156,18 @@ def handle_inbound_individual_initial_message(group_id: str, data: dict):
 
 
 @shared_task
-def individual_pipeline(participant_id: str, data: IndividualIncomingMessage):
+def individual_pipeline(
+    participant_id: str, data: IndividualIncomingMessage, request_recieved_at: timezone.datetime | None = None
+) -> None:
     record: IndividualPipelineRecord | None = None
     serializer = IndividualIncomingMessageSerializer(data=data)
     serializer.is_valid(raise_exception=True)
     individual_incoming_message: IndividualIncomingMessage = serializer.validated_data
     try:
         # Stage 1: Ingest the data and create a run record.
-        record, session, user_chat_transcript = individual_ingest(participant_id, individual_incoming_message)
+        record, session, user_chat_transcript = individual_ingest(
+            participant_id, individual_incoming_message, request_recieved_at
+        )
         assert record  # to appease the typechecker
 
         # Stage 2: Moderate the incoming message.

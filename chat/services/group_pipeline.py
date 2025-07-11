@@ -54,7 +54,7 @@ def _newer_user_messages_exist(record: GroupPipelineRecord):
 
 
 def _ingest(
-    group_id: str, group_incoming_message: GroupIncomingMessage
+    group_id: str, group_incoming_message: GroupIncomingMessage, request_recieved_at: timezone.datetime | None = None
 ) -> tuple[GroupPipelineRecord, GroupChatTranscript]:
     """
     Stage 1: Validate and store incoming data, then create a new run record.
@@ -65,7 +65,7 @@ def _ingest(
         group=group,
         message=group_incoming_message.message,
         status=GroupPipelineRecord.StageStatus.INGEST_PASSED,
-        request_recieved_at=timezone.now(),
+        request_recieved_at=request_recieved_at,
     )
     logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
     return record, user_chat_transcript
@@ -209,7 +209,9 @@ def handle_inbound_group_initial_message(group_id: str, data: dict):
 
 
 @shared_task
-def handle_inbound_group_message(group_id: str, data: dict):
+def handle_inbound_group_message(
+    group_id: str, data: dict, request_recieved_at: timezone.datetime | None = None
+) -> None:
     # we reuse serializer used in inbound http endpoint, which already validated data
     serializer = GroupIncomingMessageSerializer(data=data)
     serializer.is_valid(raise_exception=True)
@@ -218,7 +220,7 @@ def handle_inbound_group_message(group_id: str, data: dict):
     record: GroupPipelineRecord | None = None
     try:
         # ingest
-        record, user_chat_transcript = _ingest(group_id, group_incoming_message)
+        record, user_chat_transcript = _ingest(group_id, group_incoming_message, request_recieved_at)
 
         # moderate
         _moderate(record, user_chat_transcript)
