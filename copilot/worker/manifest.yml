@@ -12,7 +12,7 @@ image:
   build: Dockerfile
   target: production
 
-entrypoint: "celery -A config worker --loglevel=info --concurrency 1"
+entrypoint: "celery -A config worker --loglevel=info --concurrency 2"
 
 cpu: 512       # Number of CPU units for the task.
 memory: 1024    # Amount of memory in MiB used by the task.
