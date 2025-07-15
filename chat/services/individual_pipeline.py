@@ -69,7 +69,9 @@ def individual_moderation(record: IndividualPipelineRecord, user_chat_transcript
     Stage 2: Moderate the incoming message before processing.
     """
     message = record.message
+    start_timer = timezone.now()
     blocked_str = moderate_message(message)
+    record.moderation_latency = timezone.now() - start_timer
     if blocked_str:
         user_chat_transcript.moderation_status = IndividualChatTranscript.ModerationStatus.FLAGGED
         record.status = IndividualPipelineRecord.StageStatus.MODERATION_BLOCKED
