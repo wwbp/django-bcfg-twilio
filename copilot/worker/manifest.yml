@@ -41,7 +41,7 @@ secrets:
 
 environments:
   dev:
-    count: 20
+    count: 30
     deployment: # The deployment strategy for the "dev" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
