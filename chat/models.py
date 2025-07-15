@@ -419,6 +419,7 @@ class BasePipelineRecord(ModelBase):
     request_recieved_at = models.DateTimeField(blank=True, null=True)
     response_sent_at = models.DateTimeField(blank=True, null=True)
     moderation_latency = models.DurationField(default=timedelta(0))
+    db_load_latency = models.DurationField(default=timedelta(0))
     llm_latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)

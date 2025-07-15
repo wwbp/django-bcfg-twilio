@@ -88,13 +88,14 @@ def individual_process(record: IndividualPipelineRecord):
     Stage 3: Process data via an LLM call.
     """
     # Load chat history and instructions from the database
+    start_timer = timezone.now()
     if record.is_for_group_direct_messaging:
         chat_history, message = load_individual_and_group_chat_history_for_direct_messaging(record.user)
         instructions = load_instruction_prompt_for_direct_messaging(record.user)
     else:
         chat_history, message = load_individual_chat_history(record.user)
         instructions = load_instruction_prompt(record.user)
-
+    record.db_load_latency = timezone.now() - start_timer
     start_timer = timezone.now()
     gpt_model = record.user.gpt_model or settings.OPENAI_MODEL
     response, prompt_tokens, completion_tokens = generate_response(chat_history, instructions, message, gpt_model)
