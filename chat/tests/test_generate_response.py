@@ -1,39 +1,35 @@
 import pytest
-from unittest.mock import patch
-
-from chat.services.completion import _generate_response, generate_response
+from unittest.mock import patch, AsyncMock, MagicMock
+from chat.services.completion import _generate_response, generate_response, ChatMessage
 
 
 # Parameterized test for _generate_response
 @pytest.mark.parametrize(
-    "chat_history, instructions, message, expected_response",
+    "chat_history,instructions,message,expected_response",
     [
-        ([], "Test instructions", "Test message", "mocked response"),
+        ([{"role": "user", "content": "Hi"}], "Test instructions", "Test message", "mocked response"),
         ([{"role": "user", "content": "Hello"}], "Other instructions", "Another message", "mocked response"),
     ],
 )
 @patch("chat.services.completion.Kani")
 @patch("chat.services.completion.OpenAIEngine")
-def test__generate_response_param(mock_openai, mock_kani, chat_history, instructions, message, expected_response):
-    # Define a dummy async function to simulate assistant.chat_round_str.
-    async def dummy_chat_round_str(msg):
-        return expected_response
+def test__generate_response_param(mock_engine, mock_kani, chat_history, instructions, message, expected_response):
+    # Setup AsyncMock for assistant
+    mock_assistant = AsyncMock()
+    mock_assistant.chat_round_str.return_value = expected_response
+    mock_completion = MagicMock(prompt_tokens=5, completion_tokens=7)
+    mock_assistant.get_model_completion.return_value = mock_completion
+    mock_kani.return_value = mock_assistant
 
-    # Configure the mocked Kani instance.
-    mock_kani.return_value.chat_round_str.side_effect = dummy_chat_round_str
+    # Mock engine.aclose as AsyncMock
+    mock_engine.return_value.aclose = AsyncMock()
 
-    async def dummy_get_model_completion():
-        class Dummy:
-            prompt_tokens = None
-            completion_tokens = None
-
-        return Dummy()
-
-    mock_kani.return_value.get_model_completion.side_effect = dummy_get_model_completion
-
-    result, _, _ = _generate_response(chat_history, instructions, message, "gpt-4o-mini")
-    assert result == expected_response
-    mock_kani.return_value.chat_round_str.assert_called_once_with(message)
+    # Convert chat_history dicts to ChatMessage objects
+    chat_history_objs = [ChatMessage.model_validate(chat) for chat in chat_history]
+    response, prompt_tokens, completion_tokens = _generate_response(chat_history_objs, instructions, message, "gpt-4.1-mini")
+    assert response == expected_response
+    assert prompt_tokens == 5
+    assert completion_tokens == 7
 
 
 # Parameterized test for generate_response

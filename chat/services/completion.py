@@ -23,15 +23,24 @@ async def _generate_response_async(
     completion = await assistant.get_model_completion()
     prompt_tokens = completion.prompt_tokens or 0
     completion_tokens = completion.completion_tokens or 0
+    # Attempt to close the engine if it has an aclose method
+    if hasattr(engine, "aclose"):
+        await engine.aclose()
     return (response, prompt_tokens, completion_tokens)
 
 
 def _generate_response(chat_history, instructions, message, gpt_model):
-    loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message, gpt_model))
-    finally:
-        loop.close()
+        # This will raise a RuntimeError if no event loop is running (i.e., in sync code)
+        asyncio.get_running_loop()
+        # If we get here, we're in async code, which is not allowed for this function
+        raise RuntimeError(
+            "_generate_response() cannot be called from async code. "
+            "Use _generate_response_async instead."
+        )
+    except RuntimeError:
+        # No running event loop, safe to use asyncio.run
+        return asyncio.run(_generate_response_async(chat_history, instructions, message, gpt_model))
 
 
 def generate_response(
