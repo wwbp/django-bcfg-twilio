@@ -233,7 +233,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 BCFG_DOMAIN = os.environ.get("BCFG_DOMAIN", "")
 BCFG_API_KEY = os.environ.get("BCFG_API_KEY", "")
 INBOUND_MESSAGE_API_KEY = os.environ.get("INBOUND_MESSAGE_API_KEY", "")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 MODERATION_VALUES_FOR_BLOCKED = json.loads(
     os.environ.get(
         "MODERATION_VALUES_FOR_BLOCKED",
