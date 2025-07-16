@@ -22,11 +22,13 @@ def test__generate_response_param(mock_engine, mock_kani, chat_history, instruct
     mock_kani.return_value = mock_assistant
 
     # Mock engine.aclose as AsyncMock
-    mock_engine.return_value.aclose = AsyncMock()
+    mock_engine.return_value.close = AsyncMock()
 
     # Convert chat_history dicts to ChatMessage objects
     chat_history_objs = [ChatMessage.model_validate(chat) for chat in chat_history]
-    response, prompt_tokens, completion_tokens = _generate_response(chat_history_objs, instructions, message, "gpt-4.1-mini")
+    response, prompt_tokens, completion_tokens = _generate_response(
+        chat_history_objs, instructions, message, "gpt-4.1-mini"
+    )
     assert response == expected_response
     assert prompt_tokens == 5
     assert completion_tokens == 7
