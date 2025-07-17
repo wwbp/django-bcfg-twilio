@@ -33,7 +33,6 @@ def send_message_to_participant(participant_id: str, message: str):
         logger.error(f"Failed to send message to participant {participant_id}: {msg}")
         raise
 
-
 def send_message_to_participant_group(group_id: str, message: str):
     """
     Sends a message to a participant group via the BCFG endpoint.
@@ -59,7 +58,6 @@ def send_message_to_participant_group(group_id: str, message: str):
         )
         logger.error(f"Failed to send message to participant group {group_id}: {msg}")
         raise
-
 
 def send_school_summaries_to_hub_for_week(school_name: str, week_number: int, summary_contents: list[str]):
     url = f"{settings.BCFG_DOMAIN}/ai/api/summary/school/{school_name}/week/{week_number}"

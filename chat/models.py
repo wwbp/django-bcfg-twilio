@@ -201,7 +201,7 @@ class BaseChatTranscript(ModelBase):
     )
     instruction_prompt = models.TextField(blank=True, null=True)
     chat_history = models.TextField(blank=True, null=True)
-    latency = models.DurationField(default=timedelta(0), null=True)
+    llm_latency = models.DurationField(default=timedelta(0), null=True)
     shorten_count = models.IntegerField(default=0, null=True)
     user_message = models.TextField(
         blank=True,
@@ -358,6 +358,7 @@ class ControlConfig(ModelBaseWithUuidId):
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
         INSTRUCTION_PROMPT_TEMPLATE = "instruction_prompt_template"
         GROUP_INSTRUCTION_PROMPT_TEMPLATE = "group_instruction_prompt_template"
+        TRANSCRIPT_LEN_CUTOFF = "Transcript Len Cutoff"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
@@ -416,7 +417,11 @@ class BasePipelineRecord(ModelBase):
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
-    latency = models.DurationField(default=timedelta(0))
+    request_recieved_at = models.DateTimeField(blank=True, null=True)
+    response_sent_at = models.DateTimeField(blank=True, null=True)
+    moderation_latency = models.DurationField(default=timedelta(0))
+    db_load_latency = models.DurationField(default=timedelta(0))
+    llm_latency = models.DurationField(default=timedelta(0))
     shorten_count = models.IntegerField(default=0)
     chat_history = models.TextField(blank=True, null=True)
     gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
