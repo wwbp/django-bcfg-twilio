@@ -177,7 +177,12 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         if latest_user_transcript
         else ""
     )
-
+    raw_cutoff = ControlConfig.retrieve(ControlConfig.ControlConfigKey.TRANSCRIPT_LEN_CUTOFF) or 25
+    try:
+        cutoff = int(raw_cutoff)
+    except (TypeError, ValueError):
+        cutoff = 25
+    history = history[-cutoff:]
     return history, latest_user_message_content
 
 
@@ -226,6 +231,12 @@ def load_individual_chat_history(user: User):
         if latest_user_transcript
         else ""
     )
+    raw_cutoff = ControlConfig.retrieve(ControlConfig.ControlConfigKey.TRANSCRIPT_LEN_CUTOFF) or 25
+    try:
+        cutoff = int(raw_cutoff)
+    except (TypeError, ValueError):
+        cutoff = 25
+    history = history[-cutoff:]
     return history, latest_user_message_content
 
 

@@ -358,6 +358,7 @@ class ControlConfig(ModelBaseWithUuidId):
         GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
         INSTRUCTION_PROMPT_TEMPLATE = "instruction_prompt_template"
         GROUP_INSTRUCTION_PROMPT_TEMPLATE = "group_instruction_prompt_template"
+        TRANSCRIPT_LEN_CUTOFF = "Transcript Len Cutoff"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
