@@ -41,7 +41,6 @@ secrets:
 
 environments:
   dev:
-    count: 30
     deployment: # The deployment strategy for the "dev" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
@@ -57,7 +56,7 @@ environments:
       BCFG_DOMAIN: https://test-2025.joinstarterkit.org
       BASE_ADMIN_URI: https://test.wwbp-bcfg-chatbot.org/
   prod:
-    count: 2
+    count: 15
     variables:
       DJANGO_ENV: prod
       BCFG_DOMAIN: https://2025.joinstarterkit.org
