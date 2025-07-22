@@ -105,6 +105,7 @@ pipelines:
               script:
                 - *deployScriptCommon
                 - ./copilot-bin svc deploy --name scheduler --env=dev
+
     staging:
       - parallel:
           - <<: *testStep
@@ -130,6 +131,7 @@ pipelines:
               script:
                 - *deployScriptCommon
                 - ./copilot-bin svc deploy --name scheduler --env=test
+
     main:
       - parallel:
           - <<: *testStep

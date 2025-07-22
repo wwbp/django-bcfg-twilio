@@ -8,14 +8,18 @@ from pytest_factoryboy import register
 
 from chat.models import (
     BaseChatTranscript,
+    ControlConfig,
     Group,
+    GroupPrompt,
     GroupSession,
+    GroupStrategyPhase,
     IndividualSession,
     MessageType,
+    SundaySummaryPrompt,
     User,
     IndividualChatTranscript,
     GroupChatTranscript,
-    Prompt,
+    IndividualPrompt,
     Summary,
     IndividualPipelineRecord,
     GroupPipelineRecord,
@@ -74,13 +78,11 @@ class IndividualPipelineMocks:
         mock_generate_response: MagicMock,
         mock_ensure_within_character_limit: MagicMock,
         mock_send_message_to_participant: MagicMock,
-        mock_send_moderation_message: MagicMock,
     ):
         self.mock_moderate_message = mock_moderate_message
         self.mock_generate_response = mock_generate_response
         self.mock_ensure_within_character_limit = mock_ensure_within_character_limit
         self.mock_send_message_to_participant = mock_send_message_to_participant
-        self.mock_send_moderation_message = mock_send_moderation_message
 
 
 @pytest.fixture
@@ -94,7 +96,7 @@ def mock_all_individual_external_calls():
     with (
         patch("chat.services.individual_pipeline.moderate_message", return_value="") as mock_moderate_message,
         patch(
-            "chat.services.individual_pipeline.generate_response", return_value="Some LLM response"
+            "chat.services.individual_pipeline.generate_response", return_value=("Some LLM response", None, None)
         ) as mock_generate_response,
         patch(
             "chat.services.individual_pipeline.ensure_within_character_limit",
@@ -103,16 +105,12 @@ def mock_all_individual_external_calls():
         patch(
             "chat.services.individual_pipeline.send_message_to_participant", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
-        patch(
-            "chat.services.individual_pipeline.send_moderation_message", return_value={"status": "ok"}
-        ) as mock_send_moderation_message,
     ):
         yield IndividualPipelineMocks(
             mock_moderate_message=mock_moderate_message,
             mock_generate_response=mock_generate_response,
             mock_ensure_within_character_limit=mock_ensure_within_character_limit,
             mock_send_message_to_participant=mock_send_message_to_participant,
-            mock_send_moderation_message=mock_send_moderation_message,
         )
 
 
@@ -133,7 +131,9 @@ def group_with_initial_message_interaction(
     group = group_factory()
     users = user_factory.create_batch(6, group=group, school_mascot=school_mascot, school_name=school_name)
     session = group_session_factory(group=group, week_number=1, message_type=MessageType.INITIAL)
-    group_chat_transcript_factory(session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message)
+    group_chat_transcript_factory(
+        session=session, role=BaseChatTranscript.Role.ASSISTANT, content=initial_message, hub_initiated=True
+    )
     group_chat_transcript_factory(
         session=session, role=BaseChatTranscript.Role.USER, content=user_message, sender=users[0]
     )
@@ -163,6 +163,33 @@ def group_with_initial_message_interaction(
         ],
     }
     yield group, session, group_pipeline_record, example_message_context
+
+
+@pytest.fixture
+def control_prompts(control_config_factory):
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="<<PERSONA PROMPT>>")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="<<SYSTEM PROMPT>>")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_REMINDER_STRATEGY_PROMPT, value="<<REMINDER PROMPT>>"
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT, value="<<GROUP AUDIENCE PROMPT>>"
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_SUMMARY_PERSONA_PROMPT, value="<<GROUP SUMMARY PERSONA PROMPT>>"
+    )
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=(
+            "Using the below system prompt as your guide, engage with the group as a participant in a "
+            "manner that reflects your assigned persona and follows the conversation stategy instructions"
+            "System Prompt: {system}\n\n"
+            "Assigned Persona: {persona}\n\n"
+            "Assistant Name: {assistant_name}\n\n"
+            "Group's School: {school_name}\n\n"
+            "Strategy: {strategy}\n\n"
+        ),
+    )
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -199,7 +226,7 @@ class GroupSessionFactory(factory.django.DjangoModelFactory):
     message_type = MessageType.INITIAL
 
 
-class ChatTranscriptFactory(factory.django.DjangoModelFactory):
+class IndividualChatTranscriptFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IndividualChatTranscript
 
@@ -218,21 +245,38 @@ class GroupChatTranscriptFactory(factory.django.DjangoModelFactory):
     content = factory.Faker("sentence")
 
 
-class PromptFactory(factory.django.DjangoModelFactory):
+class IndividualPromptFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Prompt
+        model = IndividualPrompt
 
     week = factory.Faker("random_int")
     activity = factory.Faker("sentence")
-    type = MessageType.INITIAL
+    message_type = MessageType.INITIAL
+
+
+class GroupPromptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = GroupPrompt
+
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
+    strategy_type = GroupStrategyPhase.AUDIENCE
+
+
+class SundaySummaryPromptFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SundaySummaryPrompt
+
+    week = factory.Faker("random_int")
+    activity = factory.Faker("sentence")
 
 
 class SummaryFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Summary
 
-    school = factory.Faker("word")
-    type = Summary.TYPE_CHOICES[0][0]
+    school_name = factory.Faker("word")
+    week_number = factory.Faker("random_int")
     summary = factory.Faker("sentence")
 
 
@@ -262,14 +306,33 @@ class GroupPipelineRecordFactory(factory.django.DjangoModelFactory):
     status = GroupPipelineRecord.StageStatus.INGEST_PASSED
 
 
+class ControlConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ControlConfig
+
+    # if you only ever care about persona & system, you can restrict the iterator:
+    key = factory.Iterator(
+        [
+            ControlConfig.ControlConfigKey.PERSONA_PROMPT,
+            ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
+            ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
+        ]
+    )
+    # default fake value; you can always override in a test
+    value = factory.Faker("sentence")
+
+
 # register factories as fixtures
 register(UserFactory)
 register(GroupFactory)
-register(ChatTranscriptFactory)
+register(IndividualChatTranscriptFactory)
 register(GroupChatTranscriptFactory)
-register(PromptFactory)
+register(GroupPromptFactory)
+register(IndividualPromptFactory)
 register(SummaryFactory)
 register(IndividualPipelineRecordFactory)
 register(GroupPipelineRecordFactory)
 register(IndividualSessionFactory)
 register(GroupSessionFactory)
+register(ControlConfigFactory)
+register(SundaySummaryPromptFactory)

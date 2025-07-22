@@ -18,7 +18,6 @@ from chat.models import (
     GroupStrategyPhase,
     GroupStrategyPhaseConfig,
     MessageType,
-    Prompt,
     User,
 )
 from chat.serializers import GroupIncomingMessageSerializer
@@ -30,7 +29,7 @@ _FIRST_USER_MESSAGE = "some message from user"
 
 
 @pytest.fixture
-def _inbound_call():
+def _inbound_call(control_config_factory):
     group_id = str(uuid4())
     sender_id = str(uuid4())
     other_user1_id = str(uuid4())
@@ -66,14 +65,21 @@ def _inbound_call():
         },
     }
 
-    Prompt.objects.create(
-        is_for_group=True,
-        week=inbound_payload["context"]["week_number"],
-        type=inbound_payload["context"]["message_type"],
-        activity="base activity",
+    control_config_factory(key=ControlConfig.ControlConfigKey.GROUP_AUDIENCE_STRATEGY_PROMPT, value="base activity")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.GROUP_INSTRUCTION_PROMPT_TEMPLATE,
+        value=(
+            "Using the below system prompt as your guide, engage with the group as a participant in a "
+            "manner that reflects your assigned persona and follows the conversation stategy instructions"
+            "System Prompt: {system}\n\n"
+            "Assigned Persona: {persona}\n\n"
+            "Assistant Name: {assistant_name}\n\n"
+            "Group's School: {school_name}\n\n"
+            "Strategy: {strategy}\n\n"
+        ),
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
 
     yield group_id, sender_id, inbound_payload, other_user1_id, other_user2_id, other_user3_id
 
@@ -83,13 +89,17 @@ def _mocks():
     with (
         patch("chat.services.group_pipeline.moderate_message", return_value="") as mock_moderate_message,
         patch(
-            "chat.services.group_pipeline.send_moderation_message", return_value={"status": "ok"}
-        ) as mock_send_moderation_message,
-        patch(
             "chat.services.group_pipeline.send_message_to_participant_group", return_value={"status": "ok"}
         ) as mock_send_message_to_participant,
+        patch(
+            "chat.services.completion._generate_response", return_value=("Some LLM response", None, None)
+        ) as mock_generate_response,
     ):
-        yield mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant
+        yield (
+            mock_moderate_message,
+            mock_send_message_to_participant,
+            mock_generate_response,
+        )
 
 
 @pytest.mark.parametrize("moderated", [True, False])
@@ -98,7 +108,7 @@ def test_group_pipeline_handle_inbound_message(
 ):
     # arrange
     group_id, sender_id, data, _, _, _ = _inbound_call
-    mock_moderate_message, mock_send_moderation_message, mock_send_message_to_participant = _mocks
+    mock_moderate_message, mock_send_message_to_participant, mock_generate_response = _mocks
     if moderated:
         mock_moderate_message.return_value = "Blocked message"
     caplog.set_level(logging.INFO)
@@ -121,10 +131,9 @@ def test_group_pipeline_handle_inbound_message(
     assert record.message == _FIRST_USER_MESSAGE
     if moderated:
         assert record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED
-        assert mock_send_moderation_message.call_count == 1
+        assert mock_generate_response.call_count == 0
     else:
         assert record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
-        assert mock_send_moderation_message.call_count == 0
 
     # assert session and transcript
     session = GroupSession.objects.get()
@@ -162,8 +171,9 @@ def test_group_pipeline_handle_inbound_message(
         task_function = celery.app.tasks[task.task]
         args = json.loads(task.args)
         kwargs = json.loads(task.kwargs)
-        task_function.apply_async(args=args, kwargs=kwargs)
 
+        task_function.apply_async(args=args, kwargs=kwargs)
+        assert mock_generate_response.call_count == 1
         record.refresh_from_db()
         session.refresh_from_db()
         assert "Group action complete for group" in caplog.text
@@ -173,7 +183,7 @@ def test_group_pipeline_handle_inbound_message(
         transcripts = list(session.transcripts.order_by("created_at").all())
         assert len(transcripts) == 3
         assert transcripts[2].role == BaseChatTranscript.Role.ASSISTANT
-        assert transcripts[2].content == f"Dummy LLM response for phase: {GroupStrategyPhase.AUDIENCE}"
+        assert transcripts[2].content == "Some LLM response"
         assert transcripts[2].assistant_strategy_phase == GroupStrategyPhase.AUDIENCE
 
     # Finally, send a second message, group and session exist and are reused
@@ -328,7 +338,28 @@ def test_group_pipeline_handle_inbound_message_changed_initial_message(
     assert response.status_code == 202
     session = GroupSession.objects.get()
     assert session.initial_message == _INITIAL_MESSAGE
-    assert "Got new initial_message for existing group session" in caplog.text
+    assert "Unexpectedly got new initial_message for existing session" in caplog.text
+
+
+def test_group_pipeline_handle_inbound_message_changed_empty_initial_message(
+    _inbound_call, _mocks, celery_task_always_eager, message_client, caplog
+):
+    group_id, _, data, _, _, _ = _inbound_call
+    url = reverse("chat:ingest-group", args=[group_id])
+
+    # send initial message as before
+    data["context"]["initial_message"] = ""
+    response = message_client.post(
+        url,
+        data,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    session = GroupSession.objects.get()
+    assert session.initial_message == ""
+    transcripts = session.transcripts
+    assert transcripts.count() == 1
+    assert transcripts.first().content == _FIRST_USER_MESSAGE
 
 
 def test_group_pipeline_handle_inbound_message_throws_exception_after_ingest(
@@ -336,7 +367,7 @@ def test_group_pipeline_handle_inbound_message_throws_exception_after_ingest(
 ):
     group_id, _, data, _, _, _ = _inbound_call
     url = reverse("chat:ingest-group", args=[group_id])
-    mock_moderate_message, _, mock_send_message_to_participant = _mocks
+    mock_moderate_message, mock_send_message_to_participant, _ = _mocks
     mock_moderate_message.side_effect = Exception("Some error")
 
     # send initial message as before
@@ -390,7 +421,7 @@ def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
     _inbound_call, _mocks, message_client, celery_task_always_eager
 ):
     group_id, sender_id, data, second_sender_id, _, _ = _inbound_call
-    mock_moderate_message, _, mock_send_message_to_participant = _mocks
+    mock_moderate_message, mock_send_message_to_participant, _ = _mocks
     url = reverse("chat:ingest-group", args=[group_id])
     second_payload = copy.deepcopy(data)
     second_payload["message"] = "some message from user during first moderation"
@@ -424,6 +455,8 @@ def test_group_pipeline_handle_inbound_message_new_message_during_ingestion(
     assert transcripts[0].content == _INITIAL_MESSAGE
     assert transcripts[1].content == _FIRST_USER_MESSAGE
     assert transcripts[2].content == "some message from user during first moderation"
+    assert all(t.week_number == 1 for t in transcripts)
+    assert all(t.school_name == "Test School" for t in transcripts)
 
 
 @pytest.mark.parametrize(
@@ -462,7 +495,7 @@ def test_group_pipeline_handle_inbound_message_updates_strategy_phase(
     created_record = pipeline_records[1]
     assert created_record.status == GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
     session.refresh_from_db()
-    assert session.transcripts.count() == 4  # add one message or inbound
+    assert session.transcripts.count() == 4  # add one message for inbound
     # when we receive a message, we always revert to BEFORE_AUDIENCE phase
     # unless we are in AFTER_AUDIENCE phase, then we stay there
     if current_strategy_phase == GroupStrategyPhase.AFTER_AUDIENCE:
@@ -529,3 +562,156 @@ def test_group_pipeline_handle_inbound_message_delays_correct_duration(
         assert clocked_time > timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS - 1)
         assert clocked_time <= timezone.now() + timezone.timedelta(seconds=_FALLBACK_DELAY_WITHOUT_CONFIG_SECONDS)
         assert f"Group strategy phase config not found for phase '{current_phase}'" in caplog.text
+
+
+def test_group_ingest_duplicate_initial_message(_mocks, message_client, celery_task_always_eager, caplog):
+    base_payload = {
+        "sender_id": "participant1",
+        "context": {
+            "school_name": "Test School",
+            "school_mascot": "Test Mascot",
+            "week_number": 1,
+            "message_type": MessageType.INITIAL,
+            "participants": [
+                {
+                    "name": "Participant 1",
+                    "id": "participant1",
+                },
+            ],
+        },
+    }
+
+    url = reverse("chat:ingest-group", args=["group123"])
+
+    # first message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "hello there human"
+    payload["message"] = "hi bot"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 2
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+
+    # second message, same initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "hello there human"
+    payload["message"] = "how are you, bot?"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 3
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+    assert "Unexpectedly got new initial_message for existing session" not in caplog.text
+
+    # third message, changed initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, hello there"
+    payload["message"] = "bot, can you hear me?"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 4
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+    assert "Unexpectedly got new initial_message for existing session" in caplog.text
+
+
+def test_group_ingest_initial_message_after_user_message(_mocks, message_client, celery_task_always_eager, caplog):
+    base_payload = {
+        "sender_id": "participant1",
+        "context": {
+            "school_name": "Test School",
+            "school_mascot": "Test Mascot",
+            "week_number": 1,
+            "message_type": MessageType.INITIAL,
+            "participants": [
+                {
+                    "name": "Participant 1",
+                    "id": "participant1",
+                },
+            ],
+        },
+    }
+
+    url = reverse("chat:ingest-group", args=["group123"])
+
+    # first message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = ""
+    payload["message"] = "hi bot"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 1
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 0
+
+    # second message, same initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = ""
+    payload["message"] = "are you there, bot?"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 2
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 0
+
+    # third message, now we get initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, I'm here"
+    payload["message"] = "bot, can you hear me?"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 4
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "human, I'm here"
+
+    # human responds to bot
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, I'm here"
+    payload["message"] = "great bot, I was worried you were not listening"
+    response = message_client.post(
+        url,
+        payload,
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    chat_transcripts = GroupChatTranscript.objects.all()
+    assert len(chat_transcripts) == 5
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "human, I'm here"
+    assert "Unexpectedly got new initial_message for existing session" not in caplog.text

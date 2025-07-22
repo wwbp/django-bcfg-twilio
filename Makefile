@@ -22,7 +22,7 @@ clear-all-prompts:
 
 dump-all-prompts:
 	mkdir -p chat/fixtures
-	python manage.py dumpdata --format yaml chat.controlconfig chat.prompt -o chat/fixtures/all-prompts.yaml
+	python manage.py dumpdata --format yaml chat.controlconfig chat.individualprompt chat.groupprompt -o chat/fixtures/all-prompts.yaml
 
 load-all-prompts:
 	mkdir -p chat/fixtures

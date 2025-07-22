@@ -1,3 +1,4 @@
+import copy
 from unittest.mock import patch
 from uuid import uuid4
 import pytest
@@ -10,7 +11,7 @@ from chat.models import (
     IndividualChatTranscript,
     IndividualPipelineRecord,
     MessageType,
-    Prompt,
+    IndividualPrompt,
     User,
 )
 
@@ -98,7 +99,15 @@ def default_context():
     ],
 )
 def test_individual_pipeline_parametrized(
-    default_context, description, participant_id, message, mocks, expected, mock_all_individual_external_calls, caplog
+    default_context,
+    description,
+    participant_id,
+    message,
+    mocks,
+    expected,
+    mock_all_individual_external_calls,
+    caplog,
+    control_config_factory,
 ):
     """
     Test the individual_pipeline task by simulating:
@@ -112,16 +121,24 @@ def test_individual_pipeline_parametrized(
         "message": message,
         "context": default_context,
     }
-    Prompt.objects.create(
+    IndividualPrompt.objects.create(
         week=default_context["week_number"],
-        type=default_context["message_type"],
+        message_type=default_context["message_type"],
         activity="base activity",
     )
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
-    ControlConfig.objects.create(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
     user = User.objects.create(id=participant_id, is_test=mocks["is_test_user"])
     mock_all_individual_external_calls.mock_moderate_message.return_value = mocks["moderation_return"]
-    mock_all_individual_external_calls.mock_generate_response.return_value = mocks["generate_response_return"]
+    mock_all_individual_external_calls.mock_generate_response.return_value = (
+        mocks["generate_response_return"],
+        None,
+        None,
+    )
     mock_all_individual_external_calls.mock_ensure_within_character_limit.return_value = mocks[
         "ensure_within_character_limit_return"
     ]
@@ -149,16 +166,6 @@ def test_individual_pipeline_parametrized(
     assert mock_all_individual_external_calls.mock_generate_response.call_count == expected_gen_calls, (
         f"{description}: generate_response call count expected {expected_gen_calls} but got "
         f"{mock_all_individual_external_calls.mock_generate_response.call_count}"
-    )
-
-    # Asser moderation message send
-    # Call count should be 1 if moderation returned a blocking value.
-    expected_send_moderation_calls = 1 if mocks["moderation_return"] else 0
-    assert (
-        mock_all_individual_external_calls.mock_send_moderation_message.call_count == expected_send_moderation_calls
-    ), (
-        f"{description}: send_moderation_message call count expected {expected_send_moderation_calls} "
-        f"but got {mock_all_individual_external_calls.mock_send_moderation_message.call_count}"
     )
 
     # Assert send_message_to_participant call count:
@@ -229,3 +236,137 @@ def test_individual_pipeline_handles_exception_after_ingestion(mock_individual_m
     assert "Simulated exception" in caplog.text
     assert IndividualPipelineRecord.objects.count() == 1
     assert IndividualPipelineRecord.objects.first().status == IndividualPipelineRecord.StageStatus.FAILED
+
+
+def test_individual_ingest_duplicate_initial_message(
+    mock_all_individual_external_calls, message_client, celery_task_always_eager, caplog, control_config_factory
+):
+    participant_id = uuid4()
+    base_payload = {
+        "message": "",
+        "context": {
+            "school_name": "Test School",
+            "school_mascot": "Default Mascot",
+            "week_number": 1,
+            "name": "Default Name",
+            "message_type": MessageType.INITIAL,
+        },
+    }
+
+    IndividualPrompt.objects.create(
+        week=base_payload["context"]["week_number"],
+        message_type=base_payload["context"]["message_type"],
+        activity="base activity",
+    )
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
+
+    # first message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "hello there human"
+    payload["message"] = "hi bot"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 3
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+
+    # second message, same initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "hello there human"
+    payload["message"] = "how are you, bot?"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 5
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+    assert "Unexpectedly got new initial_message for existing session" not in caplog.text
+
+    # third message, changed initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, hello there"
+    payload["message"] = "bot, can you hear me?"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 7
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "hello there human"
+    assert "Unexpectedly got new initial_message for existing session" in caplog.text
+
+
+def test_group_ingest_initial_message_after_user_message(
+    mock_all_individual_external_calls, message_client, celery_task_always_eager, caplog, control_config_factory
+):
+    participant_id = uuid4()
+    base_payload = {
+        "message": "",
+        "context": {
+            "school_name": "Test School",
+            "school_mascot": "Default Mascot",
+            "week_number": 1,
+            "name": "Default Name",
+            "message_type": MessageType.INITIAL,
+        },
+    }
+
+    IndividualPrompt.objects.create(
+        week=base_payload["context"]["week_number"],
+        message_type=base_payload["context"]["message_type"],
+        activity="base activity",
+    )
+    control_config_factory(key=ControlConfig.ControlConfigKey.PERSONA_PROMPT, value="test persona prompt")
+    control_config_factory(key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT, value="test system prompt")
+    control_config_factory(
+        key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
+        value="INSTRUCTION_PROMPT_TEMPLATE",
+    )
+
+    # first message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = ""
+    payload["message"] = "hi bot"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 2
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 0
+
+    # second message, same initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = ""
+    payload["message"] = "are you there, bot?"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 4
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 0
+
+    # third message, now we get initial message
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, I'm here"
+    payload["message"] = "bot, can you hear me?"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 7
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "human, I'm here"
+
+    # human responds to bot
+    payload = copy.deepcopy(base_payload)
+    payload["context"]["initial_message"] = "human, I'm here"
+    payload["message"] = "great bot, I was worried you were not listening"
+    individual_pipeline.run(participant_id, payload)
+    chat_transcripts = IndividualChatTranscript.objects.all()
+    assert len(chat_transcripts) == 9
+    chat_transcripts_hub_initiated = chat_transcripts.filter(hub_initiated=True).all()
+    assert len(chat_transcripts_hub_initiated) == 1
+    assert chat_transcripts_hub_initiated[0].content == "human, I'm here"
+    assert "Unexpectedly got new initial_message for existing session" not in caplog.text

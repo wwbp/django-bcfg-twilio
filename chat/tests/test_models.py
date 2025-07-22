@@ -1,6 +1,9 @@
 from django.forms import ValidationError
 import pytest
-from chat.models import GroupStrategyPhasesThatAllowConfig, GroupStrategyPhaseConfig
+from chat.models import (
+    GroupStrategyPhasesThatAllowConfig,
+    GroupStrategyPhaseConfig,
+)
 
 
 def test_group_strategy_phase_config_cleaning():

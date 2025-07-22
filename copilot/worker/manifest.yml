@@ -12,10 +12,10 @@ image:
   build: Dockerfile
   target: production
 
-entrypoint: "celery -A config worker --loglevel=info --concurrency 1"
+entrypoint: "celery -A config worker --loglevel=info --concurrency 2"
 
-cpu: 256       # Number of CPU units for the task.
-memory: 512    # Amount of memory in MiB used by the task.
+cpu: 512       # Number of CPU units for the task.
+memory: 1024    # Amount of memory in MiB used by the task.
 platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/worker-service/#platform
 count: 1       # Number of tasks that should be running in your service.
 exec: true     # Enable running commands in your container.
@@ -46,14 +46,18 @@ environments:
     variables:
       DJANGO_ENV: dev
       BCFG_DOMAIN: https://dev-2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://dev.wwbp-bcfg-chatbot.org/
   test:
+    count: 2
     deployment: # The deployment strategy for the "test" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
       DJANGO_ENV: test
       BCFG_DOMAIN: https://test-2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://test.wwbp-bcfg-chatbot.org/
   prod:
-    count: 2
+    count: 15
     variables:
       DJANGO_ENV: prod
       BCFG_DOMAIN: https://2025.joinstarterkit.org
+      BASE_ADMIN_URI: https://app.wwbp-bcfg-chatbot.org/

@@ -21,7 +21,8 @@
                     data-school_mascot="{{ user.school_mascot }}"
                     data-week_number="{{ user.current_session.week_number }}"
                     data-initial_message="{{ user.current_session.initial_message }}"
-                    data-message_type="{{ user.current_session.message_type }}">
+                    data-message_type="{{ user.current_session.message_type }}"
+                    data-gpt-model="{{ user.gpt_model }}">
                     {{ user.name }} - {{ user.school_name }} {% if user.group %}(Group Direct-Messaging){% endif %}
                 </option>
                 {% endfor %}
@@ -47,6 +48,15 @@
                 
                 <label for="new_week_number">Week Number:</label>
                 <input type="text" id="new_week_number"><br><br>
+
+                <label for="new_gpt_model">GPT Model:</label>
+                <select id="new_gpt_model">
+                {% for m in gpt_model_options %}
+                    <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+                </select>
+                <br><br>
+
                 
                 {% comment %} message type options: initial, reminder, check-in, summary {% endcomment %}
                 <label for="message_type">Message Type:</label>
@@ -74,6 +84,8 @@
                 <p><strong>Week Number:</strong> <span id="meta_week_number"></span></p>
                 <p><strong>Initial Message:</strong> <span id="meta_initial_message_display"></span></p>
                 <p><strong>Message Type:</strong> <span id="meta_message_type_display"></span></p>
+                <p><strong>GPT Model:</strong> <span id="meta_gpt_model"></span></p>
+
 
                 <label for="message">Message:</label><br>
                 <textarea id="message" rows="3" cols="50"></textarea><br><br>
@@ -101,6 +113,7 @@
                 document.getElementById('meta_week_number').innerText = selectedOption.getAttribute('data-week_number');
                 document.getElementById('meta_initial_message_display').innerText = selectedOption.getAttribute('data-initial_message');
                 document.getElementById('meta_message_type_display').innerText = selectedOption.getAttribute('data-message_type');
+                document.getElementById('meta_gpt_model').innerText = selectedOption.getAttribute('data-gpt-model');
                 
                 document.getElementById('test_case_metadata').style.display = 'block';
                 loadChatTranscript(selectedOption.value);
@@ -121,11 +134,11 @@
                         data.transcript.forEach(function(message) {
                             var p = document.createElement('p');
                             if (message.role === 'user') {
-                                p.innerHTML = `<span class="user-tag">User:</span> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<span class="user-tag">${message.name}:</span> ${message.content}`;
                             } else if (message.role === 'assistant') {
-                                p.innerHTML = `<span class="assistant-tag">Assistant:</span> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<span class="assistant-tag">${message.name}:</span> ${message.content}`;
                             } else {
-                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content} <small>${message.created_at}</small>`;
+                                p.innerHTML = `<strong>${message.role}:</strong> ${message.content}`;
                             }
                             transcriptDiv.appendChild(p);
                         });
@@ -202,6 +215,7 @@
             var initialMessage = document.getElementById('new_initial_message').value;
             var weekNumber = document.getElementById('new_week_number').value;
             var messageType = document.getElementById('message_type').value;
+            var gptModel = document.getElementById('new_gpt_model').value;
 
             fetch("{% url 'admin:tester:create-test-case' %}", {
                 method: "POST",
@@ -216,7 +230,8 @@
                     school_mascot: schoolMascot,
                     initial_message: initialMessage,
                     week_number: weekNumber,
-                    message_type: messageType
+                    message_type: messageType,
+                    gpt_model: gptModel
                 })
             }).then(response => response.json())
             .then(data => {

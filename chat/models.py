@@ -1,3 +1,4 @@
+from datetime import timedelta
 import logging
 import uuid
 from django.db import models
@@ -15,6 +16,11 @@ class MessageType(models.TextChoices):
     REMINDER = "reminder", "Reminder"
     CHECK_IN = "check-in", "Check-in"
     SUMMARY = "summary", "Summary"
+
+
+class GroupPromptMessageType(models.TextChoices):
+    INITIAL = MessageType.INITIAL
+    SUMMARY = MessageType.SUMMARY
 
 
 class GroupStrategyPhase(models.TextChoices):
@@ -41,6 +47,11 @@ class GroupStrategyPhasesThatAllowConfig(models.TextChoices):
     AFTER_FOLLOWUP = GroupStrategyPhase.AFTER_FOLLOWUP
 
 
+class GroupStrategyPhasesThatAllowPrompts(models.TextChoices):
+    FOLLOWUP = GroupStrategyPhase.FOLLOWUP
+    SUMMARY = GroupStrategyPhase.SUMMARY
+
+
 class ModelBase(models.Model):
     history = HistoricalRecords(inherit=True, excluded_fields=["created_at"])
 
@@ -64,14 +75,15 @@ class ModelBaseWithUuidId(ModelBase):
 class Group(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
     is_test = models.BooleanField(default=False)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
 
     @property
     def current_session(self) -> "IndividualSession | None":
         return self.sessions.order_by("-created_at").first()
 
     def __str__(self):
-        member_count = self.users.count()
-        return f"{self.id} ({member_count} member{'s' if member_count != 1 else ''})"
+        result = ", ".join([u.name for u in self.users.all()])
+        return result if result else self.id
 
     class Meta:
         ordering = ["-created_at"]
@@ -79,11 +91,12 @@ class Group(ModelBase):
 
 class User(ModelBase):
     id = models.CharField(primary_key=True, max_length=255)
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="users", null=True, blank=True)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="users", null=True, blank=True)
     school_name = models.CharField(max_length=255, default="")
     school_mascot = models.CharField(max_length=255, default="")
     name = models.CharField(max_length=255, default="")
     is_test = models.BooleanField(default=False)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
 
     @property
     def current_session(self) -> "IndividualSession | None":
@@ -104,7 +117,17 @@ class BaseSession(ModelBase):
 
     @property
     def initial_message(self) -> str:
-        return self.transcripts.order_by("created_at").first().content
+        """
+        Returns the content of the very first transcript for this session,
+        or None if no transcripts exist.
+        """
+        first: "BaseChatTranscript" = self.transcripts.filter(hub_initiated=True).order_by("created_at").first()
+        if not first:
+            # the hub didn't send an initial message if the first message was from the user
+            # this can happen in "reminder" sessions where everyone is responding so the
+            # hub has no reason to send a reminder or early in the study
+            return ""
+        return first.content
 
     class Meta:
         abstract = True
@@ -112,7 +135,7 @@ class BaseSession(ModelBase):
 
 
 class IndividualSession(BaseSession):
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="sessions")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sessions")
 
     class Meta(BaseSession.Meta):
         unique_together = ["user", "week_number", "message_type"]
@@ -122,7 +145,7 @@ class IndividualSession(BaseSession):
 
 
 class GroupSession(BaseSession):
-    group = models.ForeignKey(Group, on_delete=models.DO_NOTHING, related_name="sessions")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="sessions")
     current_strategy_phase = models.CharField(
         max_length=20, choices=GroupStrategyPhase.choices, default=GroupStrategyPhase.BEFORE_AUDIENCE
     )
@@ -172,10 +195,82 @@ class BaseChatTranscript(ModelBase):
         NOT_FLAGGED = "not_flagged"
 
     role = models.CharField(max_length=255, choices=Role.choices)
-    content = models.TextField()
+    content = models.TextField(help_text="The content of the message sent by the Sender")
     moderation_status = models.CharField(
         max_length=15, choices=ModerationStatus.choices, default=ModerationStatus.NOT_EVALUATED
     )
+    instruction_prompt = models.TextField(blank=True, null=True)
+    chat_history = models.TextField(blank=True, null=True)
+    llm_latency = models.DurationField(default=timedelta(0), null=True)
+    shorten_count = models.IntegerField(default=0, null=True)
+    user_message = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Message from Participant",
+        help_text="For chatbot responses, the message from a Participant which triggered the response",
+    )
+    sent_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Message Sent At",
+        help_text="Estimation of the time at which the message was sent based on information we have",
+    )
+    hub_initiated = models.BooleanField(
+        default=False,
+        help_text="Whether the message was initiated by the hub (e.g. an initial message)",
+    )
+
+    @classmethod
+    def initial_message_exists(cls, initial_message: str | None, audience: User | Group) -> bool:
+        if not initial_message:
+            return True
+        audience_kwarg = "session__user" if isinstance(audience, User) else "session__group"
+        try:
+            # NOTE might need an index on these fields for performance
+            cls.objects.get(
+                **{audience_kwarg: audience},
+                content=initial_message,
+                hub_initiated=True,
+            )
+            return True
+        except cls.DoesNotExist:
+            return False
+
+    @classmethod
+    def persist_initial_message_if_necessary(
+        cls,
+        audience: User | Group,
+        initial_message: str | None,
+        session: IndividualSession | GroupSession,
+        created_session: bool,
+    ):
+        if not initial_message:
+            # no initial message to persist
+            return
+
+        def _persist_initial_message():
+            additional_kwargs = {}
+            if isinstance(session, GroupSession):
+                additional_kwargs["assistant_strategy_phase"] = GroupStrategyPhase.AUDIENCE
+            cls.objects.create(
+                session=session,
+                role=BaseChatTranscript.Role.ASSISTANT,
+                content=initial_message,
+                hub_initiated=True,
+                **additional_kwargs,
+            )
+
+        if cls.initial_message_exists(initial_message, audience):
+            return
+        if not created_session and session.initial_message and session.initial_message != initial_message:
+            logger.error(
+                f"Unexpectedly got new initial_message for existing session {session}. "
+                f"New message: '{initial_message}'. Not persisting new initial_message."
+            )
+            return
+
+        # either the session is new for a new initial message
+        # or the initial message was sent after the session was created
+        _persist_initial_message()
 
     class Meta:
         abstract = True
@@ -183,30 +278,74 @@ class BaseChatTranscript(ModelBase):
 
 
 class IndividualChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(IndividualSession, on_delete=models.DO_NOTHING, related_name="transcripts")
+    session = models.ForeignKey(IndividualSession, on_delete=models.CASCADE, related_name="transcripts")
+
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
+
+    @property
+    def school_name(self) -> int:
+        return self.session.user.school_name
 
 
 class GroupChatTranscript(BaseChatTranscript):
-    session = models.ForeignKey(GroupSession, on_delete=models.DO_NOTHING, related_name="transcripts")
-    sender = models.ForeignKey(User, on_delete=models.DO_NOTHING, related_name="group_transcripts", null=True)
+    session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="transcripts")
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_transcripts", null=True, blank=True)
     assistant_strategy_phase = models.CharField(max_length=20, choices=GroupStrategyPhase.choices, null=True)
 
+    @property
+    def week_number(self) -> int:
+        return self.session.week_number
 
-class Prompt(ModelBase):
-    is_for_group = models.BooleanField(default=False)
+    @property
+    def school_name(self) -> str | None:
+        # all users in the group should have the same school name
+        first_user: User | None = self.session.group.users.first()
+        if not first_user:
+            return None
+        return first_user.school_name
+
+
+class BasePrompt(ModelBase):
     week = models.IntegerField()
     activity = models.TextField()
-    type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
-
-    def clean(self):
-        super().clean()
-        if self.is_for_group and self.type == MessageType.CHECK_IN:
-            raise ValueError(f"Group prompts cannot be of type {MessageType.CHECK_IN}")
 
     class Meta:
-        unique_together = ["is_for_group", "week", "type"]
-        verbose_name_plural = "Weekly Prompts"
-        ordering = ["week", "type", "-created_at"]
+        abstract = True
+        ordering = ["-created_at"]
+
+
+class IndividualPrompt(BasePrompt):
+    message_type = models.CharField(max_length=20, choices=MessageType.choices, default=MessageType.INITIAL)
+
+    class Meta:
+        unique_together = ["week", "message_type"]
+        verbose_name_plural = "Weekly Individual Prompts"
+        ordering = ["week", "message_type", "-created_at"]
+
+
+class GroupPrompt(BasePrompt):
+    message_type = models.CharField(
+        max_length=20, choices=GroupPromptMessageType.choices, default=GroupPromptMessageType.INITIAL
+    )
+    strategy_type = models.CharField(
+        max_length=20,
+        choices=GroupStrategyPhasesThatAllowPrompts.choices,
+        default=GroupStrategyPhasesThatAllowPrompts.FOLLOWUP,
+    )
+
+    class Meta:
+        unique_together = ["week", "message_type", "strategy_type"]
+        verbose_name_plural = "Weekly Group Prompts"
+        ordering = ["week", "message_type", "strategy_type"]
+
+
+class SundaySummaryPrompt(BasePrompt):
+    class Meta:
+        unique_together = ["week"]
+        verbose_name_plural = "Sunday Summary Prompts"
+        ordering = ["week"]
 
 
 class ControlConfig(ModelBaseWithUuidId):
@@ -214,14 +353,20 @@ class ControlConfig(ModelBaseWithUuidId):
         PERSONA_PROMPT = "persona_prompt"
         SYSTEM_PROMPT = "system_prompt"
         GROUP_DIRECT_MESSAGE_PERSONA_PROMPT = "group_direct_message_persona_prompt"
+        GROUP_AUDIENCE_STRATEGY_PROMPT = "group_audience_strategy_prompt"
+        GROUP_REMINDER_STRATEGY_PROMPT = "group_reminder_strategy_prompt"
+        GROUP_SUMMARY_PERSONA_PROMPT = "group_summary_persona_prompt"
+        INSTRUCTION_PROMPT_TEMPLATE = "instruction_prompt_template"
+        GROUP_INSTRUCTION_PROMPT_TEMPLATE = "group_instruction_prompt_template"
+        TRANSCRIPT_LEN_CUTOFF = "Transcript Len Cutoff"
 
     key = models.TextField(unique=True, choices=ControlConfigKey.choices)
     value = models.TextField(blank=True, null=True)
 
     @classmethod
-    def retrieve(cls, key: ControlConfigKey):
+    def retrieve(cls, key: ControlConfigKey | str):
         try:
-            return cls.objects.get(key=key).value
+            return cls.objects.get(key=str(key)).value
         except cls.DoesNotExist:
             logger.warning(f"ControlConfigKey key '{key}' requested but not found.")
             return None
@@ -252,17 +397,10 @@ class GroupStrategyPhaseConfig(ModelBaseWithUuidId):
 
 
 class Summary(ModelBase):
-    TYPE_CHOICES = [
-        ("influencer", "Influencer"),
-        ("song", "Song"),
-        ("spot", "Spot"),
-        ("idea", "Idea"),
-        ("pick", "Pick"),
-    ]
-
-    school = models.CharField(max_length=255)
-    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    school_name = models.CharField(max_length=255)
+    week_number = models.IntegerField()
     summary = models.TextField()
+    selected = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -273,11 +411,22 @@ class Summary(ModelBase):
 class BasePipelineRecord(ModelBase):
     run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     message = models.TextField(blank=True, null=True)
+    processed_message = models.TextField(blank=True, null=True)
     response = models.TextField(blank=True, null=True)
     instruction_prompt = models.TextField(blank=True, null=True)
     validated_message = models.TextField(blank=True, null=True)
     error_log = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    request_recieved_at = models.DateTimeField(blank=True, null=True)
+    response_sent_at = models.DateTimeField(blank=True, null=True)
+    moderation_latency = models.DurationField(default=timedelta(0))
+    db_load_latency = models.DurationField(default=timedelta(0))
+    llm_latency = models.DurationField(default=timedelta(0))
+    shorten_count = models.IntegerField(default=0)
+    chat_history = models.TextField(blank=True, null=True)
+    gpt_model = models.CharField(max_length=100, null=True, blank=True, help_text="The model to use for only test user")
+    prompt_tokens = models.IntegerField(blank=True, null=True)
+    completion_tokens = models.IntegerField(blank=True, null=True)
 
     class Meta:
         abstract = True
@@ -297,6 +446,9 @@ class IndividualPipelineRecord(BasePipelineRecord):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="individual_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        IndividualChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     # note that we could use a derived property for this, but we would lose history if the user
     # is removed from the group
@@ -321,6 +473,9 @@ class GroupPipelineRecord(BasePipelineRecord):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_pipeline_records")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="group_pipeline_records")
     status = models.CharField(max_length=50, choices=StageStatus.choices, default=StageStatus.INGEST_PASSED)
+    transcript = models.ForeignKey(
+        GroupChatTranscript, on_delete=models.CASCADE, related_name="pipeline_records", null=True
+    )
 
     @property
     def is_test(self):
