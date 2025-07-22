@@ -88,11 +88,15 @@ def existing_user():
 def existing_transcript(existing_user):
     user, _ = existing_user
     return IndividualChatTranscript.objects.create(
-        session=user.current_session, role=BaseChatTranscript.Role.ASSISTANT, content="Initial Hello"
+        session=user.current_session,
+        role=BaseChatTranscript.Role.ASSISTANT,
+        content="Initial Hello",
+        hub_initiated=True,
     )
 
 
-def test_existing_user_update_session_context(existing_user, existing_transcript, make_input_data):
+@pytest.mark.parametrize("initial_message", ["some initial message", ""])
+def test_existing_user_update_session_context(existing_user, existing_transcript, make_input_data, initial_message):
     """
     When an existing user sends data with a changed week_number,
     the user record should update and a new transcript entry should be added.
@@ -102,7 +106,7 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
         overrides={
             "week_number": 2,
             "message_type": MessageType.INITIAL,
-            "initial_message": "Initial Hello From Week 2",
+            "initial_message": initial_message,
         },
         message="User message for week 2",
     )
@@ -118,7 +122,10 @@ def test_existing_user_update_session_context(existing_user, existing_transcript
     assert new_session.week_number == 2
 
     transcripts = IndividualChatTranscript.objects.filter(session__user=user).order_by("id")
-    assert transcripts.count() == 3  # 2 existing + 1 new assistant
+    if initial_message:
+        assert transcripts.count() == 3  # 1 existing + 1 new assistant + 1 new user
+    else:
+        assert transcripts.count() == 2  # 1 existing + 1 new user (no assistant transcript)
     assert transcripts.last().role == "user"
     assert transcripts.last().content == "User message for week 2"
 

@@ -7,12 +7,22 @@ from chat.services.individual_crud import format_chat_history, strip_meta
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction
 from django.utils import timezone
-
-from chat.serializers import GroupIncomingMessage, GroupIncomingMessageSerializer
+from django.conf import settings
+from chat.serializers import (
+    GroupIncomingInitialMessage,
+    GroupIncomingMessage,
+    GroupIncomingMessageSerializer,
+    GroupIncomingInitialMessageSerializer,
+)
 from chat.services.completion import ensure_within_character_limit, generate_response
-from chat.services.group_crud import load_group_chat_history, load_instruction_prompt, ingest_request
+from chat.services.group_crud import (
+    ingest_initial_message,
+    load_group_chat_history,
+    load_instruction_prompt,
+    ingest_request,
+)
 from chat.services.moderation import moderate_message
-from chat.services.send import send_message_to_participant_group, send_moderation_message
+from chat.services.send import send_message_to_participant_group
 
 from ..models import (
     BaseChatTranscript,
@@ -44,7 +54,7 @@ def _newer_user_messages_exist(record: GroupPipelineRecord):
 
 
 def _ingest(
-    group_id: str, group_incoming_message: GroupIncomingMessage
+    group_id: str, group_incoming_message: GroupIncomingMessage, request_recieved_at: timezone.datetime | None = None
 ) -> tuple[GroupPipelineRecord, GroupChatTranscript]:
     """
     Stage 1: Validate and store incoming data, then create a new run record.
@@ -55,6 +65,7 @@ def _ingest(
         group=group,
         message=group_incoming_message.message,
         status=GroupPipelineRecord.StageStatus.INGEST_PASSED,
+        request_recieved_at=request_recieved_at,
     )
     logger.info(f"Group ingest pipeline complete for group {group_id}, run_id {record.run_id}")
     return record, user_chat_transcript
@@ -120,7 +131,9 @@ def _clear_existing_and_schedule_group_action(
         record.status = GroupPipelineRecord.StageStatus.SCHEDULED_ACTION
         record.save()
     logger.info(
-        f"Scheduled response for group {record.group.id}, sender {record.user.id}, run_id {record.run_id} "
+        f"Scheduled response for group {record.group.id} "
+        f"(phase {last_user_chat_transcript.session.current_strategy_phase}), "
+        f"sender {record.user.id}, run_id {record.run_id} "
         f"after {delay_sec} seconds"
     )
 
@@ -133,10 +146,17 @@ def _compute_and_validate_message_to_send(
     instruction_prompt = load_instruction_prompt(session, next_strategy_phase)
     chat_history, message = load_group_chat_history(session)
     start_timer = timezone.now()
-    response = generate_response(chat_history, instruction_prompt, message)
-    response = strip_meta(response, record.user.school_mascot)
+    gpt_model = record.group.gpt_model or settings.OPENAI_MODEL
+    response, prompt_tokens, completion_tokens = generate_response(chat_history, instruction_prompt, message, gpt_model)
+    # Strip metadata from the response if the user is not a test user
+    # for testing llm responses, we want to see the raw response
+    if not record.is_test:
+        response = strip_meta(response, record.user.school_mascot)
+    record.prompt_tokens = prompt_tokens
+    record.completion_tokens = completion_tokens
+    record.gpt_model = gpt_model
     record.processed_message = message
-    record.latency = timezone.now() - start_timer
+    record.llm_latency = timezone.now() - start_timer
     record.instruction_prompt = instruction_prompt
     record.chat_history = format_chat_history(chat_history)
     record.response = response
@@ -160,14 +180,15 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
         content=response,
         instruction_prompt=record.instruction_prompt,
         chat_history=record.chat_history,
-        latency=record.latency,
+        llm_latency=record.llm_latency,
         shorten_count=record.shorten_count,
         user_message=record.processed_message,
         assistant_strategy_phase=next_strategy_phase,
     )
-    if not record.is_test:
+    if not record.is_test and response:
         send_message_to_participant_group(group_id, response)
         record.status = GroupPipelineRecord.StageStatus.SEND_PASSED
+    record.response_sent_at = timezone.now()
     record.save()
     logger.info(
         f"Group send pipeline complete for group {record.group.id}, sender {record.user.id}, run_id {record.run_id}"
@@ -180,7 +201,17 @@ def _save_and_send_message(record: GroupPipelineRecord, session: GroupSession, n
 
 
 @shared_task
-def handle_inbound_group_message(group_id: str, data: dict):
+def handle_inbound_group_initial_message(group_id: str, data: dict):
+    serializer = GroupIncomingInitialMessageSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    group_incoming_initial_message: GroupIncomingInitialMessage = serializer.validated_data
+    ingest_initial_message(group_id, group_incoming_initial_message)
+
+
+@shared_task
+def handle_inbound_group_message(
+    group_id: str, data: dict, request_recieved_at: timezone.datetime | None = None
+) -> None:
     # we reuse serializer used in inbound http endpoint, which already validated data
     serializer = GroupIncomingMessageSerializer(data=data)
     serializer.is_valid(raise_exception=True)
@@ -189,14 +220,11 @@ def handle_inbound_group_message(group_id: str, data: dict):
     record: GroupPipelineRecord | None = None
     try:
         # ingest
-        record, user_chat_transcript = _ingest(group_id, group_incoming_message)
+        record, user_chat_transcript = _ingest(group_id, group_incoming_message, request_recieved_at)
 
         # moderate
         _moderate(record, user_chat_transcript)
         if record.status == GroupPipelineRecord.StageStatus.MODERATION_BLOCKED:
-            # if blocked, we tell BCFG and stop here
-            if not record.is_test:
-                send_moderation_message(record.user.id)
             return
 
         # handle changing current session if necessary

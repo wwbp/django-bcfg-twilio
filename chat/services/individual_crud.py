@@ -19,13 +19,15 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+
 def strip_meta(txt, assistant_name=None):
-    # 1) remove [tag]: … from start of each line
-    out = re.sub(r"^\[[^\]]+\]:\s*", "", txt, flags=re.M)
-    # 2) then, if given, strip leading ": name", "name:", or ": name :" 
+    # 1) remove [tag] (with or without “:”) from start of each line
+    out = re.sub(r"^\[[^\]]+\]\s*:?\s*", "", txt, flags=re.M)
+
+    # 2) then, if given, strip leading ": name", "name:", or ": name :"
     if assistant_name:
         esc = re.escape(assistant_name)
-        assistant_pattern = rf"^(?::\s*{esc}\s*:?\s*|{esc}:\s*)"
+        assistant_pattern = rf"^(?::\s*{esc}\s*:?\s*|{esc}\s*:?\s*)"
         out = re.sub(assistant_pattern, "", out, flags=re.M)
     return out
 
@@ -48,6 +50,24 @@ def format_chat_history(chat_history, delimiter="\n"):
     return delimiter.join(parts)
 
 
+def _create_user_and_get_or_create_session(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+    user, _ = User.objects.update_or_create(
+        id=participant_id,
+        defaults={
+            "created_at": timezone.now(),
+            "school_name": individual_incoming_message.context.school_name,
+            "school_mascot": individual_incoming_message.context.school_mascot,
+            "name": individual_incoming_message.context.name,
+        },
+    )
+    session, created_session = IndividualSession.objects.get_or_create(
+        user=user,
+        week_number=individual_incoming_message.context.week_number,
+        message_type=individual_incoming_message.context.message_type,
+    )
+    return user, session, created_session
+
+
 def ingest_request(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
     """
     Ingests an individual request by either creating a new user record or updating
@@ -56,47 +76,34 @@ def ingest_request(participant_id: str, individual_incoming_message: IndividualI
     logger.info("Processing request for participant ID: %s", participant_id)
 
     with transaction.atomic():
-        # Provide a default for created_at to avoid null value issues.
-        user, _ = User.objects.update_or_create(
-            id=participant_id,
-            defaults={
-                "created_at": timezone.now(),
-                "school_name": individual_incoming_message.context.school_name,
-                "school_mascot": individual_incoming_message.context.school_mascot,
-                "name": individual_incoming_message.context.name,
-            },
+        user, session, created_session = _create_user_and_get_or_create_session(
+            participant_id, individual_incoming_message
         )
-        session, created_session = IndividualSession.objects.get_or_create(
-            user=user,
-            week_number=individual_incoming_message.context.week_number,
-            message_type=individual_incoming_message.context.message_type,
+        IndividualChatTranscript.persist_initial_message_if_necessary(
+            user,
+            individual_incoming_message.context.initial_message,
+            session,
+            created_session,
         )
-
-        if not user.group:
-            # we only care about the initial message if the user is not in a group condition, because
-            # if the user is in the group condition, we already captured the initial message in the
-            # group session's transcript
-            if created_session:
-                # if we created a new session, we need to add the initial message to it
-                IndividualChatTranscript.objects.create(
-                    session=session,
-                    role=BaseChatTranscript.Role.ASSISTANT,
-                    content=individual_incoming_message.context.initial_message,
-                )
-            else:
-                if session.initial_message != individual_incoming_message.context.initial_message and not user.is_test:
-                    logger.error(
-                        f"Got new initial_message for existing individual session {session}. "
-                        f"New message: '{individual_incoming_message.context.initial_message}'."
-                        + " Not updating existing initial_message."
-                    )
-
         # in either case, we need to add the user message to the transcript
         user_chat_transcript = IndividualChatTranscript.objects.create(
             session=session, role=BaseChatTranscript.Role.USER, content=individual_incoming_message.message
         )
 
     return user, session, user_chat_transcript
+
+
+def ingest_initial_message(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+    with transaction.atomic():
+        user, session, _ = _create_user_and_get_or_create_session(participant_id, individual_incoming_message)
+        assistant_chat_transcript = IndividualChatTranscript.objects.create(
+            session=session,
+            role=BaseChatTranscript.Role.ASSISTANT,
+            content=individual_incoming_message.message,
+            hub_initiated=True,
+        )
+
+    return user, session, assistant_chat_transcript
 
 
 def _sanitize_name(name: str) -> str:
@@ -146,7 +153,7 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         .first()
     )
     for t in individual_transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if latest_user_transcript and t.id == latest_user_transcript.id:  # type: ignore[attrib]
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
@@ -170,7 +177,12 @@ def load_individual_and_group_chat_history_for_direct_messaging(user: User):
         if latest_user_transcript
         else ""
     )
-
+    raw_cutoff = ControlConfig.retrieve(ControlConfig.ControlConfigKey.TRANSCRIPT_LEN_CUTOFF) or 25
+    try:
+        cutoff = int(raw_cutoff)
+    except (TypeError, ValueError):
+        cutoff = 25
+    history = history[-cutoff:]
     return history, latest_user_message_content
 
 
@@ -194,7 +206,7 @@ def load_individual_chat_history(user: User):
     # Build chat history, excluding the latest user message
     history = []
     for t in transcripts:
-        if latest_user_transcript and t.id == latest_user_transcript.id:
+        if latest_user_transcript and t.id == latest_user_transcript.id:  # type: ignore[attrib]
             continue
 
         if t.role == BaseChatTranscript.Role.USER:
@@ -219,6 +231,12 @@ def load_individual_chat_history(user: User):
         if latest_user_transcript
         else ""
     )
+    raw_cutoff = ControlConfig.retrieve(ControlConfig.ControlConfigKey.TRANSCRIPT_LEN_CUTOFF) or 25
+    try:
+        cutoff = int(raw_cutoff)
+    except (TypeError, ValueError):
+        cutoff = 25
+    history = history[-cutoff:]
     return history, latest_user_message_content
 
 
@@ -230,7 +248,7 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
         content=record.validated_message,
         instruction_prompt=record.instruction_prompt,
         chat_history=record.chat_history,
-        latency=record.latency,
+        llm_latency=record.llm_latency,
         shorten_count=record.shorten_count,
         user_message=record.processed_message,
     )
@@ -238,18 +256,17 @@ def save_assistant_response(record: IndividualPipelineRecord, session: Individua
     return assistant_chat_transcript
 
 
-def load_instruction_prompt_for_direct_messaging(user: User):
-    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+def _load_instruction_prompt(user: User, personal_prompt_key: str):
     # get latest session for the user
-    session = user.sessions.order_by("-created_at").first()
+    session = user.sessions.order_by("-created_at").first()  # type: ignore[attrib]
     week = session.week_number
     message_type = session.message_type
     assistant_name = user.school_mascot if user.school_mascot else "Assistant"
     school_name = user.school_name
 
     # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
+    persona = ControlConfig.retrieve(personal_prompt_key)
+    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)
     if not persona or not system:
         raise ValueError("System or Persona prompt not found in ControlConfig.")
 
@@ -260,7 +277,7 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         raise
 
     # Pull the template out of ControlConfig (fallback to the constant if missing)
-    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
+    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)
     if not template:
         raise ValueError("instruction-prompt template not found in ControlConfig.")
 
@@ -273,39 +290,13 @@ def load_instruction_prompt_for_direct_messaging(user: User):
         activity=activity,
     )
     return instruction_prompt
+
+
+def load_instruction_prompt_for_direct_messaging(user: User):
+    logger.info(f"Loading instruction prompt for direct-messaging group participant: {user.id}")
+    return _load_instruction_prompt(user, ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT)
 
 
 def load_instruction_prompt(user: User):
-    # get latest session for the user
-    session = user.sessions.order_by("-created_at").first()
-    week = session.week_number
-    message_type = session.message_type
-    assistant_name = user.school_mascot if user.school_mascot else "Assistant"
-    school_name = user.school_name
-
-    # Load the most recent controls record
-    persona = ControlConfig.retrieve(ControlConfig.ControlConfigKey.PERSONA_PROMPT)  # type: ignore[arg-type]
-    system = ControlConfig.retrieve(ControlConfig.ControlConfigKey.SYSTEM_PROMPT)  # type: ignore[arg-type]
-    if not persona or not system:
-        raise ValueError("System or Persona prompt not found in ControlConfig.")
-
-    try:
-        activity = IndividualPrompt.objects.get(week=week, message_type=message_type).activity
-    except IndividualPrompt.DoesNotExist as err:
-        logger.error(f"Error retrieving activity for week '{week}' and type '{message_type}': {err}")
-        raise
-
-    # Pull the template out of ControlConfig (fallback to the constant if missing)
-    template = ControlConfig.retrieve(ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE)  # type: ignore[arg-type]
-    if not template:
-        raise ValueError("instruction-prompt template not found in ControlConfig.")
-
-    # Format the final prompt using the template
-    instruction_prompt = template.format(
-        system=system,
-        persona=persona,
-        assistant_name=assistant_name,
-        school_name=school_name,
-        activity=activity,
-    )
-    return instruction_prompt
+    logger.info(f"Loading instruction prompt for individual participant: {user.id}")
+    return _load_instruction_prompt(user, ControlConfig.ControlConfigKey.PERSONA_PROMPT)
