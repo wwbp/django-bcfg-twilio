@@ -22,6 +22,7 @@ async def _generate_response_async(
         assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
         # response = await assistant.chat_round_str(message)
         response = "mocked response"
+        await asyncio.sleep(3)
         completion = await assistant.get_model_completion()
         return (
             response,
