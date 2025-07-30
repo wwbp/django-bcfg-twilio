@@ -51,6 +51,17 @@ def overwrite_secrets():
         yield
 
 
+@pytest.fixture(autouse=True)
+def clear_prompt_cache():
+    """Clear prompt cache before each test to prevent test pollution"""
+    from chat.services.cache import prompt_cache
+    # Clear cache before test
+    prompt_cache.clear_all()
+    yield
+    # Also clear cache after test to be extra safe
+    prompt_cache.clear_all()
+
+
 @pytest.fixture
 def celery_task_always_eager(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True

@@ -20,9 +20,9 @@ async def _generate_response_async(
     engine = OpenAIEngine(settings.OPENAI_API_KEY, model=gpt_model)
     try:
         assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
-        # response = await assistant.chat_round_str(message)
-        response = "mocked response"
-        await asyncio.sleep(3)
+        response = await assistant.chat_round_str(message)
+        # response = "mocked response"
+        # await asyncio.sleep(3)
         completion = await assistant.get_model_completion()
         return (
             response,
