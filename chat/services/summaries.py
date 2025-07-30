@@ -101,6 +101,7 @@ def _parse_top_10_summaries(response: str) -> list[str]:
         if not isinstance(items, list):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
+        logger.error(f"Failed to parse LLM response as JSON: {resp}")
         return [response]
     return items
 
@@ -172,7 +173,7 @@ def generate_weekly_summaries():
         prompt = SundaySummaryPrompt.objects.filter(week=school_week_number).first()
         if prompt is None:
             # not all weeks have summary activities so this is expected
-            logger.info(
+            logger.error(
                 f"No summary prompt defined for week {school_week_number}. "
                 f"Not generating summaries for school {school_name}."
             )
