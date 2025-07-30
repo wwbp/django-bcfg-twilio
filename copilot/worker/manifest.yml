@@ -12,10 +12,10 @@ image:
   build: Dockerfile
   target: production
 
-entrypoint: "celery -A config worker --loglevel=info --concurrency 4 --prefetch-multiplier 1"
+entrypoint: "celery -A config worker --loglevel=info --concurrency 8 --prefetch-multiplier 1"
 
-cpu: 512       # Number of CPU units for the task.
-memory: 1024    # Amount of memory in MiB used by the task.
+cpu: 1024       # Number of CPU units for the task (1 vCPU - for database operations)
+memory: 2048    # Amount of memory in MiB used by the task (2GB - for database operations)
 platform: linux/x86_64  # See https://aws.github.io/copilot-cli/docs/manifest/worker-service/#platform
 count: 1       # Number of tasks that should be running in your service.
 exec: true     # Enable running commands in your container.
@@ -41,7 +41,7 @@ secrets:
 
 environments:
   dev:
-    count: 15
+    count: 6  # Balanced for database operations
     deployment: # The deployment strategy for the "dev" environment.
       rolling: "recreate" # Stops existing tasks before new ones are started for faster deployments.
     variables:
