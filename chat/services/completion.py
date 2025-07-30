@@ -20,9 +20,7 @@ async def _generate_response_async(
     engine = OpenAIEngine(settings.OPENAI_API_KEY, model=gpt_model)
     try:
         assistant = Kani(engine, system_prompt=instructions, chat_history=chat_history)
-        # response = await assistant.chat_round_str(message)
-        response = "mocked response"
-        await asyncio.sleep(3)
+        response = await assistant.chat_round_str(message)
         completion = await assistant.get_model_completion()
         return (
             response,
@@ -34,10 +32,12 @@ async def _generate_response_async(
 
 
 def _generate_response(chat_history, instructions, message, gpt_model):
-    loop = asyncio.new_event_loop()
+    loop = asyncio.new_event_loop()                   
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(_generate_response_async(chat_history, instructions, message, gpt_model))
+        return loop.run_until_complete(
+            _generate_response_async(chat_history, instructions, message, gpt_model)
+        )
     finally:
         loop.close()
         asyncio.set_event_loop(None)

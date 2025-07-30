@@ -365,22 +365,8 @@ class ControlConfig(ModelBaseWithUuidId):
 
     @classmethod
     def retrieve(cls, key: ControlConfigKey | str):
-        # Import cache service here to avoid circular imports
-        from .services.cache import prompt_cache
-        
-        # Try cache first
-        cache_key = f"control_config:{key}"
-        cached_value = prompt_cache.get(cache_key)
-        if cached_value is not None:
-            return cached_value
-        
-        # Fallback to database
         try:
-            value = cls.objects.get(key=str(key)).value
-            # Cache the result
-            if value is not None:
-                prompt_cache.set(cache_key, value)
-            return value
+            return cls.objects.get(key=str(key)).value
         except cls.DoesNotExist:
             logger.warning(f"ControlConfigKey key '{key}' requested but not found.")
             return None
@@ -512,6 +498,3 @@ class GroupScheduledTaskAssociation(ScheduledTaskAssociation):
     """A scheduled task related to a group"""
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
-
-
-
