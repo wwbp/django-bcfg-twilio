@@ -37,6 +37,26 @@ def pytest_configure(config: pytest.Config):
 
 
 @pytest.fixture(autouse=True)
+def clear_prompt_cache():
+    """Clear the prompt cache before each test to prevent test interference."""
+    from chat.services.cache import prompt_cache
+    prompt_cache.clear_all()
+    yield
+    # Also clear after the test to be safe
+    prompt_cache.clear_all()
+
+
+@pytest.fixture(autouse=True)
+def clear_control_config(db):
+    """Clear all ControlConfig records before each test to prevent unique constraint conflicts."""
+    from chat.models import ControlConfig
+    ControlConfig.objects.all().delete()
+    yield
+    # Also clear after the test to be safe
+    ControlConfig.objects.all().delete()
+
+
+@pytest.fixture(autouse=True)
 def enable_db_access(db):
     pass
 
