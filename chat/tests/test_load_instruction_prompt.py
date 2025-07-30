@@ -29,15 +29,15 @@ def test_load_instruction_prompt_with_existing_user_and_prompt(control_config_fa
         message_type=MessageType.INITIAL,
     )
     # Create ControlConfig records
-    persona = ControlConfig.objects.create(
+    persona = control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="test persona prompt",
     )
-    system = ControlConfig.objects.create(
+    system = control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="test system prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
@@ -120,15 +120,15 @@ def test_load_instruction_prompt_with_empty_school_mascot(control_config_factory
         week_number=1,
         message_type=MessageType.INITIAL,
     )
-    persona = ControlConfig.objects.create(
+    persona = control_config_factory(
         key=ControlConfig.ControlConfigKey.PERSONA_PROMPT,
         value="test persona prompt",
     )
-    system = ControlConfig.objects.create(
+    system = control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="test system prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
@@ -165,15 +165,15 @@ def test_load_instruction_prompt_for_direct_messaging_with_existing_user_and_pro
         message_type=MessageType.INITIAL,
     )
     # Create ControlConfig records for direct messaging persona and system
-    persona = ControlConfig.objects.create(
+    persona = control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
         value="dm persona prompt",
     )
-    system = ControlConfig.objects.create(
+    system = control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
@@ -206,11 +206,11 @@ def test_load_instruction_prompt_for_direct_messaging_missing_control_config(con
         message_type=MessageType.INITIAL,
     )
     # Only create one of the required ControlConfig
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
         value="dm persona prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
@@ -231,15 +231,15 @@ def test_load_instruction_prompt_for_direct_messaging_with_no_prompt(control_con
         week_number=6,
         message_type=MessageType.SUMMARY,
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
         value="dm persona prompt",
     )
-    ControlConfig.objects.create(
+    control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
@@ -260,15 +260,15 @@ def test_load_instruction_prompt_for_direct_messaging_with_empty_school_mascot(c
         week_number=2,
         message_type=MessageType.INITIAL,
     )
-    persona = ControlConfig.objects.create(
+    persona = control_config_factory(
         key=ControlConfig.ControlConfigKey.GROUP_DIRECT_MESSAGE_PERSONA_PROMPT,
         value="dm persona prompt",
     )
-    system = ControlConfig.objects.create(
+    system = control_config_factory(
         key=ControlConfig.ControlConfigKey.SYSTEM_PROMPT,
         value="dm system prompt",
     )
-    instruction_prompt = ControlConfig.objects.create(
+    instruction_prompt = control_config_factory(
         key=ControlConfig.ControlConfigKey.INSTRUCTION_PROMPT_TEMPLATE,
         value=INSTRUCTION_PROMPT_TEMPLATE,
     )
