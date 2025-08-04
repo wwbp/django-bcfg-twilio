@@ -20,6 +20,25 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
+def _validate_and_truncate_name(name: str, participant_id: str = "") -> str:
+    """
+    Validate name length and truncate if necessary.
+    
+    Args:
+        name: The name to validate and potentially truncate
+        participant_id: The participant ID for logging purposes
+        
+    Returns:
+        The validated/truncated name
+    """
+    if len(name) > 50:
+        logger.error(f"Name for participant {participant_id} is too long (max 50 characters) - truncating to prevent database error")
+        # Truncate to 50 characters to prevent database error
+        return name[:50]
+    
+    return name
+
+
 def strip_meta(txt, assistant_name=None):
     # 1) remove [tag] (with or without “:”) from start of each line
     out = re.sub(r"^\[[^\]]+\]\s*:?\s*", "", txt, flags=re.M)
@@ -51,13 +70,16 @@ def format_chat_history(chat_history, delimiter="\n"):
 
 
 def _create_user_and_get_or_create_session(participant_id: str, individual_incoming_message: IndividualIncomingMessage):
+    # Validate and truncate user data
+    validated_name = _validate_and_truncate_name(individual_incoming_message.context.name, participant_id)
+    
     user, _ = User.objects.update_or_create(
         id=participant_id,
         defaults={
             "created_at": timezone.now(),
             "school_name": individual_incoming_message.context.school_name,
             "school_mascot": individual_incoming_message.context.school_mascot,
-            "name": individual_incoming_message.context.name,
+            "name": validated_name,
         },
     )
     session, created_session = IndividualSession.objects.get_or_create(
