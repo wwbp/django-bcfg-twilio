@@ -34,7 +34,8 @@ def _validate_and_truncate_name(name: str, participant_id: str = "") -> str:
     """
     if len(name) > 50:
         logger.error(
-            f"Name for participant {participant_id} is too long (max 50 characters) - truncating to prevent database error"
+            f"Name for participant {participant_id} is too long "
+            f"(max 50 characters) - truncating to prevent database error"
         )
         # Truncate to 50 characters to prevent database error
         return name[:50]

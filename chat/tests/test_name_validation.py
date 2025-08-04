@@ -1,6 +1,5 @@
 import pytest
 import logging
-from unittest.mock import patch
 
 from chat.models import User, MessageType
 from chat.serializers import IndividualIncomingMessageSerializer, GroupIncomingMessageSerializer
@@ -33,7 +32,7 @@ class TestNameValidationFunction:
         assert result == expected_name
         
         if should_log_error:
-            assert f"Name for participant test_participant_123 is too long" in caplog.text
+            assert "Name for participant test_participant_123 is too long" in caplog.text
         else:
             assert "Name for participant" not in caplog.text
 
@@ -57,7 +56,7 @@ class TestNameValidationFunction:
         assert result == expected_name
         
         if should_log_error:
-            assert f"Name for participant test_participant_123 is too long" in caplog.text
+            assert "Name for participant test_participant_123 is too long" in caplog.text
         else:
             assert "Name for participant" not in caplog.text
 
@@ -268,7 +267,7 @@ class TestGroupIngestWithNameValidation:
         # Check that user was created with truncated name
         user = User.objects.get(id="user_long_name")
         assert user.name == "C" * 50  # Should be truncated to 50 characters
-        assert f"Name for participant user_long_name is too long" in caplog.text
+        assert "Name for participant user_long_name is too long" in caplog.text
 
     def test_group_ingest_with_mixed_name_lengths(self, make_group_input_data, caplog):
         """Test group ingest with mix of normal and long names"""
@@ -305,7 +304,7 @@ class TestGroupIngestWithNameValidation:
         
         assert normal_user.name == "Normal Name"
         assert long_user.name == "D" * 50  # Should be truncated to 50 characters
-        assert f"Name for participant user_long is too long" in caplog.text
+        assert "Name for participant user_long is too long" in caplog.text
 
     def test_group_ingest_updates_existing_users_with_long_names(self, make_group_input_data, caplog):
         """Test that existing group users with long names are updated and truncated"""
@@ -348,7 +347,7 @@ class TestGroupIngestWithNameValidation:
         # Refresh from database
         existing_user.refresh_from_db()
         assert existing_user.name == "E" * 50  # Should be truncated to 50 characters
-        assert f"Name for participant existing_user_long is too long" in caplog.text
+        assert "Name for participant existing_user_long is too long" in caplog.text
 
     def test_group_ingest_with_exactly_50_char_names(self, make_group_input_data):
         """Test that names exactly 50 characters are not truncated"""
