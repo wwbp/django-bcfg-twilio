@@ -24,19 +24,21 @@ logger = logging.getLogger(__name__)
 def _validate_and_truncate_name(name: str, participant_id: str = "") -> str:
     """
     Validate name length and truncate if necessary.
-    
+
     Args:
         name: The name to validate and potentially truncate
         participant_id: The participant ID for logging purposes
-        
+
     Returns:
         The validated/truncated name
     """
     if len(name) > 50:
-        logger.error(f"Name for participant {participant_id} is too long (max 50 characters) - truncating to prevent database error")
+        logger.error(
+            f"Name for participant {participant_id} is too long (max 50 characters) - truncating to prevent database error"
+        )
         # Truncate to 50 characters to prevent database error
         return name[:50]
-    
+
     return name
 
 
@@ -86,17 +88,17 @@ def _validate_create_and_update_group_participants(
             existing_user = existing_users[0]
             changed = False
             if existing_user.group != group:
-                logger.error(
+                logger.warning(
                     f"{group.id}: User {existing_user.id} is already in group "
                     f"{existing_user.group.id if existing_user.group else None}. "
                     f"Changing group association to {group.id}."
                 )
                 existing_user.group = group
                 changed = True
-            
+
             # Validate and truncate user data
             validated_name = _validate_and_truncate_name(participant.name, participant.id)
-            
+
             if (
                 existing_user.school_name != group_incoming_message.context.school_name
                 or existing_user.school_mascot != group_incoming_message.context.school_mascot
@@ -114,10 +116,10 @@ def _validate_create_and_update_group_participants(
             if not group_just_created:
                 # we should not need to add new users to existing groups. We will do it, but we report it
                 logger.error(f"Existing group does not yet have user {participant.id}. Creating new user.")
-            
+
             # Validate and truncate user data
             validated_name = _validate_and_truncate_name(participant.name, participant.id)
-            
+
             User.objects.create(
                 id=participant.id,
                 name=validated_name,
