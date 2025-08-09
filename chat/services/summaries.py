@@ -133,9 +133,9 @@ def _generate_top_10_summaries_for_school(
                 "name": t.session.user.name if t.role == BaseChatTranscript.Role.USER else "assistant",
             }
         )
-    # call LLM
-    response = generate_response(transcript, instructions, "", settings.OPENAI_MODEL)
-    # validate response
+    # call LLM - generate_response returns a tuple (response_text, prompt_tokens, completion_tokens)
+    response, prompt_tokens, completion_tokens = generate_response(transcript, instructions, "", settings.OPENAI_MODEL)
+    # validate response - only pass the response text to the parsing function
     summaries = _parse_top_10_summaries(response)
     return summaries
 
