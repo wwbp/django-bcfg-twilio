@@ -192,10 +192,21 @@ def handle_summaries_selected_change(changed_summary_ids: list[str]):
     Handle the change in selected summaries by sending all selected summaries
     to the BCFG endpoint for any schools and weeks involed in the change.
     """
+    logger.info(f"Handling summary selection change for {len(changed_summary_ids)} summary IDs: {changed_summary_ids}")
+
     changed_summaries = list(Summary.objects.filter(id__in=changed_summary_ids))
+    logger.info(f"Found {len(changed_summaries)} summaries in database")
+
     schools_and_weeks_included = {(s.school_name, s.week_number) for s in changed_summaries}
+    logger.info(f"Schools and weeks affected: {schools_and_weeks_included}")
+
     for school_name, week_number in schools_and_weeks_included:
         summaries = list(Summary.objects.filter(school_name=school_name, week_number=week_number, selected=True))
+        logger.info(f"Sending {len(summaries)} selected summaries for {school_name}, week {week_number}")
+        logger.info(
+            f"Summary contents: {[s.summary[:100] + '...' if len(s.summary) > 100 else s.summary for s in summaries]}"
+        )
+
         send_school_summaries_to_hub_for_week(school_name, week_number, [s.summary for s in summaries])
 
 
