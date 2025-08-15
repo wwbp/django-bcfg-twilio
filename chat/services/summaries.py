@@ -18,6 +18,7 @@ from chat.models import (
 )
 from chat.services.send import send_missing_summary_notification, send_school_summaries_to_hub_for_week
 from chat.services.completion import generate_response
+from chat.services.individual_crud import _sanitize_name
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +118,13 @@ def _generate_top_10_summaries_for_school(
     # assemble prompt
     instructions = prompt.activity
     transcript: list[dict] = []
+
     for t in all_group_school_chats:
         transcript.append(
             {
                 "role": t.role,
                 "content": t.content,
-                "name": t.sender.name if t.role == BaseChatTranscript.Role.USER else "assistant",
+                "name": _sanitize_name(t.sender.name) if t.role == BaseChatTranscript.Role.USER else "assistant",
             }
         )
     for t in all_individual_school_chats:
@@ -130,7 +132,7 @@ def _generate_top_10_summaries_for_school(
             {
                 "role": t.role,
                 "content": t.content,
-                "name": t.session.user.name if t.role == BaseChatTranscript.Role.USER else "assistant",
+                "name": _sanitize_name(t.session.user.name) if t.role == BaseChatTranscript.Role.USER else "assistant",
             }
         )
     # call LLM - generate_response returns a tuple (response_text, prompt_tokens, completion_tokens)
