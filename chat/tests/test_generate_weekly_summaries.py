@@ -10,7 +10,11 @@ from chat.models import (
 )
 from django.contrib.auth.models import Group as AuthGroup, User as AuthUser
 from admin.models import AuthGroupName
-from chat.services.summaries import generate_weekly_summaries, notify_on_missing_summaries
+from chat.services.summaries import (
+    generate_weekly_summaries,
+    notify_on_missing_summaries,
+    _generate_top_10_summaries_for_school,
+)
 
 
 # Helper class to simulate httpx.Client as a context manager.
@@ -396,3 +400,52 @@ def test_notify_on_missing_summaries(
             "Unselected Summaries, week 5",
         ]
     )
+
+
+@patch("chat.services.summaries.generate_response")
+def test_summary_generation_sanitizes_user_names(
+    mock_generate_response,
+    sunday_summary_prompt_factory,
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+):
+    """Test that user names are properly sanitized before sending to OpenAI API"""
+    # Create a user with a name containing spaces (which would fail OpenAI validation)
+    user = user_factory(
+        name="Alice Johnson-Smith",  # Contains spaces and hyphens
+        school_name="Test School",
+        school_mascot="Tigers",
+    )
+    prompt = sunday_summary_prompt_factory(week=1, activity="Generate summaries")
+
+    # Create a session and transcript using factories
+    session = individual_session_factory(
+        user=user,
+        week_number=1,
+        message_type=MessageType.INITIAL,
+    )
+    transcript = individual_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.USER,
+        content="Hello, this is a test message",
+    )
+
+    # Mock the OpenAI response
+    mock_generate_response.return_value = ("Summary 1", 100, 50)
+
+    # Call the function that should sanitize names
+    summaries = _generate_top_10_summaries_for_school(
+        all_individual_school_chats=[transcript], all_group_school_chats=[], prompt=prompt
+    )
+
+    # Get the transcript that was passed to generate_response
+    call_args = mock_generate_response.call_args
+    transcript_passed = call_args[0][0]  # First argument is the transcript list
+
+    # Find the user message in the transcript
+    user_message = next(msg for msg in transcript_passed if msg["role"] == BaseChatTranscript.Role.USER)
+
+    # Verify the name was sanitized (spaces removed, hyphens preserved)
+    assert user_message["name"] == "AliceJohnson-Smith"
+    assert user_message["name"] != "Alice Johnson-Smith"  # Original name should not be used
