@@ -215,25 +215,38 @@ def notify_on_missing_summaries():
     """
     Notify admins if there are missing summaries for any schools, to be scheduled weekly.
     """
-    all_unique_school_names = list(
-        User.objects.values_list("school_name", flat=True).distinct().order_by("school_name")
-    )
-    missing_for = []
-    for school_name in all_unique_school_names:
-        filter_chats_since = _get_chat_datetime_filter_to_determine_week_number()
-        school_week_number = _get_week_number_for_school(school_name, filter_chats_since)
-        if school_week_number is None:
-            continue
-        prompt = SundaySummaryPrompt.objects.filter(week=school_week_number).first()
-        if prompt is None:
-            continue
-        selected_summaries_exist = Summary.objects.filter(
-            school_name=school_name, week_number=school_week_number, selected=True
-        ).exists()
-        if not selected_summaries_exist:
-            missing_for.append(f"{school_name}, week {school_week_number}")
+    logger.info("Starting notify_on_missing_summaries task")
 
-    if missing_for:
+    try:
+        all_unique_school_names = list(
+            User.objects.values_list("school_name", flat=True).distinct().order_by("school_name")
+        )
+        logger.info(f"Found {len(all_unique_school_names)} schools to check")
+
+        missing_for = []
+        for school_name in all_unique_school_names:
+            filter_chats_since = _get_chat_datetime_filter_to_determine_week_number()
+            school_week_number = _get_week_number_for_school(school_name, filter_chats_since)
+            if school_week_number is None:
+                logger.info(f"Skipping {school_name}: no recent chats found")
+                continue
+            prompt = SundaySummaryPrompt.objects.filter(week=school_week_number).first()
+            if prompt is None:
+                logger.info(f"Skipping {school_name}: no summary prompt for week {school_week_number}")
+                continue
+            selected_summaries_exist = Summary.objects.filter(
+                school_name=school_name, week_number=school_week_number, selected=True
+            ).exists()
+            if not selected_summaries_exist:
+                logger.info(f"Adding {school_name} to missing summaries list (week {school_week_number})")
+                missing_for.append(f"{school_name}, week {school_week_number}")
+
+        if not missing_for:
+            logger.info("No missing summaries found - no notifications sent")
+            return
+
+        logger.info(f"Sending notifications for {len(missing_for)} schools with missing summaries")
+
         to_emails: list[str] = list(
             Group.objects.get(name=AuthGroupName.ResearcherUser.value).user_set.values_list("email", flat=True).all()
         )
@@ -243,3 +256,9 @@ def notify_on_missing_summaries():
             config_link=config_link,
             missing_for=missing_for,
         )
+
+        logger.info(f"Successfully completed notify_on_missing_summaries. Notified about {len(missing_for)} schools")
+
+    except Exception as e:
+        logger.error(f"Unexpected error in notify_on_missing_summaries: {str(e)}")
+        raise
