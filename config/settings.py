@@ -67,11 +67,11 @@ MIDDLEWARE = [
 REQUIRE_SAML_AUTHENTICATION = os.getenv("REQUIRE_SAML_AUTHENTICATION", "False") == "True"
 
 if REQUIRE_SAML_AUTHENTICATION:
-    AUTHENTICATION_BACKENDS = ("djangosaml2.backends.Saml2Backend",)
+    AUTHENTICATION_BACKENDS = ("chat.backends.CustomSaml2Backend",)
 else:
     AUTHENTICATION_BACKENDS = (
         "django.contrib.auth.backends.ModelBackend",
-        "djangosaml2.backends.Saml2Backend",
+        "chat.backends.CustomSaml2Backend",
     )
 
 ROOT_URLCONF = "config.urls"
