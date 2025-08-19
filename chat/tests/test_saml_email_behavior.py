@@ -25,7 +25,7 @@ def test_saml_email_overwrite_behavior():
     attribute_mapping = settings.SAML_ATTRIBUTE_MAPPING
 
     backend = Saml2Backend()
-    backend.update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
+    backend._update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
 
     auth_user.refresh_from_db()
 
@@ -80,7 +80,7 @@ def test_custom_backend_populates_empty_email():
     attribute_mapping = settings.SAML_ATTRIBUTE_MAPPING
 
     backend = CustomSaml2Backend()
-    backend.update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
+    backend._update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
 
     auth_user.refresh_from_db()
 
@@ -143,7 +143,7 @@ def test_custom_backend_logging_works():
     # Capture log output
     with patch("chat.backends.logger") as mock_logger:
         backend = CustomSaml2Backend()
-        backend.update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
+        backend._update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
 
         # Verify that logging methods were called
         mock_logger.info.assert_called()
@@ -152,7 +152,7 @@ def test_custom_backend_logging_works():
         log_calls = [call[0][0] for call in mock_logger.info.call_args_list]
         
         # Check for key log messages
-        assert any("CustomSaml2Backend.update_user called" in call for call in log_calls)
+        assert any("CustomSaml2Backend._update_user called" in call for call in log_calls)
         assert any("Preserving existing email" in call for call in log_calls)
 
     # Verify the email was actually preserved
@@ -190,8 +190,8 @@ def test_debug_saml_flow_issues():
 
     # Test 3: Call parent method directly to see what it does
     parent_backend = Saml2Backend()
-    print("6. Calling parent Saml2Backend.update_user...")
-    parent_backend.update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
+    print("6. Calling parent Saml2Backend._update_user...")
+    parent_backend._update_user(auth_user, saml_attributes, attribute_mapping, force_save=True)
 
     auth_user.refresh_from_db()
     print(f"7. After parent update: email='{auth_user.email}', first_name='{auth_user.first_name}'")
@@ -204,8 +204,8 @@ def test_debug_saml_flow_issues():
     print(f"8. Created user2: {auth_user2.username}, email: {auth_user2.email}")
 
     custom_backend = CustomSaml2Backend()
-    print("9. Calling CustomSaml2Backend.update_user...")
-    custom_backend.update_user(auth_user2, saml_attributes, attribute_mapping, force_save=True)
+    print("9. Calling CustomSaml2Backend._update_user...")
+    custom_backend._update_user(auth_user2, saml_attributes, attribute_mapping, force_save=True)
 
     auth_user2.refresh_from_db()
     print(f"10. After custom update: email='{auth_user2.email}', first_name='{auth_user2.first_name}'")

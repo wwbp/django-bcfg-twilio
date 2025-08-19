@@ -23,11 +23,11 @@ class CustomSaml2Backend(Saml2Backend):
             logger.info("CustomSaml2Backend.authenticate failed")
         return result
     
-    def update_user(self, user, attributes, attribute_mapping, force_save=False):
+    def _update_user(self, user, attributes, attribute_mapping, force_save=False):
         """
         Update user with SAML attributes, but preserve manually set emails.
         """
-        logger.info(f"CustomSaml2Backend.update_user called for user {user.username}")
+        logger.info(f"CustomSaml2Backend._update_user called for user {user.username}")
         logger.info(f"Current email: '{user.email}'")
         logger.info(f"SAML attributes: {attributes}")
         
@@ -50,7 +50,7 @@ class CustomSaml2Backend(Saml2Backend):
             logger.info("No email attributes in SAML response")
         
         # Call parent method with potentially modified attributes
-        result = super().update_user(user, attributes, attribute_mapping, force_save)
+        result = super()._update_user(user, attributes, attribute_mapping, force_save)
         
         # Log the final state
         user.refresh_from_db()
