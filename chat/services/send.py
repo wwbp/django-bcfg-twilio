@@ -4,6 +4,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Timeout configuration for HTTP requests
+DEFAULT_TIMEOUT_CONFIG = httpx.Timeout(timeout=15.0)
+
 
 def send_message_to_participant(participant_id: str, message: str):
     """
@@ -18,7 +21,7 @@ def send_message_to_participant(participant_id: str, message: str):
     payload = {"message": message}
     headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
     try:
-      with httpx.Client() as client:
+      with httpx.Client(timeout=DEFAULT_TIMEOUT_CONFIG) as client:
           response = client.post(url, json=payload, headers=headers)
           response.raise_for_status()
           return response.json()
@@ -44,7 +47,7 @@ def send_message_to_participant_group(group_id: str, message: str):
     payload = {"message": message}
     headers = {"Authorization": f"Bearer {settings.BCFG_API_KEY}"}
     try:
-      with httpx.Client() as client:
+      with httpx.Client(timeout=DEFAULT_TIMEOUT_CONFIG) as client:
           response = client.post(url, json=payload, headers=headers)
           response.raise_for_status()
           return response.json()
@@ -70,7 +73,7 @@ def send_school_summaries_to_hub_for_week(school_name: str, week_number: int, su
     logger.info(f"Number of summaries: {len(summary_contents)}")
 
     try:
-        with httpx.Client() as client:
+        with httpx.Client(timeout=DEFAULT_TIMEOUT_CONFIG) as client:
             response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             logger.info(
@@ -102,7 +105,7 @@ def send_missing_summary_notification(to_emails: list[str], config_link: str, mi
     logger.info(f"Config link: {config_link}")
 
     try:
-        with httpx.Client() as client:
+        with httpx.Client(timeout=DEFAULT_TIMEOUT_CONFIG) as client:
             response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             logger.info(f"Successfully sent missing summary notification. Response: {response.json()}")
