@@ -473,3 +473,48 @@ def test_send_missing_summary_notification_empty_lists(caplog):
     assert result == {"status": "success", "message": "Empty notification sent"}
     assert "To emails: []" in caplog.text
     assert "Missing for: []" in caplog.text
+
+
+def test_all_send_functions_use_timeout_config():
+    """Test that all send functions use the timeout configuration."""
+    from chat.services.send import DEFAULT_TIMEOUT_CONFIG
+    
+    # Test data
+    participant_id = "test_participant"
+    group_id = "test_group"
+    school_name = "TestSchool"
+    week_number = 1
+    summary_contents = ["Summary 1"]
+    to_emails = ["test@example.com"]
+    config_link = "https://example.com/config"
+    missing_for = ["School1"]
+    message = "Test message"
+    
+    # Create fake responses
+    fake_response = MagicMock()
+    fake_response.raise_for_status = lambda: None
+    fake_response.json = lambda: {"status": "ok"}
+    
+    mock_client = MagicMock()
+    mock_client.post.return_value = fake_response
+    
+    # Test all functions with mocked httpx.Client
+    with patch("chat.services.send.httpx.Client") as mock_client_class:
+        mock_client_class.return_value = get_client_patch(mock_client)
+        
+        # Test send_message_to_participant
+        send_message_to_participant(participant_id, message)
+        
+        # Test send_message_to_participant_group
+        send_message_to_participant_group(group_id, message)
+        
+        # Test send_school_summaries_to_hub_for_week
+        send_school_summaries_to_hub_for_week(school_name, week_number, summary_contents)
+        
+        # Test send_missing_summary_notification
+        send_missing_summary_notification(to_emails, config_link, missing_for)
+        
+        # Verify that httpx.Client was called 4 times, each with the correct timeout
+        assert mock_client_class.call_count == 4
+        for call in mock_client_class.call_args_list:
+            assert call.kwargs['timeout'] == DEFAULT_TIMEOUT_CONFIG
