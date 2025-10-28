@@ -154,6 +154,7 @@ def _persist_summaries(school_name: str, week_number: int, summaries: list[str])
                 week_number=week_number,
                 summary=summary,
             )
+        logger.info(f"Persisted {len(summaries)} summaries for school {school_name}, week {week_number}.")
 
 
 @shared_task
@@ -164,6 +165,7 @@ def generate_weekly_summaries():
     all_unique_school_names = list(
         User.objects.values_list("school_name", flat=True).distinct().order_by("school_name")
     )
+    logger.info(f"All unique schools found: {all_unique_school_names}")
     for school_name in all_unique_school_names:
         filter_chats_since = _get_chat_datetime_filter_to_determine_week_number()
         school_week_number = _get_week_number_for_school(school_name, filter_chats_since)
@@ -181,8 +183,13 @@ def generate_weekly_summaries():
             )
             continue
         all_individual_school_chats, all_group_school_chats = _get_all_chats_for_school(school_name, school_week_number)
-
+        logger.info(
+            f"Generating summaries for {school_name}, week {school_week_number}: "
+            f"{len(all_individual_school_chats)} individual chats, "
+            f"{len(all_group_school_chats)} group chats."
+        )
         summaries = _generate_top_10_summaries_for_school(all_individual_school_chats, all_group_school_chats, prompt)
+        logger.info(f"Generated {len(summaries)} summaries for {school_name}, week {school_week_number}.")
         _persist_summaries(school_name, school_week_number, summaries)
 
 
