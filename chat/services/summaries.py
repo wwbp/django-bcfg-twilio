@@ -158,6 +158,7 @@ def _persist_summaries(school_name: str, week_number: int, summaries: list[str],
             )
         logger.info(f"Persisted {len(summaries)} summaries for school {school_name}, week {week_number}.")
 
+
 def _trigger_fallback_summaries_generation(missing_week_school_summaries: dict[int, set[str]]):
     """
     Trigger the fallback summaries generation for the given week and schools.
@@ -175,8 +176,11 @@ def _trigger_fallback_summaries_generation(missing_week_school_summaries: dict[i
             # Extract summary text from Summary objects
             random_summary_texts = [s.summary for s in random_summaries]
             _persist_summaries(school_name, week_number, random_summary_texts, fallback=True)
-            logger.info(f"Persisted {len(random_summary_texts)} fallback summaries for school {school_name}, week {week_number}.")
-        
+            logger.info(
+                f"Persisted {len(random_summary_texts)} fallback summaries"
+                + " for school {school_name}, week {week_number}."
+            )
+
 
 @shared_task
 def generate_weekly_summaries():
