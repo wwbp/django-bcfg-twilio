@@ -1,6 +1,7 @@
 import datetime
 import logging
 import json
+import random
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth.models import Group
@@ -142,7 +143,7 @@ def _generate_top_10_summaries_for_school(
     return summaries
 
 
-def _persist_summaries(school_name: str, week_number: int, summaries: list[str]):
+def _persist_summaries(school_name: str, week_number: int, summaries: list[str], fallback: bool = False):
     """
     Persist summaries to the database.
     """
@@ -153,9 +154,29 @@ def _persist_summaries(school_name: str, week_number: int, summaries: list[str])
                 school_name=school_name,
                 week_number=week_number,
                 summary=summary,
+                fallback=fallback,
             )
         logger.info(f"Persisted {len(summaries)} summaries for school {school_name}, week {week_number}.")
 
+def _trigger_fallback_summaries_generation(missing_week_school_summaries: dict[int, set[str]]):
+    """
+    Trigger the fallback summaries generation for the given week and schools.
+    """
+    for week_number, school_names in missing_week_school_summaries.items():
+        # get all existing summaries across all schools in summary table for the given week
+        existing_summaries = list(Summary.objects.filter(week_number=week_number).all())
+        if len(existing_summaries) == 0:
+            logger.warning(f"No existing summaries found for week {week_number}, skipping fallback generation.")
+            continue
+        # take at most 10 summaries random
+        for school_name in school_names:
+            sample_size = min(10, len(existing_summaries))
+            random_summaries = random.sample(existing_summaries, sample_size)
+            # Extract summary text from Summary objects
+            random_summary_texts = [s.summary for s in random_summaries]
+            _persist_summaries(school_name, week_number, random_summary_texts, fallback=True)
+            logger.info(f"Persisted {len(random_summary_texts)} fallback summaries for school {school_name}, week {week_number}.")
+        
 
 @shared_task
 def generate_weekly_summaries():
@@ -166,6 +187,7 @@ def generate_weekly_summaries():
         User.objects.values_list("school_name", flat=True).distinct().order_by("school_name")
     )
     logger.info(f"All unique schools found: {all_unique_school_names}")
+    missing_week_school_summaries = dict[int, set[str]]()
     for school_name in all_unique_school_names:
         filter_chats_since = _get_chat_datetime_filter_to_determine_week_number()
         school_week_number = _get_week_number_for_school(school_name, filter_chats_since)
@@ -190,7 +212,12 @@ def generate_weekly_summaries():
         )
         summaries = _generate_top_10_summaries_for_school(all_individual_school_chats, all_group_school_chats, prompt)
         logger.info(f"Generated {len(summaries)} summaries for {school_name}, week {school_week_number}.")
+        if len(summaries) == 0:
+            if school_week_number not in missing_week_school_summaries:
+                missing_week_school_summaries[school_week_number] = set()
+            missing_week_school_summaries[school_week_number].add(school_name)
         _persist_summaries(school_name, school_week_number, summaries)
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
 
 
 @shared_task
