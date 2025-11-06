@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-django = "==5.1.13"
+django = "==5.1.14"
 djangorestframework = "*"
 celery = "*"
 redis = "*"
