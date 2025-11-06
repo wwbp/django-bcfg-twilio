@@ -14,6 +14,7 @@ from chat.services.summaries import (
     generate_weekly_summaries,
     notify_on_missing_summaries,
     _generate_top_10_summaries_for_school,
+    _trigger_fallback_summaries_generation,
 )
 import pytest
 
@@ -535,3 +536,90 @@ def test_notify_on_missing_summaries_exception_handling(
         # Verify error logging
         assert "Starting notify_on_missing_summaries task" in caplog.text
         assert "Unexpected error in notify_on_missing_summaries: Database connection failed" in caplog.text
+
+
+def test_fallback_summaries_creates_summaries_from_other_schools(summary_factory):
+    """Test that fallback creates summaries with fallback=True when a school has no summaries but others do"""
+    # Create summaries for school1 in week 5
+    school1 = "School A"
+    school2 = "School B"
+    week_number = 5
+    
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 1", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 2", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 3", fallback=False)
+    
+    # School2 has no summaries - trigger fallback
+    missing_week_school_summaries = {week_number: {school2}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School2 should now have fallback summaries (randomly selected from school1's summaries)
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    assert len(school2_summaries) == 3
+    assert all(s.fallback is True for s in school2_summaries)
+    # Verify summaries came from school1's summaries
+    school1_summary_texts = {"Summary 1", "Summary 2", "Summary 3"}
+    school2_summary_texts = {s.summary for s in school2_summaries}
+    assert school2_summary_texts.issubset(school1_summary_texts)
+
+
+def test_fallback_summaries_multiple_schools_same_week(summary_factory, caplog):
+    """Test that multiple schools can get fallback summaries for the same week"""
+    school1 = "School A"
+    school2 = "School B"
+    school3 = "School C"
+    week_number = 5
+    
+    # Create summaries for school1
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 1", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 2", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 3", fallback=False)
+    
+    # School2 and school3 need fallback
+    missing_week_school_summaries = {week_number: {school2, school3}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # Both schools should have fallback summaries
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    school3_summaries = list(Summary.objects.filter(school_name=school3, week_number=week_number).all())
+    assert len(school2_summaries) == 3
+    assert len(school3_summaries) == 3
+    assert all(s.fallback is True for s in school2_summaries)
+    assert all(s.fallback is True for s in school3_summaries)
+
+
+def test_fallback_summaries_no_existing_summaries(caplog):
+    """Test that fallback is skipped when no summaries exist for the week"""
+    school1 = "School A"
+    week_number = 5
+    
+    # No summaries exist for this week - trigger fallback
+    missing_week_school_summaries = {week_number: {school1}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School1 should have no summaries
+    school1_summaries = list(Summary.objects.filter(school_name=school1, week_number=week_number).all())
+    assert len(school1_summaries) == 0
+    
+    # Verify warning log
+    assert "No existing summaries found for week 5, skipping fallback generation." in caplog.text
+
+
+def test_fallback_summaries_limits_to_10(summary_factory):
+    """Test that fallback limits to at most 10 summaries even if more exist"""
+    school1 = "School A"
+    school2 = "School B"
+    week_number = 5
+    
+    # Create 15 summaries for school1 (more than 10)
+    for i in range(15):
+        summary_factory(school_name=school1, week_number=week_number, summary=f"Summary {i}", fallback=False)
+    
+    # School2 needs fallback
+    missing_week_school_summaries = {week_number: {school2}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School2 should have at most 10 fallback summaries
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    assert len(school2_summaries) == 10
+    assert all(s.fallback is True for s in school2_summaries)
