@@ -370,12 +370,14 @@ class SummaryAdmin(BaseAdmin):
         "week_number",
         "summary",
         "selected",
+        "fallback",
         "get_associated_question",
         "get_chat_transcripts_link",
         "updated_at",
     )
     search_fields = ("summary",)
-    list_filter = ("school_name", "week_number", "selected")
+    list_filter = ("school_name", "week_number", "selected", "fallback")
+    readonly_fields = ("selected", "fallback")
 
     @admin.display(description="Question Asked")
     def get_associated_question(self, obj: Summary):

@@ -10,7 +10,13 @@ from chat.models import (
 )
 from django.contrib.auth.models import Group as AuthGroup, User as AuthUser
 from admin.models import AuthGroupName
-from chat.services.summaries import generate_weekly_summaries, notify_on_missing_summaries
+from chat.services.summaries import (
+    generate_weekly_summaries,
+    notify_on_missing_summaries,
+    _generate_top_10_summaries_for_school,
+    _trigger_fallback_summaries_generation,
+)
+import pytest
 
 
 # Helper class to simulate httpx.Client as a context manager.
@@ -396,3 +402,224 @@ def test_notify_on_missing_summaries(
             "Unselected Summaries, week 5",
         ]
     )
+
+
+@patch("chat.services.summaries.generate_response")
+def test_summary_generation_sanitizes_user_names(
+    mock_generate_response,
+    sunday_summary_prompt_factory,
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+):
+    """Test that user names are properly sanitized before sending to OpenAI API"""
+    # Create a user with a name containing spaces (which would fail OpenAI validation)
+    user = user_factory(
+        name="Alice Johnson-Smith",  # Contains spaces and hyphens
+        school_name="Test School",
+        school_mascot="Tigers",
+    )
+    prompt = sunday_summary_prompt_factory(week=1, activity="Generate summaries")
+
+    # Create a session and transcript using factories
+    session = individual_session_factory(
+        user=user,
+        week_number=1,
+        message_type=MessageType.INITIAL,
+    )
+    transcript = individual_chat_transcript_factory(
+        session=session,
+        role=BaseChatTranscript.Role.USER,
+        content="Hello, this is a test message",
+    )
+
+    # Mock the OpenAI response
+    mock_generate_response.return_value = ("Summary 1", 100, 50)
+
+    # Call the function that should sanitize names
+    summaries = _generate_top_10_summaries_for_school(
+        all_individual_school_chats=[transcript], all_group_school_chats=[], prompt=prompt
+    )
+
+    # Get the transcript that was passed to generate_response
+    call_args = mock_generate_response.call_args
+    transcript_passed = call_args[0][0]  # First argument is the transcript list
+
+    # Find the user message in the transcript
+    user_message = next(msg for msg in transcript_passed if msg["role"] == BaseChatTranscript.Role.USER)
+
+    # Verify the name was sanitized (spaces removed, hyphens preserved)
+    assert user_message["name"] == "AliceJohnson-Smith"
+    assert user_message["name"] != "Alice Johnson-Smith"  # Original name should not be used
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_logging_verification(
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+    sunday_summary_prompt_factory,
+    summary_factory,
+    caplog,
+):
+    """Test that the new logging statements are working correctly"""
+    transcript_date = timezone.make_aware(datetime.datetime(2025, 4, 15, 15, 0))
+    sunday_summary_prompt_factory(week=5, activity="test_value")
+    
+    # Create a school that will be missing summaries (similar to School 3 in the main test)
+    school_user = user_factory(school_name="Test School")
+    school_session = individual_session_factory(user=school_user, week_number=5, message_type=MessageType.INITIAL)
+    individual_chat_transcript_factory(
+        session=school_session, role=BaseChatTranscript.Role.USER, created_at=transcript_date
+    )
+
+    # Mock the HTTP client
+    mock_client = MagicMock()
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        notify_on_missing_summaries()
+
+    # Verify logging statements
+    assert "Starting notify_on_missing_summaries task" in caplog.text
+    assert "Found 1 schools to check" in caplog.text
+    assert "Adding Test School to missing summaries list (week 5)" in caplog.text
+    assert "Sending notifications for 1 schools with missing summaries" in caplog.text
+    assert "Successfully completed notify_on_missing_summaries. Notified about 1 schools" in caplog.text
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_empty_schools(caplog):
+    """Test behavior when no schools exist in the system"""
+    # Mock the HTTP client
+    mock_client = MagicMock()
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        notify_on_missing_summaries()
+
+    # Verify no notifications were sent
+    mock_client.post.assert_not_called()
+    
+    # Verify logging
+    assert "Starting notify_on_missing_summaries task" in caplog.text
+    assert "Found 0 schools to check" in caplog.text
+    assert "No missing summaries found - no notifications sent" in caplog.text
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_exception_handling(
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+    sunday_summary_prompt_factory,
+    caplog,
+):
+    """Test exception handling when database queries fail"""
+    transcript_date = timezone.make_aware(datetime.datetime(2025, 4, 15, 15, 0))
+    sunday_summary_prompt_factory(week=5, activity="test_value")
+    
+    # Create a school
+    school_user = user_factory(school_name="Test School")
+    school_session = individual_session_factory(user=school_user, week_number=5, message_type=MessageType.INITIAL)
+    individual_chat_transcript_factory(
+        session=school_session, role=BaseChatTranscript.Role.USER, created_at=transcript_date
+    )
+
+    # Mock User.objects to raise an exception
+    with patch("chat.services.summaries.User.objects") as mock_user_objects:
+        mock_user_objects.values_list.side_effect = Exception("Database connection failed")
+        
+        # Should raise the exception
+        with pytest.raises(Exception, match="Database connection failed"):
+            notify_on_missing_summaries()
+        
+        # Verify error logging
+        assert "Starting notify_on_missing_summaries task" in caplog.text
+        assert "Unexpected error in notify_on_missing_summaries: Database connection failed" in caplog.text
+
+
+def test_fallback_summaries_creates_summaries_from_other_schools(summary_factory):
+    """Test that fallback creates summaries with fallback=True when a school has no summaries but others do"""
+    # Create summaries for school1 in week 5
+    school1 = "School A"
+    school2 = "School B"
+    week_number = 5
+    
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 1", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 2", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 3", fallback=False)
+    
+    # School2 has no summaries - trigger fallback
+    missing_week_school_summaries = {week_number: {school2}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School2 should now have fallback summaries (randomly selected from school1's summaries)
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    assert len(school2_summaries) == 3
+    assert all(s.fallback is True for s in school2_summaries)
+    # Verify summaries came from school1's summaries
+    school1_summary_texts = {"Summary 1", "Summary 2", "Summary 3"}
+    school2_summary_texts = {s.summary for s in school2_summaries}
+    assert school2_summary_texts.issubset(school1_summary_texts)
+
+
+def test_fallback_summaries_multiple_schools_same_week(summary_factory, caplog):
+    """Test that multiple schools can get fallback summaries for the same week"""
+    school1 = "School A"
+    school2 = "School B"
+    school3 = "School C"
+    week_number = 5
+    
+    # Create summaries for school1
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 1", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 2", fallback=False)
+    summary_factory(school_name=school1, week_number=week_number, summary="Summary 3", fallback=False)
+    
+    # School2 and school3 need fallback
+    missing_week_school_summaries = {week_number: {school2, school3}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # Both schools should have fallback summaries
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    school3_summaries = list(Summary.objects.filter(school_name=school3, week_number=week_number).all())
+    assert len(school2_summaries) == 3
+    assert len(school3_summaries) == 3
+    assert all(s.fallback is True for s in school2_summaries)
+    assert all(s.fallback is True for s in school3_summaries)
+
+
+def test_fallback_summaries_no_existing_summaries(caplog):
+    """Test that fallback is skipped when no summaries exist for the week"""
+    school1 = "School A"
+    week_number = 5
+    
+    # No summaries exist for this week - trigger fallback
+    missing_week_school_summaries = {week_number: {school1}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School1 should have no summaries
+    school1_summaries = list(Summary.objects.filter(school_name=school1, week_number=week_number).all())
+    assert len(school1_summaries) == 0
+    
+    # Verify warning log
+    assert "No existing summaries found for week 5, skipping fallback generation." in caplog.text
+
+
+def test_fallback_summaries_limits_to_10(summary_factory):
+    """Test that fallback limits to at most 10 summaries even if more exist"""
+    school1 = "School A"
+    school2 = "School B"
+    week_number = 5
+    
+    # Create 15 summaries for school1 (more than 10)
+    for i in range(15):
+        summary_factory(school_name=school1, week_number=week_number, summary=f"Summary {i}", fallback=False)
+    
+    # School2 needs fallback
+    missing_week_school_summaries = {week_number: {school2}}
+    _trigger_fallback_summaries_generation(missing_week_school_summaries)
+    
+    # School2 should have at most 10 fallback summaries
+    school2_summaries = list(Summary.objects.filter(school_name=school2, week_number=week_number).all())
+    assert len(school2_summaries) == 10
+    assert all(s.fallback is True for s in school2_summaries)

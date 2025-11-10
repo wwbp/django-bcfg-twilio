@@ -401,6 +401,7 @@ class Summary(ModelBase):
     week_number = models.IntegerField()
     summary = models.TextField()
     selected = models.BooleanField(default=False)
+    fallback = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
