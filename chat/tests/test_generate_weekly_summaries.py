@@ -15,6 +15,7 @@ from chat.services.summaries import (
     notify_on_missing_summaries,
     _generate_top_10_summaries_for_school,
 )
+import pytest
 
 
 # Helper class to simulate httpx.Client as a context manager.
@@ -449,3 +450,88 @@ def test_summary_generation_sanitizes_user_names(
     # Verify the name was sanitized (spaces removed, hyphens preserved)
     assert user_message["name"] == "AliceJohnson-Smith"
     assert user_message["name"] != "Alice Johnson-Smith"  # Original name should not be used
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_logging_verification(
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+    sunday_summary_prompt_factory,
+    summary_factory,
+    caplog,
+):
+    """Test that the new logging statements are working correctly"""
+    transcript_date = timezone.make_aware(datetime.datetime(2025, 4, 15, 15, 0))
+    sunday_summary_prompt_factory(week=5, activity="test_value")
+    
+    # Create a school that will be missing summaries (similar to School 3 in the main test)
+    school_user = user_factory(school_name="Test School")
+    school_session = individual_session_factory(user=school_user, week_number=5, message_type=MessageType.INITIAL)
+    individual_chat_transcript_factory(
+        session=school_session, role=BaseChatTranscript.Role.USER, created_at=transcript_date
+    )
+
+    # Mock the HTTP client
+    mock_client = MagicMock()
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        notify_on_missing_summaries()
+
+    # Verify logging statements
+    assert "Starting notify_on_missing_summaries task" in caplog.text
+    assert "Found 1 schools to check" in caplog.text
+    assert "Adding Test School to missing summaries list (week 5)" in caplog.text
+    assert "Sending notifications for 1 schools with missing summaries" in caplog.text
+    assert "Successfully completed notify_on_missing_summaries. Notified about 1 schools" in caplog.text
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_empty_schools(caplog):
+    """Test behavior when no schools exist in the system"""
+    # Mock the HTTP client
+    mock_client = MagicMock()
+    with patch("chat.services.send.httpx.Client", return_value=get_client_patch(mock_client)):
+        notify_on_missing_summaries()
+
+    # Verify no notifications were sent
+    mock_client.post.assert_not_called()
+    
+    # Verify logging
+    assert "Starting notify_on_missing_summaries task" in caplog.text
+    assert "Found 0 schools to check" in caplog.text
+    assert "No missing summaries found - no notifications sent" in caplog.text
+
+
+@freeze_time("2025-04-17T20:00:00")
+@override_settings(BASE_ADMIN_URI="https://example.com/")
+def test_notify_on_missing_summaries_exception_handling(
+    user_factory,
+    individual_session_factory,
+    individual_chat_transcript_factory,
+    sunday_summary_prompt_factory,
+    caplog,
+):
+    """Test exception handling when database queries fail"""
+    transcript_date = timezone.make_aware(datetime.datetime(2025, 4, 15, 15, 0))
+    sunday_summary_prompt_factory(week=5, activity="test_value")
+    
+    # Create a school
+    school_user = user_factory(school_name="Test School")
+    school_session = individual_session_factory(user=school_user, week_number=5, message_type=MessageType.INITIAL)
+    individual_chat_transcript_factory(
+        session=school_session, role=BaseChatTranscript.Role.USER, created_at=transcript_date
+    )
+
+    # Mock User.objects to raise an exception
+    with patch("chat.services.summaries.User.objects") as mock_user_objects:
+        mock_user_objects.values_list.side_effect = Exception("Database connection failed")
+        
+        # Should raise the exception
+        with pytest.raises(Exception, match="Database connection failed"):
+            notify_on_missing_summaries()
+        
+        # Verify error logging
+        assert "Starting notify_on_missing_summaries task" in caplog.text
+        assert "Unexpected error in notify_on_missing_summaries: Database connection failed" in caplog.text

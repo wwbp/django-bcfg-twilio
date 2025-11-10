@@ -376,6 +376,7 @@ class SummaryAdmin(BaseAdmin):
     )
     search_fields = ("summary",)
     list_filter = ("school_name", "week_number", "selected")
+    readonly_fields = ("selected",)
 
     @admin.display(description="Question Asked")
     def get_associated_question(self, obj: Summary):
